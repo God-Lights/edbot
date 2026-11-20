@@ -1,0 +1,14 @@
+[
+  { "id": "ancient-lord", "nameKo": "에이션트 로드", "nameEn": "Ancient Lord", "piece": "king", "hp": 1500, "attack": 60, "speed": "slow", "range": "mid" },
+  { "id": "richmond", "nameKo": "리치몬드", "nameEn": "Richmond", "piece": "king", "hp": 1200, "attack": 70, "speed": "normal", "range": "long" },
+  { "id": "rosmaktia", "nameKo": "로즈막티아", "nameEn": "Rosmaktia", "piece": "queen", "hp": 900, "attack": 90, "speed": "fast", "range": "melee" },
+  { "id": "toka-loga", "nameKo": "토카로가", "nameEn": "Toka Loga", "piece": "queen", "hp": 800, "attack": 85, "speed": "normal", "range": "long" },
+  { "id": "dwargon", "nameKo": "드워곤", "nameEn": "Dwargon", "piece": "rook", "hp": 1400, "attack": 65, "speed": "slow", "range": "melee" },
+  { "id": "raufaino", "nameKo": "라우페이노", "nameEn": "Raufaino", "piece": "rook", "hp": 1300, "attack": 55, "speed": "normal", "range": "melee" },
+  { "id": "for-the-more", "nameKo": "포더모어", "nameEn": "For The More", "piece": "bishop", "hp": 850, "attack": 45, "speed": "normal", "range": "mid" },
+  { "id": "lappus", "nameKo": "라푸스", "nameEn": "Lappus", "piece": "bishop", "hp": 750, "attack": 40, "speed": "normal", "range": "long" },
+  { "id": "bwtkan-jaws", "nameKo": "부캉죠스", "nameEn": "Bwtkan Jaws", "piece": "knight", "hp": 1000, "attack": 80, "speed": "fast", "range": "melee" },
+  { "id": "ankio", "nameKo": "안키오", "nameEn": "Ankio", "piece": "knight", "hp": 850, "attack": 70, "speed": "veryFast", "range": "melee" },
+  { "id": "nut-wolf", "nameKo": "넛울프", "nameEn": "Nut Wolf", "piece": "pawn", "hp": 700, "attack": 60, "speed": "fast", "range": "mid" },
+  { "id": "xenosaurs", "nameKo": "제노사우로스", "nameEn": "Xenosaurs", "piece": "pawn", "hp": 750, "attack": 55, "speed": "normal", "range": "melee" }
+]

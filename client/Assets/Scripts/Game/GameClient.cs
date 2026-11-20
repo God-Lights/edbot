@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Edbot.Net;
 using UnityEngine;
 
@@ -32,6 +33,11 @@ namespace Edbot.Game
         }
 
         public bool IsCreatingRoom { get; private set; }
+
+        /// <summary>캐릭터 12명의 데이터. 방에 들어갈 때 서버에서 가져온다. 아직이면 null.</summary>
+        public IReadOnlyList<CharacterInfo> Roster { get; private set; }
+
+        private bool _loadingRoster;
 
         /// <summary>화면에 띄울 마지막 안내/오류 문구.</summary>
         public string LastMessage { get; private set; }
@@ -99,6 +105,8 @@ namespace Edbot.Game
             StopConnection();
             LastMessage = null;
 
+            LoadRosterAsync();
+
             var connection = new RoomConnection();
             _connection = connection;
             try
@@ -121,6 +129,67 @@ namespace Edbot.Game
         public bool SetReady(bool ready)
         {
             return _connection != null && _connection.SendReady(ready);
+        }
+
+        public bool Ban(string characterId)
+        {
+            return _connection != null && _connection.SendBan(characterId);
+        }
+
+        public bool Pick(string characterId)
+        {
+            return _connection != null && _connection.SendPick(characterId);
+        }
+
+        public bool Place(string characterId, Lane lane)
+        {
+            return _connection != null && _connection.SendPlace(characterId, lane);
+        }
+
+        public bool LockPlacement()
+        {
+            return _connection != null && _connection.SendLock();
+        }
+
+        /// <summary>id로 캐릭터를 찾는다. 데이터가 아직 없거나 모르는 id면 null.</summary>
+        public CharacterInfo FindCharacter(string characterId)
+        {
+            if (Roster == null || characterId == null) return null;
+            foreach (var character in Roster)
+            {
+                if (character.Id == characterId) return character;
+            }
+            return null;
+        }
+
+        /// <summary>"이름 (기물)" 형태. 데이터가 없으면 id를 그대로 보여 준다.</summary>
+        public string DescribeCharacter(string characterId)
+        {
+            if (characterId == null) return "-";
+            var character = FindCharacter(characterId);
+            return character == null ? characterId : character.NameKo + " (" + Labels.PieceName(character.Piece) + ")";
+        }
+
+        private async void LoadRosterAsync()
+        {
+            if (Roster != null || _loadingRoster) return;
+            _loadingRoster = true;
+            try
+            {
+                using (var api = new ApiClient(serverUrl))
+                {
+                    Roster = await api.GetCharactersAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                LastMessage = "캐릭터 데이터를 불러오지 못했다: " + ex.Message;
+                Debug.LogWarning(LastMessage);
+            }
+            finally
+            {
+                _loadingRoster = false;
+            }
         }
 
         private void StopConnection()

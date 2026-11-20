@@ -21,6 +21,31 @@ namespace Edbot.Game
             }
         }
 
+        public static string PieceName(Piece piece)
+        {
+            switch (piece)
+            {
+                case Piece.King: return "킹";
+                case Piece.Queen: return "퀸";
+                case Piece.Rook: return "룩";
+                case Piece.Bishop: return "비숍";
+                case Piece.Knight: return "나이트";
+                case Piece.Pawn: return "폰";
+                default: return piece.ToString();
+            }
+        }
+
+        public static string LaneName(Lane lane)
+        {
+            switch (lane)
+            {
+                case Lane.Queenside: return "퀸사이드";
+                case Lane.Center: return "센터";
+                case Lane.Kingside: return "킹사이드";
+                default: return lane.ToString();
+            }
+        }
+
         /// <summary>서버 오류 코드나 연결이 끝난 이유를 사람이 읽을 문장으로 바꾼다.</summary>
         public static string Error(string codeOrReason)
         {
@@ -31,6 +56,13 @@ namespace Edbot.Game
                 case ErrorCodes.RoomNotFound: return "방을 찾을 수 없다. 코드를 확인해 보자.";
                 case ErrorCodes.NotInLobby: return "로비에서만 할 수 있다.";
                 case ErrorCodes.BadMessage: return "서버가 이해하지 못한 요청이다.";
+                case ErrorCodes.WrongPhase: return "지금 단계에서는 할 수 없다.";
+                case ErrorCodes.UnknownCharacter: return "없는 캐릭터다.";
+                case ErrorCodes.CharacterUnavailable: return "이미 밴되었거나 뽑힌 캐릭터다.";
+                case ErrorCodes.NotYourTurn: return "네 차례가 아니다.";
+                case ErrorCodes.AlreadyDone: return "이미 정했다. 바꿀 수 없다.";
+                case ErrorCodes.NotYourCharacter: return "내 팀의 캐릭터가 아니다.";
+                case ErrorCodes.InvalidLane: return "올바르지 않은 레인이다.";
                 case "stopped": return null; // 내가 직접 나간 경우
                 default: return string.IsNullOrEmpty(codeOrReason) ? null : "연결이 끝났다: " + codeOrReason;
             }

@@ -1,3 +1,4 @@
+import { CHARACTERS } from "./characters";
 import { Room } from "./room";
 
 export { Room };
@@ -48,6 +49,11 @@ export default {
         }
       }
       return json({ error: "could_not_create_room" }, 503);
+    }
+
+    // GET /api/characters -> 캐릭터 12명의 데이터 (이름, 기물, 능력치).
+    if (request.method === "GET" && parts.length === 2 && parts[0] === "api" && parts[1] === "characters") {
+      return json({ characters: CHARACTERS });
     }
 
     // GET /api/rooms/:code -> 방이 있는지, 들어갈 수 있는지.

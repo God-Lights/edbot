@@ -1,10 +1,12 @@
+using System.Collections.Generic;
+using System.Text;
 using Edbot.Net;
 using UnityEngine;
 
 namespace Edbot.Game
 {
     /// <summary>
-    /// 개발용 임시 화면. 방 만들기/입장, 준비, 단계와 남은 시간을 IMGUI로 그린다.
+    /// 개발용 임시 화면. 방 만들기/입장, 준비, 밴, 드래프트, 배치를 IMGUI로 그린다.
     /// 씬이나 프리팹을 따로 만들 필요가 없고, 진짜 UI가 생기면 이 파일과 DevBootstrap을 지우면 된다.
     /// </summary>
     public sealed class DevLobbyGui : MonoBehaviour
@@ -14,6 +16,7 @@ namespace Edbot.Game
 
         private string _name = "Player";
         private string _code = "";
+        private Vector2 _scroll;
 
         private void OnGUI()
         {
@@ -24,7 +27,8 @@ namespace Edbot.Game
             GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
             if (font != null) GUI.skin.font = font;
 
-            GUILayout.BeginArea(new Rect(16, 16, 380, Screen.height / scale - 32));
+            GUILayout.BeginArea(new Rect(16, 16, 420, Screen.height / scale - 32));
+            _scroll = GUILayout.BeginScrollView(_scroll);
             GUILayout.Label("edbot 개발용 로비");
 
             var connection = client.Connection;
@@ -42,6 +46,7 @@ namespace Edbot.Game
                 GUILayout.Space(8);
                 GUILayout.Label(client.LastMessage);
             }
+            GUILayout.EndScrollView();
             GUILayout.EndArea();
         }
 
@@ -91,18 +96,157 @@ namespace Edbot.Game
                 string status = player.Connected ? (player.Ready ? "준비 완료" : "") : "연결 끊김";
                 GUILayout.Label(player.Name + me + "   " + status);
             }
+            GUILayout.Space(8);
 
-            if (room.Phase == Phase.Lobby)
+            int seat = room.SeatOf(connection.PlayerId);
+            var game = room.Game;
+            switch (room.Phase)
             {
-                if (room.Players.Count < 2) GUILayout.Label("상대를 기다리는 중... 방 코드를 알려 주자.");
-
-                var self = room.FindPlayer(connection.PlayerId);
-                bool ready = self != null && self.Ready;
-                if (GUILayout.Button(ready ? "준비 취소" : "준비")) client.SetReady(!ready);
+                case Phase.Lobby:
+                    DrawLobby(client, room, connection);
+                    break;
+                case Phase.Ban:
+                    if (game != null && seat >= 0) DrawBan(client, game, seat);
+                    break;
+                case Phase.Draft:
+                    if (game != null && seat >= 0) DrawDraft(client, connection, game, seat);
+                    break;
+                case Phase.Placement:
+                    if (game != null && seat >= 0) DrawPlacement(client, game, seat);
+                    break;
+                default:
+                    if (game != null && seat >= 0) DrawTeams(client, game, seat);
+                    break;
             }
 
             GUILayout.Space(8);
             if (GUILayout.Button("나가기")) client.Leave();
+        }
+
+        private void DrawLobby(GameClient client, RoomSnapshot room, RoomConnection connection)
+        {
+            if (room.Players.Count < 2) GUILayout.Label("상대를 기다리는 중... 방 코드를 알려 주자.");
+
+            var self = room.FindPlayer(connection.PlayerId);
+            bool ready = self != null && self.Ready;
+            if (GUILayout.Button(ready ? "준비 취소" : "준비")) client.SetReady(!ready);
+        }
+
+        // ---- 밴 ----
+
+        private void DrawBan(GameClient client, GameSnapshot game, int seat)
+        {
+            var mine = game.Bans[seat];
+            var theirs = game.Bans[1 - seat];
+
+            GUILayout.Label(mine.Locked
+                ? "내 밴: " + client.DescribeCharacter(mine.CharacterId)
+                : "밴할 캐릭터를 고르자. 한 번 정하면 바꿀 수 없다.");
+            GUILayout.Label(theirs.Locked ? "상대가 밴을 정했다." : "상대가 고르는 중...");
+
+            if (mine.Locked || client.Roster == null) return;
+            foreach (var character in client.Roster)
+            {
+                if (GUILayout.Button(client.DescribeCharacter(character.Id))) client.Ban(character.Id);
+            }
+        }
+
+        // ---- 드래프트 ----
+
+        private void DrawDraft(GameClient client, RoomConnection connection, GameSnapshot game, int seat)
+        {
+            bool myTurn = game.TurnSeat.HasValue && game.TurnSeat.Value == seat;
+            string remaining = Labels.Countdown(connection.RemainingMsUntil(game.TurnEndsAt));
+            GUILayout.Label(myTurn ? "내 차례! 캐릭터를 뽑자.  (" + remaining + ")" : "상대 차례...  (" + remaining + ")");
+            GUILayout.Label("순서: " + DescribePickOrder(game, seat));
+            GUILayout.Label(game.FirstPicker == seat ? "내가 선공이다." : "내가 후공이다.");
+
+            DrawTeam(client, "내 팀", game.Picks[seat]);
+            DrawTeam(client, "상대 팀", game.Picks[1 - seat]);
+
+            if (client.Roster == null) return;
+            GUILayout.Space(8);
+            GUILayout.Label("뽑을 수 있는 캐릭터");
+            foreach (var character in client.Roster)
+            {
+                if (game.IsUnavailable(character.Id)) continue;
+                GUI.enabled = myTurn;
+                if (GUILayout.Button(client.DescribeCharacter(character.Id))) client.Pick(character.Id);
+                GUI.enabled = true;
+            }
+
+            var gone = new List<string>();
+            foreach (var character in client.Roster)
+            {
+                if (game.IsUnavailable(character.Id)) gone.Add(client.DescribeCharacter(character.Id));
+            }
+            if (gone.Count > 0) GUILayout.Label("밴/뽑힘: " + string.Join(", ", gone));
+        }
+
+        /// <summary>"[나] 상대 상대 나 나 ..." 형태. 이미 지난 차례는 괄호, 지금 차례는 [ ]로 표시한다.</summary>
+        private static string DescribePickOrder(GameSnapshot game, int seat)
+        {
+            var text = new StringBuilder();
+            int done = game.PickCount;
+            for (int i = 0; i < game.PickOrder.Count; i++)
+            {
+                string who = game.PickOrder[i] == seat ? "나" : "상대";
+                if (i < done) text.Append("(").Append(who).Append(") ");
+                else if (i == done) text.Append("[").Append(who).Append("] ");
+                else text.Append(who).Append(" ");
+            }
+            return text.ToString().TrimEnd();
+        }
+
+        private void DrawTeam(GameClient client, string title, List<string> picks)
+        {
+            var names = new List<string>();
+            foreach (var id in picks) names.Add(client.DescribeCharacter(id));
+            GUILayout.Label(title + " (" + picks.Count + "/5): " + (names.Count == 0 ? "-" : string.Join(", ", names)));
+        }
+
+        // ---- 배치 ----
+
+        private void DrawPlacement(GameClient client, GameSnapshot game, int seat)
+        {
+            bool locked = game.PlacementLocked[seat];
+            GUILayout.Label(locked ? "배치를 확정했다." : "캐릭터마다 레인을 고르고 확정하자. 정하지 않으면 기본 레인으로 간다.");
+            GUILayout.Label(game.PlacementLocked[1 - seat] ? "상대가 배치를 확정했다." : "상대가 배치하는 중...");
+
+            GUI.enabled = !locked;
+            foreach (var id in game.Picks[seat])
+            {
+                GUILayout.Label(client.DescribeCharacter(id));
+                GUILayout.BeginHorizontal();
+                var current = game.LaneOf(seat, id);
+                foreach (Lane lane in new[] { Lane.Queenside, Lane.Center, Lane.Kingside })
+                {
+                    string label = (current.HasValue && current.Value == lane ? "● " : "") + Labels.LaneName(lane);
+                    if (GUILayout.Button(label)) client.Place(id, lane);
+                }
+                GUILayout.EndHorizontal();
+            }
+            if (GUILayout.Button("배치 확정")) client.LockPlacement();
+            GUI.enabled = true;
+        }
+
+        // ---- 탐사 이후: 두 팀과 레인을 보여 준다 ----
+
+        private void DrawTeams(GameClient client, GameSnapshot game, int seat)
+        {
+            DrawTeamWithLanes(client, "내 팀", game, seat);
+            DrawTeamWithLanes(client, "상대 팀", game, 1 - seat);
+        }
+
+        private void DrawTeamWithLanes(GameClient client, string title, GameSnapshot game, int seat)
+        {
+            GUILayout.Label(title);
+            foreach (var id in game.Picks[seat])
+            {
+                var lane = game.LaneOf(seat, id);
+                string where = lane.HasValue ? Labels.LaneName(lane.Value) : "비공개";
+                GUILayout.Label("  " + client.DescribeCharacter(id) + " - " + where);
+            }
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Threading;
@@ -65,6 +66,19 @@ namespace Edbot.Net
                 response.EnsureSuccessStatusCode();
                 string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                 return JsonConvert.DeserializeObject<RoomInfo>(body);
+            }
+        }
+
+        /// <summary>캐릭터 12명의 데이터(이름, 기물, 능력치)를 가져온다.</summary>
+        public async Task<List<CharacterInfo>> GetCharactersAsync(CancellationToken ct = default(CancellationToken))
+        {
+            using (var response = await _http.GetAsync(_baseUrl + "/api/characters", ct).ConfigureAwait(false))
+            {
+                response.EnsureSuccessStatusCode();
+                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                var characters = MessageCodec.ParseCharacters(body);
+                if (characters == null) throw new HttpRequestException("캐릭터 데이터를 해석할 수 없다.");
+                return characters;
             }
         }
 

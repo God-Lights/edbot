@@ -1,8 +1,35 @@
 // 방 하나의 상태와 규칙. Cloudflare에 의존하지 않는 순수 함수만 둔다.
 // (Durable Object인 room.ts는 이 함수들을 불러서 저장·전송만 맡는다.)
 
+import {
+  TOTAL_PICKS,
+  areBansDone,
+  arePlacementsDone,
+  autoPick,
+  createGame,
+  currentTurnSeat,
+  fillDraft,
+  isDraftComplete,
+  lockAllPlacements,
+  lockBans,
+  lockPlacement,
+  startDraft,
+  submitBan,
+  submitPick,
+  submitPlacement,
+} from "./game";
+import type { ActionResult, GameState } from "./game";
 import { isTimedPhase, nextPhase, phaseDurationMs } from "./phases";
-import type { ErrorCode, Phase, PublicPlayer, RoomSnapshot } from "./protocol";
+import type {
+  BanSnapshot,
+  ErrorCode,
+  GameSnapshot,
+  Lane,
+  Phase,
+  PublicPlayer,
+  RoomSnapshot,
+  Seat,
+} from "./protocol";
 
 export const MAX_PLAYERS = 2;
 export const MAX_NAME_LENGTH = 16;
@@ -15,7 +42,7 @@ export interface PlayerState {
   id: string;
   token: string;
   name: string;
-  seat: 0 | 1;
+  seat: Seat;
   connected: boolean;
   ready: boolean;
   disconnectedAt: number | null;
@@ -27,6 +54,8 @@ export interface RoomState {
   phaseStartedAt: number;
   phaseEndsAt: number | null;
   players: PlayerState[];
+  /** 밴, 드래프트, 배치 상태. 로비에서는 null. */
+  game: GameState | null;
   createdAt: number;
   lastActiveAt: number;
 }
@@ -40,6 +69,7 @@ export function createRoom(code: string, now: number): RoomState {
     phaseStartedAt: now,
     phaseEndsAt: null,
     players: [],
+    game: null,
     createdAt: now,
     lastActiveAt: now,
   };
@@ -83,7 +113,7 @@ export function joinRoom(
   }
 
   const taken = new Set(state.players.map((p) => p.seat));
-  const seat: 0 | 1 = taken.has(0) ? 1 : 0;
+  const seat: Seat = taken.has(0) ? 1 : 0;
   const player: PlayerState = {
     id: newId(),
     token: newId(),
@@ -118,6 +148,7 @@ export function setReady(
   ready: boolean,
   now: number,
   scale = 1,
+  rng: () => number = Math.random,
 ): ReadyResult {
   if (state.phase !== "lobby") {
     return { ok: false, code: "not_in_lobby", message: "로비에서만 준비할 수 있다." };
@@ -132,37 +163,197 @@ export function setReady(
   const everyoneReady =
     state.players.length === MAX_PLAYERS && state.players.every((p) => p.connected && p.ready);
   if (everyoneReady) {
-    enterPhase(state, nextPhase("lobby"), now, scale);
+    enterPhase(state, nextPhase("lobby"), now, scale, rng);
     return { ok: true, started: true };
   }
   return { ok: true, started: false };
 }
 
-function enterPhase(state: RoomState, phase: Phase, now: number, scale: number): void {
+// ---- 단계 전환 ----
+
+/** 드래프트 한 차례의 제한 시간. 드래프트 단계 시간을 뽑는 횟수로 나눈다. (40초 / 10 = 4초) */
+export function draftTurnMs(scale = 1): number {
+  return Math.floor(phaseDurationMs("draft", scale) / TOTAL_PICKS);
+}
+
+function enterPhase(
+  state: RoomState,
+  phase: Phase,
+  startedAt: number,
+  scale: number,
+  rng: () => number,
+): void {
   state.phase = phase;
-  state.phaseStartedAt = now;
-  state.phaseEndsAt = isTimedPhase(phase) ? now + phaseDurationMs(phase, scale) : null;
+  state.phaseStartedAt = startedAt;
+  state.phaseEndsAt = isTimedPhase(phase) ? startedAt + phaseDurationMs(phase, scale) : null;
+
   if (phase === "lobby") {
     // 한 판이 끝나고 돌아온 로비. 다시 하려면 새로 준비해야 한다.
+    state.game = null;
     for (const p of state.players) p.ready = false;
+  } else if (phase === "ban") {
+    state.game = createGame(rng() < 0.5 ? 0 : 1); // 선공은 무작위
+  } else if (phase === "draft" && state.game) {
+    startDraft(state.game, startedAt, draftTurnMs(scale));
   }
 }
 
-/**
- * 시간이 다 된 단계를 다음 단계로 넘긴다. 서버가 늦게 깨어나도 밀린 단계가 한 번에
- * 몰아서 지나가지 않도록, 새 단계의 시작 시각은 이전 단계가 끝났어야 할 시각으로 잡는다.
- */
-export function advancePhase(state: RoomState, now: number, scale = 1): boolean {
-  if (state.phaseEndsAt === null || now < state.phaseEndsAt) return false;
-  const startedAt = state.phaseEndsAt;
-  enterPhase(state, nextPhase(state.phase), startedAt, scale);
-  // 이미 다음 단계 시간도 지났다면 계속 넘긴다 (알람이 한참 늦은 경우).
-  while (state.phaseEndsAt !== null && now >= state.phaseEndsAt) {
-    enterPhase(state, nextPhase(state.phase), state.phaseEndsAt, scale);
+/** 단계를 떠나기 전에 정리한다. 하지 못한 선택은 기본값으로 채운다. */
+function leavePhase(state: RoomState, rng: () => number): void {
+  const game = state.game;
+  if (!game) return;
+  switch (state.phase) {
+    case "ban":
+      lockBans(game); // 못 정한 사람은 밴 없이 넘어간다
+      break;
+    case "draft":
+      fillDraft(game, rng); // 남은 차례는 남은 캐릭터 중 무작위
+      break;
+    case "placement":
+      lockAllPlacements(game); // 못 정한 캐릭터는 기물별 기본 레인
+      break;
   }
-  state.lastActiveAt = Math.max(state.lastActiveAt, now);
+}
+
+function moveToNext(state: RoomState, at: number, scale: number, rng: () => number): void {
+  leavePhase(state, rng);
+  enterPhase(state, nextPhase(state.phase), at, scale, rng);
+}
+
+/** 모두가 할 일을 끝냈으면 시간이 남아도 바로 다음 단계로 간다. */
+function advanceIfDone(state: RoomState, now: number, scale: number, rng: () => number): boolean {
+  const game = state.game;
+  if (!game) return false;
+  const done =
+    (state.phase === "ban" && areBansDone(game)) ||
+    (state.phase === "draft" && isDraftComplete(game)) ||
+    (state.phase === "placement" && arePlacementsDone(game));
+  if (!done) return false;
+  moveToNext(state, now, scale, rng);
   return true;
 }
+
+/**
+ * 시간이 된 일을 처리한다. 두 종류다.
+ * - 드래프트의 한 차례가 끝났다 -> 그 사람 대신 무작위로 뽑는다 (다 뽑았으면 다음 단계)
+ * - 단계 시간이 끝났다 -> 하지 못한 선택을 기본값으로 채우고 다음 단계
+ *
+ * 서버가 늦게 깨어나도 밀린 일이 한 번에 몰리지 않도록, 각 일이 있어야 했던 시각을 기준으로
+ * 순서대로 처리한다. 바뀐 게 있으면 true.
+ */
+export function advancePhase(
+  state: RoomState,
+  now: number,
+  scale = 1,
+  rng: () => number = Math.random,
+): boolean {
+  let changed = false;
+  for (;;) {
+    const game = state.game;
+    const turnDue =
+      state.phase === "draft" && game && game.turnEndsAt !== null ? game.turnEndsAt : Infinity;
+    const phaseDue = state.phaseEndsAt ?? Infinity;
+    const due = Math.min(turnDue, phaseDue);
+    if (due > now) break;
+
+    changed = true;
+    if (game && turnDue <= phaseDue) {
+      if (autoPick(game, due, draftTurnMs(scale), rng) === null) fillDraft(game, rng);
+      if (isDraftComplete(game)) moveToNext(state, due, scale, rng);
+    } else {
+      moveToNext(state, due, scale, rng);
+    }
+  }
+  if (changed) state.lastActiveAt = Math.max(state.lastActiveAt, now);
+  return changed;
+}
+
+// ---- 플레이어의 선택 (밴, 뽑기, 배치) ----
+
+export type ActionOutcome = { ok: true; advanced: boolean } | Failure;
+
+const WRONG_PHASE: Failure = {
+  ok: false,
+  code: "wrong_phase",
+  message: "지금 단계에서는 할 수 없다.",
+};
+
+function runAction(
+  state: RoomState,
+  playerId: string,
+  expected: Phase,
+  now: number,
+  scale: number,
+  rng: () => number,
+  act: (game: GameState, seat: Seat) => ActionResult,
+): ActionOutcome {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return { ok: false, code: "bad_message", message: "방에 없는 플레이어다." };
+  if (state.phase !== expected || !state.game) return WRONG_PHASE;
+
+  const result = act(state.game, player.seat);
+  if (!result.ok) return result;
+  state.lastActiveAt = now;
+  return { ok: true, advanced: advanceIfDone(state, now, scale, rng) };
+}
+
+/** 밴 단계에서 캐릭터 1명을 금지한다. 둘 다 정하면 시간이 남아도 바로 드래프트로 간다. */
+export function playerBan(
+  state: RoomState,
+  playerId: string,
+  characterId: string,
+  now: number,
+  scale = 1,
+  rng: () => number = Math.random,
+): ActionOutcome {
+  return runAction(state, playerId, "ban", now, scale, rng, (game, seat) =>
+    submitBan(game, seat, characterId),
+  );
+}
+
+/** 드래프트에서 내 차례에 캐릭터를 뽑는다. 10명을 다 뽑으면 바로 배치로 간다. */
+export function playerPick(
+  state: RoomState,
+  playerId: string,
+  characterId: string,
+  now: number,
+  scale = 1,
+  rng: () => number = Math.random,
+): ActionOutcome {
+  return runAction(state, playerId, "draft", now, scale, rng, (game, seat) =>
+    submitPick(game, seat, characterId, now, draftTurnMs(scale)),
+  );
+}
+
+/** 배치 단계에서 내 캐릭터 하나의 레인을 정한다. */
+export function playerPlace(
+  state: RoomState,
+  playerId: string,
+  characterId: string,
+  lane: Lane,
+  now: number,
+  scale = 1,
+  rng: () => number = Math.random,
+): ActionOutcome {
+  return runAction(state, playerId, "placement", now, scale, rng, (game, seat) =>
+    submitPlacement(game, seat, characterId, lane),
+  );
+}
+
+/** 배치를 확정한다. 둘 다 확정하면 시간이 남아도 바로 다음 단계로 간다. */
+export function playerLock(
+  state: RoomState,
+  playerId: string,
+  now: number,
+  scale = 1,
+  rng: () => number = Math.random,
+): ActionOutcome {
+  return runAction(state, playerId, "placement", now, scale, rng, (game, seat) =>
+    lockPlacement(game, seat),
+  );
+}
+
+// ---- 정리와 알람 ----
 
 /** 로비에서 유예 시간이 지난 끊긴 플레이어를 내보낸다. 바뀐 게 있으면 true. */
 export function pruneLobby(state: RoomState, now: number): boolean {
@@ -184,6 +375,9 @@ export function isExpired(state: RoomState, now: number): boolean {
 export function nextDeadline(state: RoomState): number | null {
   const candidates: number[] = [];
   if (state.phaseEndsAt !== null) candidates.push(state.phaseEndsAt);
+  if (state.phase === "draft" && state.game && state.game.turnEndsAt !== null) {
+    candidates.push(state.game.turnEndsAt);
+  }
   if (state.phase === "lobby") {
     for (const p of state.players) {
       if (!p.connected && p.disconnectedAt !== null) {
@@ -197,6 +391,8 @@ export function nextDeadline(state: RoomState): number | null {
   return candidates.length > 0 ? Math.min(...candidates) : null;
 }
 
+// ---- 클라이언트에게 보여 줄 상태 ----
+
 export function toPublicPlayer(player: PlayerState): PublicPlayer {
   return {
     id: player.id,
@@ -207,8 +403,42 @@ export function toPublicPlayer(player: PlayerState): PublicPlayer {
   };
 }
 
+/**
+ * 밴과 배치는 상대에게 숨겨야 해서 보는 사람마다 다르게 만든다.
+ * - 밴: 밴 단계가 끝나기 전에는 상대가 무엇을 밴했는지 모른다 (정했는지만 안다).
+ * - 레인 배치: 전투가 시작되기 전에는 상대의 배치를 모른다.
+ * - 드래프트 결과(뽑은 캐릭터)는 뽑는 즉시 모두에게 공개된다.
+ */
+export function toGameSnapshot(state: RoomState, viewerSeat: Seat | null): GameSnapshot | null {
+  const game = state.game;
+  if (!game) return null;
+
+  const bansRevealed = state.phase !== "ban";
+  const lanesRevealed = state.phase === "battle" || state.phase === "result";
+  const inDraft = state.phase === "draft";
+
+  const ban = (seat: Seat): BanSnapshot => ({
+    locked: game.banLocked[seat],
+    characterId: bansRevealed || seat === viewerSeat ? game.bans[seat] : null,
+  });
+  const lanes = (seat: Seat) =>
+    lanesRevealed || seat === viewerSeat ? { ...game.lanes[seat] } : null;
+
+  return {
+    firstPicker: game.firstPicker,
+    bans: [ban(0), ban(1)],
+    pickOrder: [...game.pickOrder],
+    picks: [[...game.picks[0]], [...game.picks[1]]],
+    turnSeat: inDraft ? currentTurnSeat(game) : null,
+    turnEndsAt: inDraft ? game.turnEndsAt : null,
+    lanes: [lanes(0), lanes(1)],
+    placementLocked: [game.placementLocked[0], game.placementLocked[1]],
+  };
+}
+
 /** 클라이언트에게 보낼 공개 상태. token 같은 비밀 값은 넣지 않는다. */
-export function toSnapshot(state: RoomState, now: number): RoomSnapshot {
+export function toSnapshot(state: RoomState, now: number, viewerId?: string): RoomSnapshot {
+  const viewer = viewerId ? state.players.find((p) => p.id === viewerId) : undefined;
   return {
     code: state.code,
     phase: state.phase,
@@ -216,5 +446,6 @@ export function toSnapshot(state: RoomState, now: number): RoomSnapshot {
     phaseEndsAt: state.phaseEndsAt,
     serverTime: now,
     players: state.players.map(toPublicPlayer),
+    game: toGameSnapshot(state, viewer ? viewer.seat : null),
   };
 }

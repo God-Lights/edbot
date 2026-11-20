@@ -7,12 +7,16 @@ import {
   isExpired,
   joinRoom,
   nextDeadline,
+  playerBan,
+  playerLock,
+  playerPick,
+  playerPlace,
   pruneLobby,
   setDisconnected,
   setReady,
   toSnapshot,
 } from "./room-state";
-import type { RoomState } from "./room-state";
+import type { ActionOutcome, RoomState } from "./room-state";
 
 const STATE_KEY = "state";
 
@@ -108,7 +112,7 @@ export class Room extends DurableObject<Env> {
       t: "welcome",
       playerId: player.id,
       token: player.token,
-      room: toSnapshot(this.state, now),
+      room: toSnapshot(this.state, now, player.id),
     });
     this.broadcast();
     return new Response(null, { status: 101, webSocket: client });
@@ -126,21 +130,46 @@ export class Room extends DurableObject<Env> {
     }
 
     const now = Date.now();
+    const playerId = attachment.playerId;
+    const scale = this.scale;
     switch (msg.t) {
       case "ping":
         sendTo(ws, { t: "pong", ts: msg.ts, serverTime: now });
         return;
       case "ready": {
-        const result = setReady(this.state, attachment.playerId, msg.ready, now, this.scale);
-        if (!result.ok) {
-          sendTo(ws, { t: "error", code: result.code, message: result.message });
-          return;
-        }
-        await this.persist();
-        this.broadcast();
+        const result = setReady(this.state, playerId, msg.ready, now, scale);
+        await this.finishAction(ws, result);
         return;
       }
+      case "ban":
+        await this.finishAction(ws, playerBan(this.state, playerId, msg.characterId, now, scale));
+        return;
+      case "pick":
+        await this.finishAction(ws, playerPick(this.state, playerId, msg.characterId, now, scale));
+        return;
+      case "place":
+        await this.finishAction(
+          ws,
+          playerPlace(this.state, playerId, msg.characterId, msg.lane, now, scale),
+        );
+        return;
+      case "lock":
+        await this.finishAction(ws, playerLock(this.state, playerId, now, scale));
+        return;
     }
+  }
+
+  /** 선택이 받아들여졌으면 저장하고 모두에게 알리고, 거절되었으면 보낸 사람에게만 이유를 알린다. */
+  private async finishAction(
+    ws: WebSocket,
+    result: ActionOutcome | { ok: true; started: boolean } | { ok: false; code: ErrorCode; message: string },
+  ): Promise<void> {
+    if (!result.ok) {
+      sendTo(ws, { t: "error", code: result.code, message: result.message });
+      return;
+    }
+    await this.persist();
+    this.broadcast();
   }
 
   async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
@@ -204,13 +233,16 @@ export class Room extends DurableObject<Env> {
     }
   }
 
+  /** 모두에게 현재 상태를 보낸다. 밴과 배치는 상대에게 숨겨야 해서 소켓마다 따로 만든다. */
   private broadcast(): void {
     if (!this.state) return;
-    const message: ServerMessage = { t: "state", room: toSnapshot(this.state, Date.now()) };
-    const text = JSON.stringify(message);
+    const now = Date.now();
     for (const ws of this.ctx.getWebSockets()) {
+      let viewerId: string | undefined;
       try {
-        ws.send(text);
+        viewerId = (ws.deserializeAttachment() as SocketAttachment | null)?.playerId;
+        const message: ServerMessage = { t: "state", room: toSnapshot(this.state, now, viewerId) };
+        ws.send(JSON.stringify(message));
       } catch {
         // 이미 닫힌 소켓. close 이벤트가 따로 정리한다.
       }

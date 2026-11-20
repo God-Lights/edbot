@@ -164,6 +164,36 @@ namespace Edbot.Net
             return TrySend(MessageCodec.Ready(ready));
         }
 
+        /// <summary>밴 단계에서 캐릭터 한 명을 금지한다. 한 번 정하면 바꿀 수 없다.</summary>
+        public bool SendBan(string characterId)
+        {
+            return TrySend(MessageCodec.Ban(characterId));
+        }
+
+        /// <summary>드래프트에서 내 차례에 캐릭터 한 명을 뽑는다.</summary>
+        public bool SendPick(string characterId)
+        {
+            return TrySend(MessageCodec.Pick(characterId));
+        }
+
+        /// <summary>배치 단계에서 내 캐릭터 한 명의 레인을 정한다. 확정하기 전에는 다시 바꿀 수 있다.</summary>
+        public bool SendPlace(string characterId, Lane lane)
+        {
+            return TrySend(MessageCodec.Place(characterId, lane));
+        }
+
+        /// <summary>배치를 확정한다. 정하지 않은 캐릭터는 기본 레인으로 간다.</summary>
+        public bool SendLock()
+        {
+            return TrySend(MessageCodec.Lock());
+        }
+
+        /// <summary>서버 시각(ms)까지 남은 시간(ms). 서버 시계로 보정한다. 시각이 없으면 null.</summary>
+        public long? RemainingMsUntil(long? serverTimeMs)
+        {
+            return _clock.RemainingMs(serverTimeMs, _nowMs());
+        }
+
         /// <summary>끝날 때까지 기다린다. 주로 테스트에서 쓴다.</summary>
         public bool WaitUntilStopped(TimeSpan timeout)
         {

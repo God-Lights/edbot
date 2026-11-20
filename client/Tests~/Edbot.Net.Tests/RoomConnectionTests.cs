@@ -233,6 +233,54 @@ namespace Edbot.Net.Tests
         }
 
         [Fact]
+        public void 밴_뽑기_배치_확정_메시지를_보낸다()
+        {
+            var transport = new FakeTransport();
+            using (var connection = new RoomConnection(new FakeFactory(transport), Fast))
+            {
+                Assert.False(connection.SendBan("richmond"));
+                Assert.False(connection.SendPick("richmond"));
+                Assert.False(connection.SendPlace("richmond", Lane.Center));
+                Assert.False(connection.SendLock());
+
+                connection.Start("ws://x", "ABCD", "에드");
+                transport.Push(Welcome());
+                WaitUntil(connection, Connected);
+
+                Assert.True(connection.SendBan("ancient-lord"));
+                Assert.True(connection.SendPick("richmond"));
+                Assert.True(connection.SendPlace("richmond", Lane.Kingside));
+                Assert.True(connection.SendLock());
+
+                WaitFor(() => transport.Sent.Count >= 5); // ping 1개 + 위 4개
+                var sent = transport.Sent;
+                Assert.Contains("{\"t\":\"ban\",\"characterId\":\"ancient-lord\"}", sent);
+                Assert.Contains("{\"t\":\"pick\",\"characterId\":\"richmond\"}", sent);
+                Assert.Contains("{\"t\":\"place\",\"characterId\":\"richmond\",\"lane\":\"kingside\"}", sent);
+                Assert.Contains("{\"t\":\"lock\"}", sent);
+            }
+        }
+
+        [Fact]
+        public void 서버_시각까지_남은_시간을_보정해서_알려준다()
+        {
+            long localNow = 100_500; // 내 시계가 서버보다 500ms 빠르다
+            var transport = new FakeTransport();
+            using (var connection = new RoomConnection(new FakeFactory(transport), Fast, () => localNow))
+            {
+                Assert.Null(connection.RemainingMsUntil(null));
+                connection.Start("ws://x", "ABCD", "에드");
+                transport.Push(Welcome(serverTime: 100_000));
+                WaitUntil(connection, Connected);
+
+                localNow = 101_500; // 서버 시각 101_000
+                Assert.Equal(4_000, connection.RemainingMsUntil(105_000));
+                Assert.Equal(0, connection.RemainingMsUntil(100_000)); // 이미 지났다
+                Assert.Null(connection.RemainingMsUntil(null));
+            }
+        }
+
+        [Fact]
         public void 끊기면_token으로_다시_접속한다()
         {
             var first = new FakeTransport();

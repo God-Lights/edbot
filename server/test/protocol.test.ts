@@ -7,6 +7,33 @@ describe("parseClientMessage", () => {
     expect(parseClientMessage('{"t":"ping","ts":123}')).toEqual({ t: "ping", ts: 123 });
   });
 
+  it("ban, pick, place, lock을 받아들인다", () => {
+    expect(parseClientMessage('{"t":"ban","characterId":"richmond"}')).toEqual({
+      t: "ban",
+      characterId: "richmond",
+    });
+    expect(parseClientMessage('{"t":"pick","characterId":"lappus"}')).toEqual({
+      t: "pick",
+      characterId: "lappus",
+    });
+    expect(parseClientMessage('{"t":"place","characterId":"lappus","lane":"center"}')).toEqual({
+      t: "place",
+      characterId: "lappus",
+      lane: "center",
+    });
+    expect(parseClientMessage('{"t":"lock"}')).toEqual({ t: "lock" });
+  });
+
+  it("ban, pick, place의 잘못된 값은 null", () => {
+    expect(parseClientMessage('{"t":"ban"}')).toBeNull();
+    expect(parseClientMessage('{"t":"ban","characterId":""}')).toBeNull();
+    expect(parseClientMessage('{"t":"pick","characterId":5}')).toBeNull();
+    expect(parseClientMessage(`{"t":"pick","characterId":"${"x".repeat(65)}"}`)).toBeNull();
+    expect(parseClientMessage('{"t":"place","characterId":"lappus"}')).toBeNull();
+    expect(parseClientMessage('{"t":"place","characterId":"lappus","lane":"top"}')).toBeNull();
+    expect(parseClientMessage('{"t":"place","lane":"center"}')).toBeNull();
+  });
+
   it("형식이 틀리면 null", () => {
     expect(parseClientMessage("not json")).toBeNull();
     expect(parseClientMessage("[]")).toBeNull();
