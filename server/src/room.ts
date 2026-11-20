@@ -10,6 +10,7 @@ import {
   nextDeadline,
   playerBan,
   playerLock,
+  playerExplore,
   playerMoveLane,
   playerPick,
   playerPlace,
@@ -175,6 +176,12 @@ export class Room extends DurableObject<Env> {
         await this.finishAction(
           ws,
           playerUltimate(this.state, playerId, msg.characterId, msg.lane, now, scale),
+        );
+        return;
+      case "explore":
+        await this.finishAction(
+          ws,
+          playerExplore(this.state, playerId, msg.action, msg.tile, now, scale),
         );
         return;
       case "move":

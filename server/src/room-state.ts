@@ -22,10 +22,14 @@ import type { ActionResult, GameState } from "./game";
 import { createBattle, TICKS_PER_SECOND } from "./battle/core";
 import type { BattleState } from "./battle/core";
 import { toBattleSnapshot } from "./battle/snapshot";
+import { awardKill, createExplore, startAmbush, startGather, startScout, stepExplore } from "./explore/explore";
+import type { ExploreState } from "./explore/explore";
+import { toExploreSnapshot } from "./explore/snapshot";
 import { finishByTime, moveLane, startDeathmatch, stepBattle, useUltimate } from "./battle/sim";
 import { isTimedPhase, nextPhase, phaseDurationMs } from "./phases";
 import type {
   BanSnapshot,
+  ExploreAction,
   ErrorCode,
   GameSnapshot,
   Lane,
@@ -65,6 +69,12 @@ export interface RoomState {
   game: GameState | null;
   /** 전투와 데스매치의 시뮬레이션. 그 외에는 null. */
   battle: BattleState | null;
+  /** 탐사 지도와 자원. 탐사 단계부터 판이 끝날 때까지. 그 외에는 null. */
+  explore: ExploreState | null;
+  /** 탐사가 여기까지 진행됐다는 서버 시각(ms). 틱 하나는 tickMs. */
+  exploreClock: number;
+  /** 킬 보상을 이미 준 전투 이벤트 번호. */
+  killsAwardedSeq: number;
   /** 시뮬레이션이 여기까지 진행됐다는 서버 시각(ms). 틱 하나는 tickMs. */
   battleClock: number;
   /** 다음에 상태를 보내려고 깨어날 시각(ms). */
@@ -85,6 +95,9 @@ export function createRoom(code: string, now: number): RoomState {
     players: [],
     game: null,
     battle: null,
+    explore: null,
+    exploreClock: now,
+    killsAwardedSeq: 0,
     battleClock: now,
     battleSyncAt: now,
     result: null,
@@ -221,12 +234,24 @@ function enterPhase(
     // 한 판이 끝나고 돌아온 로비. 다시 하려면 새로 준비해야 한다.
     state.game = null;
     state.battle = null;
+    state.explore = null;
     state.result = null;
     for (const p of state.players) p.ready = false;
   } else if (phase === "ban") {
     state.game = createGame(rng() < 0.5 ? 0 : 1); // 선공은 무작위
   } else if (phase === "draft" && state.game) {
     startDraft(state.game, startedAt, draftTurnMs(scale));
+  } else if (phase === "explore" && state.game) {
+    state.explore = createExplore({
+      seed: Math.floor(rng() * 0x7fffffff),
+      teams: [[...state.game.picks[0]], [...state.game.picks[1]]],
+      secondPicker: state.game.firstPicker === 0 ? 1 : 0,
+    });
+    state.exploreClock = startedAt;
+    state.killsAwardedSeq = 0;
+    state.battleSyncAt = startedAt + battleSyncMs(scale);
+  } else if (phase === "forge") {
+    state.battleSyncAt = startedAt + battleSyncMs(scale);
   } else if (phase === "battle" && state.game) {
     state.battle = createBattle(battleSetup(state.game));
     state.battleClock = startedAt;
@@ -274,6 +299,27 @@ function settleBattle(state: RoomState, at: number, scale: number, rng: () => nu
   enterPhase(state, "result", at, scale, rng);
 }
 
+/** 탐사를 until(서버 시각)까지 진행한다. 탐사는 탐사·대장간·전투·데스매치 동안 계속 흐른다. */
+function runExploreTo(state: RoomState, until: number, scale: number): void {
+  const explore = state.explore;
+  if (!explore) return;
+  const step = tickMs(scale);
+  while (state.exploreClock + step <= until) {
+    state.exploreClock += step;
+    stepExplore(explore);
+  }
+}
+
+/** 새로 일어난 처치에 탈런트를 준다. */
+function awardKills(state: RoomState): void {
+  if (!state.explore || !state.battle) return;
+  for (const event of state.battle.events) {
+    if (event.seq <= state.killsAwardedSeq) continue;
+    if (event.type === "kill" && event.seat !== undefined) awardKill(state.explore, event.seat);
+    state.killsAwardedSeq = event.seq;
+  }
+}
+
 /** 시뮬레이션을 until(서버 시각)까지 진행한다. 중간에 끝나면 결과를 정리하고 true. */
 function runBattleTo(state: RoomState, until: number, scale: number, rng: () => number): boolean {
   const battle = state.battle;
@@ -282,6 +328,7 @@ function runBattleTo(state: RoomState, until: number, scale: number, rng: () => 
   while (!battle.finished && state.battleClock + step <= until) {
     state.battleClock += step;
     stepBattle(battle);
+    awardKills(state);
   }
   if (battle.finished) {
     settleBattle(state, state.battleClock, scale, rng);
@@ -346,6 +393,7 @@ export function advancePhase(
     if (inBattle && state.battle) {
       const end = state.phaseEndsAt ?? Infinity;
       const before = state.phase;
+      runExploreTo(state, Math.min(now, end), scale);
       const finishedEarly = runBattleTo(state, Math.min(now, end), scale, rng);
       if (finishedEarly || state.phase !== before) {
         changed = true;
@@ -368,7 +416,15 @@ export function advancePhase(
       state.phase === "draft" && game && game.turnEndsAt !== null ? game.turnEndsAt : Infinity;
     const phaseDue = state.phaseEndsAt ?? Infinity;
     const due = Math.min(turnDue, phaseDue);
-    if (due > now) break;
+    const exploring = state.explore !== null && (state.phase === "explore" || state.phase === "forge");
+    if (exploring) runExploreTo(state, Math.min(due, now), scale);
+    if (due > now) {
+      if (exploring && now >= state.battleSyncAt) {
+        state.battleSyncAt = now + battleSyncMs(scale);
+        changed = true;
+      }
+      break;
+    }
 
     changed = true;
     if (game && turnDue <= phaseDue) {
@@ -480,6 +536,11 @@ const COMMAND_MESSAGES: Record<string, string> = {
   no_target: "대상이 없다.",
   invalid_lane: "갈 수 없는 레인이다.",
   not_a_knight: "나이트만 레인을 옮길 수 있다.",
+  invalid_tile: "없는 칸이다.",
+  no_action_gauge: "행동 게이지가 부족하다.",
+  tile_busy: "이미 그 칸에서 행동 중이다.",
+  nothing_to_gather: "채집할 게 없는 칸이다.",
+  already_known: "이미 알고 있는 칸이다.",
 };
 
 function runBattleCommand(
@@ -496,6 +557,30 @@ function runBattleCommand(
   advancePhase(state, now, scale, rng);
   if ((state.phase !== "battle" && state.phase !== "deathmatch") || !state.battle) return WRONG_PHASE;
   const result = act(state.battle, player.seat);
+  if (!result.ok) {
+    return { ok: false, code: result.code as ErrorCode, message: COMMAND_MESSAGES[result.code] ?? "할 수 없다." };
+  }
+  state.lastActiveAt = now;
+  return { ok: true, advanced: false };
+}
+
+/** 탐사 행동. 탐사·대장간·전투·데스매치 중에 할 수 있다. */
+export function playerExplore(
+  state: RoomState,
+  playerId: string,
+  action: ExploreAction,
+  tile: number,
+  now: number,
+  scale = 1,
+  rng: () => number = Math.random,
+): ActionOutcome {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return { ok: false, code: "bad_message", message: "방에 없는 플레이어다." };
+  advancePhase(state, now, scale, rng); // 그 순간까지 탐사를 먼저 진행한다
+  const active = ["explore", "forge", "battle", "deathmatch"].includes(state.phase);
+  if (!active || !state.explore) return WRONG_PHASE;
+  const act = action === "gather" ? startGather : action === "ambush" ? startAmbush : startScout;
+  const result = act(state.explore, player.seat, tile);
   if (!result.ok) {
     return { ok: false, code: result.code as ErrorCode, message: COMMAND_MESSAGES[result.code] ?? "할 수 없다." };
   }
@@ -558,9 +643,10 @@ export function nextDeadline(state: RoomState): number | null {
   if (state.phase === "draft" && state.game && state.game.turnEndsAt !== null) {
     candidates.push(state.game.turnEndsAt);
   }
-  if ((state.phase === "battle" || state.phase === "deathmatch") && state.battle) {
-    candidates.push(state.battleSyncAt);
-  }
+  const syncing =
+    ((state.phase === "battle" || state.phase === "deathmatch") && state.battle !== null) ||
+    ((state.phase === "explore" || state.phase === "forge") && state.explore !== null);
+  if (syncing) candidates.push(state.battleSyncAt);
   if (state.phase === "lobby") {
     for (const p of state.players) {
       if (!p.connected && p.disconnectedAt !== null) {
@@ -632,6 +718,7 @@ export function toSnapshot(state: RoomState, now: number, viewerId?: string): Ro
     players: state.players.map(toPublicPlayer),
     game: toGameSnapshot(state, viewer ? viewer.seat : null),
     battle: state.battle ? toBattleSnapshot(state.battle, viewer ? viewer.seat : null) : null,
+    explore: state.explore ? toExploreSnapshot(state.explore, viewer ? viewer.seat : null) : null,
     result: state.result,
   };
 }

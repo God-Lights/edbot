@@ -44,7 +44,13 @@ export type ErrorCode =
   | "on_cooldown"
   | "not_enough_steam"
   | "no_target"
-  | "not_a_knight";
+  | "not_a_knight"
+  // ---- 탐사 ----
+  | "invalid_tile"
+  | "no_action_gauge"
+  | "tile_busy"
+  | "nothing_to_gather"
+  | "already_known";
 
 export interface PublicPlayer {
   id: string;
@@ -147,6 +153,44 @@ export interface BattleSnapshot {
   events: BattleEventSnapshot[];
 }
 
+export interface ExploreTileSnapshot {
+  index: number;
+  /** 이 칸의 정체를 아는가. 안개 칸은 정찰하거나 채집하기 전에는 모른다. */
+  known: boolean;
+  /** tree | rock | ore | chest | empty. 모르면 null. */
+  kind: string | null;
+  /** 자원이 지금 없다 (채집됨). 아는 칸만. */
+  depleted: boolean;
+  respawnInTicks: number | null;
+  /** 내가 이 칸을 채집하는 중이면 끝날 때까지 남은 틱. */
+  myGatherInTicks: number | null;
+  /** 내가 이 칸에 매복 중이면 끝날 때까지 남은 틱. */
+  myAmbushInTicks: number | null;
+  /** 정찰해서 상대의 매복을 알아냈다. */
+  enemyAmbush: boolean;
+}
+
+export interface ExploreEventSnapshot {
+  seq: number;
+  tick: number;
+  type: string;
+  tile: number;
+  gain: Partial<Record<"talent" | "branch" | "stone" | "ore" | "ironIngot" | "rare" | "blueprints", number>> | null;
+  detail: string | null;
+}
+
+/** 탐사 상태. 내 자원과 내 행동만 들어 있고 상대 것은 없다. */
+export interface ExploreSnapshot {
+  tick: number;
+  ticksPerSecond: number;
+  gauge: number;
+  gaugeMax: number;
+  gaugeNextInTicks: number | null;
+  tiles: ExploreTileSnapshot[];
+  resources: Record<"talent" | "branch" | "stone" | "ore" | "ironIngot" | "rare" | "blueprints", number> | null;
+  events: ExploreEventSnapshot[];
+}
+
 export interface ResultSnapshot {
   winner: Seat | null;
   /** towers | time | deathmatch | deathmatchTime */
@@ -168,6 +212,8 @@ export interface RoomSnapshot {
   game: GameSnapshot | null;
   /** 전투와 데스매치 중에만 있다. */
   battle: BattleSnapshot | null;
+  /** 탐사 단계부터 판이 끝날 때까지. */
+  explore: ExploreSnapshot | null;
   /** 결과 단계에서만 있다. */
   result: ResultSnapshot | null;
 }
@@ -188,7 +234,12 @@ export type ClientMessage =
   /** 전투 중 궁극기를 쓴다. 스팀포스 5가 든다. 안키오는 갈 레인(lane)을 같이 보낸다. */
   | { t: "ultimate"; characterId: string; lane?: Lane }
   /** 전투 중 나이트가 다른 레인으로 옮겨 간다. */
-  | { t: "move"; characterId: string; lane: Lane };
+  | { t: "move"; characterId: string; lane: Lane }
+  /** 탐사: 칸(0~15, 4x4)에 채집·매복·정찰을 한다. 행동 게이지가 1 든다. */
+  | { t: "explore"; action: ExploreAction; tile: number };
+
+export type ExploreAction = "gather" | "ambush" | "scout";
+export const EXPLORE_ACTIONS: readonly ExploreAction[] = ["gather", "ambush", "scout"];
 
 // ---- 서버 -> 클라이언트 ----
 
@@ -244,6 +295,12 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       if (!id) return null;
       if (msg.lane === undefined || msg.lane === null) return { t: "ultimate", characterId: id };
       return isLane(msg.lane) ? { t: "ultimate", characterId: id, lane: msg.lane } : null;
+    }
+    case "explore": {
+      const action = (EXPLORE_ACTIONS as readonly unknown[]).includes(msg.action) ? (msg.action as ExploreAction) : null;
+      const tile = msg.tile;
+      if (!action || typeof tile !== "number" || !Number.isInteger(tile) || tile < 0 || tile > 15) return null;
+      return { t: "explore", action, tile };
     }
     case "move": {
       const id = characterId(msg.characterId);

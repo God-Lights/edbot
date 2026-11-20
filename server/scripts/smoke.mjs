@@ -268,6 +268,23 @@ async function activeGame(ids) {
   );
   check(explore.room.game.lanes[seatB] === null, "탐사 단계에서도 상대의 배치는 숨겨져 있다");
 
+  // ---- 탐사: 지도와 내 자원만 보인다
+  const map = explore.room.explore;
+  check(map && map.tiles.length === 16 && map.gauge === 3 && map.resources.talent === 15, "탐사가 시작되면 4x4 지도와 내 자원(탈런트 15)이 온다");
+  const tree = map.tiles.find((t) => t.known && t.kind === "tree");
+  const foggy = map.tiles.find((t) => !t.known);
+  const exAt = a.messages.length;
+  a.send({ t: "explore", action: "gather", tile: tree.index });
+  a.send({ t: "explore", action: "scout", tile: foggy.index });
+  const gathering = await a.waitFor((m) => m.t === "state" && m.room.explore && m.room.explore.tiles[tree.index].myGatherInTicks !== null && m.room.explore.tiles[foggy.index].known, 5000, exAt);
+  check(gathering.room.explore.gauge <= 1, "행동을 하면 행동 게이지가 줄어든다");
+  const theirView = await b.waitFor((m) => m.t === "state" && m.room.explore, 5000, exAt);
+  check(theirView.room.explore.tiles[tree.index].myGatherInTicks === null && !theirView.room.explore.tiles[foggy.index].known, "상대의 채집과 정찰 결과는 나에게 보이지 않는다");
+  a.send({ t: "explore", action: "gather", tile: 99 });
+  check((await a.waitFor((m) => m.t === "error", 5000, exAt)).code, "잘못된 칸은 거절된다");
+  const gathered = await a.waitFor((m) => m.t === "state" && m.room.explore && m.room.explore.resources.branch >= 5, 15000, exAt);
+  check(gathered.room.explore.resources.branch >= 5, "채집이 끝나면 나뭇가지가 늘어난다");
+
   // ---- 전투: 서버가 시뮬레이션을 돌리고 상태를 계속 보낸다
   const battle = await a.waitFor(isState("battle"), 15000);
   const bs = battle.room.battle;
