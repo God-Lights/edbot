@@ -13,7 +13,7 @@ namespace Edbot.Game
     {
         public static GameClient Instance { get; private set; }
 
-        [SerializeField] private string serverUrl = "http://127.0.0.1:8787";
+        [SerializeField] private string serverUrl = "https://edgame-api.officialgl.com";
 
         public event Action<ConnectedEvent> Connected;
         public event Action<RoomSnapshot> StateChanged;
@@ -34,6 +34,20 @@ namespace Edbot.Game
 
         public bool IsCreatingRoom { get; private set; }
 
+        // ---- GL Account 로그인 ----
+
+        private const string TokenPref = "edbot.authToken";
+        private System.Threading.CancellationTokenSource _loginCts;
+
+        /// <summary>로그인한 사용자. 로그인하지 않았으면 null.</summary>
+        public AuthUser User { get; private set; }
+
+        /// <summary>게임 세션 토큰. 서버가 로그인을 요구하지 않는 개발 서버에서는 없어도 된다.</summary>
+        public string AuthToken { get; private set; }
+
+        /// <summary>브라우저에서 로그인하기를 기다리는 중인가.</summary>
+        public bool IsLoggingIn { get; private set; }
+
         /// <summary>캐릭터 12명의 데이터. 방에 들어갈 때 서버에서 가져온다. 아직이면 null.</summary>
         public IReadOnlyList<CharacterInfo> Roster { get; private set; }
 
@@ -53,6 +67,7 @@ namespace Edbot.Game
             DontDestroyOnLoad(gameObject);
             // 창이 포커스를 잃어도 연결과 타이머가 계속 돌아야 한다.
             Application.runInBackground = true;
+            RestoreLogin();
         }
 
         private void Update()
@@ -69,8 +84,115 @@ namespace Edbot.Game
 
         private void OnDestroy()
         {
+            if (_loginCts != null) _loginCts.Cancel();
             if (Instance == this) Instance = null;
             StopConnection();
+        }
+
+        /// <summary>저장해 둔 토큰이 아직 유효한지 확인한다. 만료되었으면 지운다.</summary>
+        private async void RestoreLogin()
+        {
+            string token = PlayerPrefs.GetString(TokenPref, "");
+            if (string.IsNullOrEmpty(token)) return;
+            try
+            {
+                using (var auth = new AuthClient(serverUrl))
+                {
+                    var user = await auth.GetMeAsync(token);
+                    if (user == null)
+                    {
+                        PlayerPrefs.DeleteKey(TokenPref);
+                        return;
+                    }
+                    AuthToken = token;
+                    User = user;
+                }
+            }
+            catch (Exception ex)
+            {
+                // 서버에 닿지 못한 것일 수 있어서 토큰은 지우지 않는다.
+                Debug.LogWarning("로그인 상태를 확인하지 못했다: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// 로그인하기 버튼을 눌렀을 때. 브라우저로 GL Account 로그인 화면을 열고,
+        /// 로그인을 마치면 게임이 토큰을 받아 온다. (자동으로 열지 않는다.)
+        /// </summary>
+        public async void BeginLogin()
+        {
+            if (IsLoggingIn) return;
+            IsLoggingIn = true;
+            LastMessage = null;
+            _loginCts = new System.Threading.CancellationTokenSource();
+            var ct = _loginCts.Token;
+            try
+            {
+                using (var auth = new AuthClient(serverUrl))
+                {
+                    var start = await auth.StartAsync(ct);
+                    Application.OpenURL(start.LoginUrl);
+                    LastMessage = "브라우저에서 로그인한 뒤 '로그인 확인'을 눌러 주세요.";
+                    var deadline = DateTime.UtcNow.AddSeconds(Mathf.Max(30, start.ExpiresInSeconds));
+                    while (DateTime.UtcNow < deadline)
+                    {
+                        await System.Threading.Tasks.Task.Delay(2000, ct);
+                        var result = await auth.PollAsync(start.LoginId, ct);
+                        if (result.Status == LoginPollStatus.Pending) continue;
+                        if (result.Status == LoginPollStatus.Expired) break;
+                        AuthToken = result.Token;
+                        User = result.User;
+                        PlayerPrefs.SetString(TokenPref, result.Token);
+                        PlayerPrefs.Save();
+                        LastMessage = null;
+                        return;
+                    }
+                    LastMessage = "로그인 시간이 지났다. 다시 눌러 주세요.";
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                LastMessage = "로그인할 수 없다: " + ex.Message;
+                Debug.LogWarning(LastMessage);
+            }
+            finally
+            {
+                IsLoggingIn = false;
+            }
+        }
+
+        public void CancelLogin()
+        {
+            if (_loginCts != null) _loginCts.Cancel();
+        }
+
+        /// <summary>게임 세션을 끊는다. (GL 계정 로그아웃은 account.officialgl.com 에서)</summary>
+        public async void Logout()
+        {
+            string token = AuthToken;
+            AuthToken = null;
+            User = null;
+            PlayerPrefs.DeleteKey(TokenPref);
+            if (string.IsNullOrEmpty(token)) return;
+            try
+            {
+                using (var auth = new AuthClient(serverUrl)) await auth.LogoutAsync(token);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("로그아웃 요청에 실패했다: " + ex.Message);
+            }
+        }
+
+        private void HandleUnauthorized()
+        {
+            AuthToken = null;
+            User = null;
+            PlayerPrefs.DeleteKey(TokenPref);
+            LastMessage = "로그인이 필요하다. 로그인하기를 눌러 주세요.";
         }
 
         /// <summary>새 방을 만들고 바로 들어간다.</summary>
@@ -81,12 +203,16 @@ namespace Edbot.Game
             LastMessage = null;
             try
             {
-                using (var api = new ApiClient(serverUrl))
+                using (var api = new ApiClient(serverUrl, null, AuthToken))
                 {
                     string code = await api.CreateRoomAsync();
                     // await 뒤에는 Unity 메인 스레드로 돌아와 있다.
                     Join(code, playerName);
                 }
+            }
+            catch (UnauthorizedException)
+            {
+                HandleUnauthorized();
             }
             catch (Exception ex)
             {
@@ -108,10 +234,12 @@ namespace Edbot.Game
             LoadRosterAsync();
 
             var connection = new RoomConnection();
+            connection.AuthToken = AuthToken;
             _connection = connection;
             try
             {
-                connection.Start(ApiClient.ToWebSocketBase(serverUrl), roomCode, playerName);
+                // 로그인했다면 서버가 GL 닉네임을 이름으로 쓴다.
+                connection.Start(ApiClient.ToWebSocketBase(serverUrl), roomCode, User != null ? User.Nickname : playerName);
             }
             catch (Exception ex)
             {
@@ -149,6 +277,16 @@ namespace Edbot.Game
         public bool LockPlacement()
         {
             return _connection != null && _connection.SendLock();
+        }
+
+        public bool UseUltimate(string characterId, Lane? lane = null)
+        {
+            return _connection != null && _connection.SendUltimate(characterId, lane);
+        }
+
+        public bool MoveLane(string characterId, Lane lane)
+        {
+            return _connection != null && _connection.SendMoveLane(characterId, lane);
         }
 
         /// <summary>id로 캐릭터를 찾는다. 데이터가 아직 없거나 모르는 id면 null.</summary>

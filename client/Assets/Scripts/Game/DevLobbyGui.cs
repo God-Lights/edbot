@@ -48,14 +48,42 @@ namespace Edbot.Game
             }
             GUILayout.EndScrollView();
             GUILayout.EndArea();
+
+            // 전투 화면은 넓어서 로비 패널 오른쪽에 따로 그린다.
+            var connection2 = client.Connection;
+            var room = connection2 == null ? null : connection2.Room;
+            if (room != null && room.Battle != null && (room.Phase == Phase.Battle || room.Phase == Phase.Deathmatch))
+            {
+                BattleView.Draw(client, connection2, room, new Rect(452, 16, Screen.width / scale - 468, Screen.height / scale - 32));
+            }
         }
 
         private void DrawJoinForm(GameClient client)
         {
             GUILayout.Label("서버 주소");
             client.ServerUrl = GUILayout.TextField(client.ServerUrl);
-            GUILayout.Label("이름");
-            _name = GUILayout.TextField(_name, 16);
+
+            // 자동으로 로그인 화면으로 보내지 않고, 버튼을 눌렀을 때만 브라우저를 연다.
+            if (client.User != null)
+            {
+                GUILayout.Label("로그인: " + client.User.Nickname);
+                if (GUILayout.Button("로그아웃")) client.Logout();
+            }
+            else if (client.IsLoggingIn)
+            {
+                GUILayout.Label("브라우저에서 로그인하는 중...");
+                if (GUILayout.Button("취소")) client.CancelLogin();
+            }
+            else if (GUILayout.Button("로그인하기"))
+            {
+                client.BeginLogin();
+            }
+
+            if (client.User == null)
+            {
+                GUILayout.Label("이름 (로그인하지 않은 개발 서버용)");
+                _name = GUILayout.TextField(_name, 16);
+            }
 
             GUI.enabled = !client.IsCreatingRoom;
             if (GUILayout.Button(client.IsCreatingRoom ? "방을 만드는 중..." : "방 만들기"))
@@ -113,6 +141,13 @@ namespace Edbot.Game
                     break;
                 case Phase.Placement:
                     if (game != null && seat >= 0) DrawPlacement(client, game, seat);
+                    break;
+                case Phase.Battle:
+                case Phase.Deathmatch:
+                    GUILayout.Label("전투 화면은 오른쪽에 있다.");
+                    break;
+                case Phase.Result:
+                    DrawResult(room, seat);
                     break;
                 default:
                     if (game != null && seat >= 0) DrawTeams(client, game, seat);
@@ -228,6 +263,19 @@ namespace Edbot.Game
             }
             if (GUILayout.Button("배치 확정")) client.LockPlacement();
             GUI.enabled = true;
+        }
+
+        // ---- 결과 ----
+
+        private static void DrawResult(RoomSnapshot room, int seat)
+        {
+            var result = room.Result;
+            if (result == null) return;
+            string outcome = !result.Winner.HasValue ? "무승부" : (result.Winner.Value == seat ? "승리!" : "패배");
+            GUILayout.Label(outcome + "   (" + Labels.ResultReason(result.Reason) + ")");
+            GUILayout.Label("점수 " + result.Score[0] + " : " + result.Score[1] + "   처치 " + result.Kills[0] + " : " + result.Kills[1]
+                            + "   (왼쪽이 seat 0)");
+            GUILayout.Label("잠시 뒤 로비로 돌아간다.");
         }
 
         // ---- 탐사 이후: 두 팀과 레인을 보여 준다 ----

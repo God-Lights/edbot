@@ -18,6 +18,8 @@ namespace Edbot.Net
         Explore,
         Forge,
         Battle,
+        /// <summary>전투가 동점일 때만 이어지는 연장전.</summary>
+        Deathmatch,
         Result,
     }
 
@@ -132,6 +134,122 @@ namespace Edbot.Net
         }
     }
 
+    /// <summary>전투 중인 캐릭터 한 명(소환수 포함).</summary>
+    public sealed class UnitSnapshot
+    {
+        [JsonProperty("id")] public string Id { get; set; }
+        [JsonProperty("characterId")] public string CharacterId { get; set; }
+        [JsonProperty("seat")] public int Seat { get; set; }
+        [JsonProperty("lane")] public Lane Lane { get; set; }
+        /// <summary>레인 위의 위치 0~100. seat 0의 본진이 0, seat 1의 본진이 100.</summary>
+        [JsonProperty("pos")] public double Pos { get; set; }
+        [JsonProperty("hp")] public int Hp { get; set; }
+        [JsonProperty("maxHp")] public int MaxHp { get; set; }
+        [JsonProperty("alive")] public bool Alive { get; set; }
+        /// <summary>죽어 있다면 되살아날 때까지 남은 틱.</summary>
+        [JsonProperty("respawnInTicks")] public int? RespawnInTicks { get; set; }
+        [JsonProperty("shield")] public int Shield { get; set; }
+        [JsonProperty("promoted")] public bool Promoted { get; set; }
+        [JsonProperty("summon")] public bool Summon { get; set; }
+        [JsonProperty("effects")] public List<string> Effects { get; set; } = new List<string>();
+        /// <summary>궁극기를 다시 쓸 수 있게 되는 틱. 내 캐릭터에게만 들어 있다.</summary>
+        [JsonProperty("ultReadyTick")] public int? UltReadyTick { get; set; }
+        /// <summary>나이트의 레인 이동을 다시 쓸 수 있게 되는 틱. 내 캐릭터에게만 들어 있다.</summary>
+        [JsonProperty("laneMoveReadyTick")] public int? LaneMoveReadyTick { get; set; }
+    }
+
+    public sealed class TowerSnapshot
+    {
+        [JsonProperty("id")] public string Id { get; set; }
+        [JsonProperty("seat")] public int Seat { get; set; }
+        [JsonProperty("lane")] public Lane Lane { get; set; }
+        /// <summary>"guard" 또는 "main".</summary>
+        [JsonProperty("kind")] public string Kind { get; set; }
+        [JsonProperty("pos")] public double Pos { get; set; }
+        [JsonProperty("hp")] public int Hp { get; set; }
+        [JsonProperty("maxHp")] public int MaxHp { get; set; }
+        [JsonProperty("alive")] public bool Alive { get; set; }
+
+        public bool IsMain { get { return Kind == "main"; } }
+    }
+
+    public sealed class BattleZone
+    {
+        [JsonProperty("lane")] public Lane Lane { get; set; }
+        [JsonProperty("pos")] public double Pos { get; set; }
+        [JsonProperty("seat")] public int Seat { get; set; }
+    }
+
+    public sealed class BattleEvent
+    {
+        /// <summary>전투 동안 1씩 늘어나는 번호. 이미 본 이벤트를 거르는 데 쓴다.</summary>
+        [JsonProperty("seq")] public int Seq { get; set; }
+        [JsonProperty("tick")] public int Tick { get; set; }
+        /// <summary>kill, towerDestroyed, ultimate, skill, respawn, promote, end</summary>
+        [JsonProperty("type")] public string Type { get; set; }
+        [JsonProperty("seat")] public int? Seat { get; set; }
+        [JsonProperty("unitId")] public string UnitId { get; set; }
+        [JsonProperty("targetId")] public string TargetId { get; set; }
+        [JsonProperty("text")] public string Text { get; set; }
+    }
+
+    /// <summary>전투와 데스매치 중의 상태.</summary>
+    public sealed class BattleSnapshot
+    {
+        /// <summary>"battle" 또는 "deathmatch".</summary>
+        [JsonProperty("mode")] public string Mode { get; set; }
+        /// <summary>전투 시작부터 센 틱.</summary>
+        [JsonProperty("tick")] public int Tick { get; set; }
+        [JsonProperty("ticksPerSecond")] public int TicksPerSecond { get; set; } = 10;
+        [JsonProperty("score")] public List<int> Score { get; set; } = new List<int>();
+        [JsonProperty("kills")] public List<int> Kills { get; set; } = new List<int>();
+        /// <summary>내 스팀포스. 구경꾼이면 null. 상대 것은 보이지 않는다.</summary>
+        [JsonProperty("steam")] public double? Steam { get; set; }
+        [JsonProperty("towers")] public List<TowerSnapshot> Towers { get; set; } = new List<TowerSnapshot>();
+        [JsonProperty("units")] public List<UnitSnapshot> Units { get; set; } = new List<UnitSnapshot>();
+        [JsonProperty("walls")] public List<BattleZone> Walls { get; set; } = new List<BattleZone>();
+        [JsonProperty("wells")] public List<BattleZone> Wells { get; set; } = new List<BattleZone>();
+        [JsonProperty("events")] public List<BattleEvent> Events { get; set; } = new List<BattleEvent>();
+
+        public const double UltimateCost = 5;
+
+        public bool IsDeathmatch { get { return Mode == "deathmatch"; } }
+
+        /// <summary>그 틱까지 남은 시간(초). 이미 지났으면 0.</summary>
+        public double SecondsUntilTick(int tick)
+        {
+            int perSecond = TicksPerSecond <= 0 ? 10 : TicksPerSecond;
+            return Math.Max(0, (tick - Tick) / (double)perSecond);
+        }
+
+        /// <summary>이 캐릭터의 궁극기를 지금 쓸 수 있는가. 살아 있고, 재사용 대기가 끝났고, 스팀포스가 충분해야 한다.</summary>
+        public bool CanUseUltimate(UnitSnapshot unit)
+        {
+            return unit != null && unit.Alive && unit.UltReadyTick.HasValue &&
+                   unit.UltReadyTick.Value <= Tick && Steam.HasValue && Steam.Value >= UltimateCost;
+        }
+
+        public UnitSnapshot FindUnit(string id)
+        {
+            foreach (var unit in Units)
+            {
+                if (unit.Id == id) return unit;
+            }
+            return null;
+        }
+    }
+
+    /// <summary>판이 끝난 뒤의 결과.</summary>
+    public sealed class ResultSnapshot
+    {
+        /// <summary>이긴 seat. 없으면 null.</summary>
+        [JsonProperty("winner")] public int? Winner { get; set; }
+        /// <summary>towers | time | deathmatch | deathmatchTime</summary>
+        [JsonProperty("reason")] public string Reason { get; set; }
+        [JsonProperty("score")] public List<int> Score { get; set; } = new List<int>();
+        [JsonProperty("kills")] public List<int> Kills { get; set; } = new List<int>();
+    }
+
     public sealed class RoomSnapshot
     {
         [JsonProperty("code")] public string Code { get; set; }
@@ -148,6 +266,12 @@ namespace Edbot.Net
 
         /// <summary>밴, 드래프트, 배치 상태. 로비에서는 null.</summary>
         [JsonProperty("game")] public GameSnapshot Game { get; set; }
+
+        /// <summary>전투와 데스매치 중에만 있다.</summary>
+        [JsonProperty("battle")] public BattleSnapshot Battle { get; set; }
+
+        /// <summary>결과 단계에서만 있다.</summary>
+        [JsonProperty("result")] public ResultSnapshot Result { get; set; }
 
         public PublicPlayer FindPlayer(string playerId)
         {
@@ -221,6 +345,14 @@ namespace Edbot.Net
         public const string AlreadyDone = "already_done";
         public const string NotYourCharacter = "not_your_character";
         public const string InvalidLane = "invalid_lane";
+        public const string UnitDead = "unit_dead";
+        public const string UnitDisabled = "unit_disabled";
+        public const string NotImplemented = "not_implemented";
+        public const string OnCooldown = "on_cooldown";
+        public const string NotEnoughSteam = "not_enough_steam";
+        public const string NoTarget = "no_target";
+        public const string NotAKnight = "not_a_knight";
+        public const string Unauthorized = "unauthorized";
 
         /// <summary>다시 시도해도 소용없는 오류. 이 오류를 받으면 자동 재접속을 멈춘다.</summary>
         public static bool IsFatal(string code)
@@ -325,6 +457,21 @@ namespace Edbot.Net
         public static string Lock()
         {
             return "{\"t\":\"lock\"}";
+        }
+
+        /// <summary>궁극기. 안키오처럼 레인을 골라야 하는 캐릭터만 lane을 넘긴다.</summary>
+        public static string Ultimate(string characterId, Lane? lane = null)
+        {
+            string json = "{\"t\":\"ultimate\",\"characterId\":" + JsonConvert.ToString(characterId);
+            if (lane.HasValue) json += ",\"lane\":\"" + lane.Value.ToString().ToLowerInvariant() + "\"";
+            return json + "}";
+        }
+
+        /// <summary>나이트가 다른 레인으로 옮겨 간다.</summary>
+        public static string Move(string characterId, Lane lane)
+        {
+            return "{\"t\":\"move\",\"characterId\":" + JsonConvert.ToString(characterId) +
+                   ",\"lane\":\"" + lane.ToString().ToLowerInvariant() + "\"}";
         }
     }
 }

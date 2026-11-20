@@ -9,17 +9,28 @@ using Newtonsoft.Json.Linq;
 
 namespace Edbot.Net
 {
+    /// <summary>로그인이 필요하거나 로그인이 만료되었다.</summary>
+    public sealed class UnauthorizedException : Exception
+    {
+        public UnauthorizedException() : base("로그인이 필요하다.") { }
+    }
+
     /// <summary>서버의 HTTP API (방 만들기, 방 정보 조회).</summary>
     public sealed class ApiClient : IDisposable
     {
         private readonly HttpClient _http;
         private readonly string _baseUrl;
 
-        public ApiClient(string serverUrl, HttpMessageHandler handler = null)
+        /// <param name="authToken">GL 로그인으로 받은 게임 세션 토큰. 방을 만들 때 필요하다.</param>
+        public ApiClient(string serverUrl, HttpMessageHandler handler = null, string authToken = null)
         {
             _baseUrl = NormalizeServerUrl(serverUrl);
             _http = handler != null ? new HttpClient(handler) : new HttpClient();
             _http.Timeout = TimeSpan.FromSeconds(10);
+            if (!string.IsNullOrEmpty(authToken))
+            {
+                _http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authToken);
+            }
         }
 
         /// <summary>"127.0.0.1:8787" 처럼 적어도 되도록 주소를 다듬는다. 끝의 '/'는 뺀다.</summary>
@@ -46,6 +57,7 @@ namespace Edbot.Net
             using (var response = await _http.PostAsync(_baseUrl + "/api/rooms", new StringContent(""), ct).ConfigureAwait(false))
             {
                 string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                if (response.StatusCode == HttpStatusCode.Unauthorized) throw new UnauthorizedException();
                 if (!response.IsSuccessStatusCode)
                 {
                     throw new HttpRequestException("방을 만들 수 없다 (" + (int)response.StatusCode + ")");

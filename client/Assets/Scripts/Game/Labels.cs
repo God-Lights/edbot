@@ -16,6 +16,7 @@ namespace Edbot.Game
                 case Phase.Explore: return "탐사";
                 case Phase.Forge: return "대장간";
                 case Phase.Battle: return "전투";
+                case Phase.Deathmatch: return "데스매치";
                 case Phase.Result: return "결과";
                 default: return phase.ToString();
             }
@@ -63,8 +64,28 @@ namespace Edbot.Game
                 case ErrorCodes.AlreadyDone: return "이미 정했다. 바꿀 수 없다.";
                 case ErrorCodes.NotYourCharacter: return "내 팀의 캐릭터가 아니다.";
                 case ErrorCodes.InvalidLane: return "올바르지 않은 레인이다.";
+                case ErrorCodes.UnitDead: return "쓰러진 캐릭터다.";
+                case ErrorCodes.UnitDisabled: return "움직일 수 없는 상태다.";
+                case ErrorCodes.NotImplemented: return "아직 쓸 수 없는 궁극기다.";
+                case ErrorCodes.OnCooldown: return "아직 쓸 수 없다. (재사용 대기)";
+                case ErrorCodes.NotEnoughSteam: return "스팀포스가 부족하다.";
+                case ErrorCodes.NoTarget: return "대상이 없다.";
+                case ErrorCodes.NotAKnight: return "나이트만 레인을 옮길 수 있다.";
+                case ErrorCodes.Unauthorized: return "로그인이 필요하다.";
                 case "stopped": return null; // 내가 직접 나간 경우
                 default: return string.IsNullOrEmpty(codeOrReason) ? null : "연결이 끝났다: " + codeOrReason;
+            }
+        }
+
+        public static string ResultReason(string reason)
+        {
+            switch (reason)
+            {
+                case "towers": return "본진 타워 파괴";
+                case "time": return "시간 종료 (점수)";
+                case "deathmatch": return "데스매치 전멸";
+                case "deathmatchTime": return "데스매치 시간 종료 (남은 체력)";
+                default: return reason ?? "";
             }
         }
 

@@ -83,3 +83,11 @@ EDBOT_SERVER=http://127.0.0.1:8787 dotnet test
 - 검증됨: 네트워크 코어 전체 (단위 테스트 56개 + 실제 서버 통합 테스트 2개).
 - 아직 아님: `Assets/Scripts/Game/` 의 Unity 코드는 이 환경에 에디터가 없어서 **에디터에서 실행해 보지 못했습니다.**
   UnityEngine의 필요한 부분만 흉내 낸 임시 스텁으로 컴파일만 확인했습니다. 처음 열었을 때 오류가 있으면 알려 주세요.
+
+## 로그인 (GL Account)와 전투 화면
+
+- 서버 주소 기본값은 `https://edgame-api.officialgl.com` 입니다. 로컬 개발 서버(`--var REQUIRE_AUTH:false`)에는 `http://127.0.0.1:8787` 로 바꾸면 로그인 없이 쓸 수 있습니다.
+- **로그인하기** 버튼을 누르면 브라우저로 `account.officialgl.com` 로그인 화면이 열리고, 로그인한 뒤 서버 페이지의 **로그인 확인**을 누르면 게임이 토큰을 받습니다 (`AuthClient`, `GameClient.BeginLogin`). 자동으로 열리지 않습니다. 토큰은 `PlayerPrefs`에 저장되고, 방을 만들거나 들어갈 때 `Authorization: Bearer` 헤더로 보냅니다. 로그인하면 이름은 GL 닉네임이 됩니다.
+- 전투(`Phase.Battle`)와 데스매치는 `BattleView`(IMGUI)가 그립니다. 레인 3개, 타워, 유닛, 점수, 스팀포스, 내 캐릭터별 궁극기 버튼(안키오는 레인 선택), 나이트의 레인 이동 버튼이 있습니다. 내 본진이 항상 왼쪽에 오도록 seat 1이면 좌우를 뒤집습니다.
+- 새 메시지: `MessageCodec.Ultimate`, `MessageCodec.Move`, `RoomConnection.SendUltimate/SendMoveLane`.
+- Unity 에디터에서 실행해 본 것은 아닙니다. 순수 C#(`Net`)은 `dotnet test`로 검증했고, `Game` 스크립트는 컴파일만 확인했습니다.

@@ -98,9 +98,18 @@ namespace Edbot.Net
 
         public RoomConnection(ITransportFactory factory = null, ConnectionOptions options = null, Func<long> nowMs = null)
         {
-            _factory = factory ?? new ClientWebSocketTransportFactory();
+            _factory = factory ?? new ClientWebSocketTransportFactory(() => _authToken);
             _options = options ?? new ConnectionOptions();
             _nowMs = nowMs ?? (() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        }
+
+        private volatile string _authToken;
+
+        /// <summary>GL 로그인으로 받은 게임 세션 토큰. 접속(과 재접속)할 때 Authorization 헤더로 보낸다.</summary>
+        public string AuthToken
+        {
+            get { return _authToken; }
+            set { _authToken = value; }
         }
 
         public ConnectionState State { get { return (ConnectionState)Volatile.Read(ref _state); } }
@@ -180,6 +189,18 @@ namespace Edbot.Net
         public bool SendPlace(string characterId, Lane lane)
         {
             return TrySend(MessageCodec.Place(characterId, lane));
+        }
+
+        /// <summary>전투 중 궁극기를 쓴다 (스팀포스 5). 안키오는 갈 레인도 보낸다.</summary>
+        public bool SendUltimate(string characterId, Lane? lane = null)
+        {
+            return TrySend(MessageCodec.Ultimate(characterId, lane));
+        }
+
+        /// <summary>전투 중 나이트가 다른 레인으로 옮겨 간다.</summary>
+        public bool SendMoveLane(string characterId, Lane lane)
+        {
+            return TrySend(MessageCodec.Move(characterId, lane));
         }
 
         /// <summary>배치를 확정한다. 정하지 않은 캐릭터는 기본 레인으로 간다.</summary>
