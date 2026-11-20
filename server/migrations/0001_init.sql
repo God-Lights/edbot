@@ -1,7 +1,7 @@
 -- 전적과 랭킹. 방(Durable Object)은 판 안의 상태만 갖고, 남겨야 하는 데이터는 여기에 둔다.
 
 CREATE TABLE players (
-  user_id    TEXT PRIMARY KEY,           -- GL Account 사용자 id (UUID)
+  user_id    TEXT PRIMARY KEY NOT NULL,  -- GL Account 사용자 id (UUID)
   nickname   TEXT NOT NULL,              -- 마지막으로 판을 한 때의 닉네임
   rating     INTEGER NOT NULL DEFAULT 1000,
   games      INTEGER NOT NULL DEFAULT 0,
