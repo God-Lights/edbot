@@ -1,0 +1,91 @@
+name: CI
+
+# main 이외의 브랜치에 푸시할 때와 모든 PR에서 검증한다.
+# (main에 합쳐질 때는 deploy.yml이 같은 검사를 한 뒤 배포한다.)
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  WRANGLER_SEND_METRICS: "false"
+
+jobs:
+  server:
+    name: 서버 (타입 검사, 단위 테스트, 배포 시험)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      # 실제로 올리지는 않고, 설정과 번들이 올라갈 수 있는 상태인지만 확인한다. (로그인 불필요)
+      - name: 배포 시험 (dry run)
+        run: npx wrangler deploy --dry-run
+
+  client:
+    name: 클라이언트 네트워크 코어 (dotnet 단위 테스트)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      # EDBOT_SERVER가 없으면 서버가 필요한 통합 테스트는 건너뛴다. (e2e 작업에서 따로 돌린다)
+      - name: dotnet test
+        working-directory: client/Tests~/Edbot.Net.Tests
+        run: dotnet test
+
+  e2e:
+    name: 종단 간 (로컬 서버에 서버 스모크와 C# 클라이언트를 붙여 한 판 진행)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: 서버 의존성 설치
+        working-directory: server
+        run: npm ci
+      # 시간을 10배 빠르게 해서 한 판(4분)을 24초 안에 돌린다.
+      - name: 로컬 서버 시작
+        working-directory: server
+        run: |
+          nohup npx wrangler dev --var PHASE_SCALE:0.1 --port 8787 > "$RUNNER_TEMP/wrangler.log" 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8787/health > /dev/null; then break; fi
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8787/health
+      - name: 서버 스모크 테스트
+        working-directory: server
+        run: npm run smoke
+      - name: C# 클라이언트 통합 테스트
+        working-directory: client/Tests~/Edbot.Net.Tests
+        env:
+          EDBOT_SERVER: http://127.0.0.1:8787
+        run: dotnet test
+      - name: 서버 로그
+        if: failure()
+        run: cat "$RUNNER_TEMP/wrangler.log"
