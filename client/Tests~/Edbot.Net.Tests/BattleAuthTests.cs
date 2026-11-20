@@ -90,6 +90,38 @@ namespace Edbot.Net.Tests
         }
     }
 
+    public class ExploreProtocolTests
+    {
+        [Fact]
+        public void ParsesExploreSnapshot()
+        {
+            const string json = @"{""t"":""state"",""room"":{""code"":""ABCD"",""phase"":""explore"",""phaseStartedAt"":1,""phaseEndsAt"":2,""serverTime"":1,
+              ""players"":[],""game"":null,""battle"":null,""result"":null,
+              ""explore"":{""tick"":50,""ticksPerSecond"":10,""gauge"":2,""gaugeMax"":3,""gaugeNextInTicks"":70,
+                ""tiles"":[{""index"":0,""known"":true,""kind"":""tree"",""depleted"":false,""respawnInTicks"":null,""myGatherInTicks"":20,""myAmbushInTicks"":null,""enemyAmbush"":false},
+                           {""index"":1,""known"":false,""kind"":null,""depleted"":false,""respawnInTicks"":null,""myGatherInTicks"":null,""myAmbushInTicks"":null,""enemyAmbush"":false}],
+                ""resources"":{""talent"":15,""branch"":3,""stone"":3,""ore"":0,""ironIngot"":0,""rare"":0,""blueprints"":0},
+                ""events"":[{""seq"":1,""tick"":40,""type"":""gathered"",""tile"":0,""gain"":{""branch"":2},""detail"":null}]}}}";
+            var room = ((StateMessage)MessageCodec.Parse(json)).Room;
+            var explore = room.Explore;
+            Assert.Equal(Phase.Explore, room.Phase);
+            Assert.Equal(2, explore.Gauge);
+            Assert.Equal(7.0, explore.Seconds(explore.GaugeNextInTicks.Value));
+            Assert.Equal("tree", explore.Tiles[0].Kind);
+            Assert.Equal(20, explore.Tiles[0].MyGatherInTicks);
+            Assert.False(explore.Tiles[1].Known);
+            Assert.Null(explore.Tiles[1].Kind);
+            Assert.Equal(15, explore.Resources.Talent);
+            Assert.Equal(2, explore.Events[0].Gain.Branch);
+        }
+
+        [Fact]
+        public void BuildsExploreCommand()
+        {
+            Assert.Equal(@"{""t"":""explore"",""action"":""gather"",""tile"":5}", MessageCodec.Explore("gather", 5));
+        }
+    }
+
     public class AuthClientTests
     {
         private static HttpResponseMessage Json(HttpStatusCode code, string body)

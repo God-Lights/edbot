@@ -49,12 +49,20 @@ namespace Edbot.Game
             GUILayout.EndScrollView();
             GUILayout.EndArea();
 
-            // 전투 화면은 넓어서 로비 패널 오른쪽에 따로 그린다.
+            // 전투 화면과 탐사 화면은 넓어서 로비 패널 오른쪽에 따로 그린다.
             var connection2 = client.Connection;
             var room = connection2 == null ? null : connection2.Room;
-            if (room != null && room.Battle != null && (room.Phase == Phase.Battle || room.Phase == Phase.Deathmatch))
+            if (room == null) return;
+            float width = Screen.width / scale;
+            float height = Screen.height / scale;
+            bool exploring = room.Explore != null &&
+                             (room.Phase == Phase.Explore || room.Phase == Phase.Forge || room.Phase == Phase.Battle || room.Phase == Phase.Deathmatch);
+            float exploreWidth = 330f;
+            if (exploring) ExploreView.Draw(client, room.Explore, new Rect(width - exploreWidth - 8, 16, exploreWidth, height - 32));
+            if (room.Battle != null && (room.Phase == Phase.Battle || room.Phase == Phase.Deathmatch))
             {
-                BattleView.Draw(client, connection2, room, new Rect(452, 16, Screen.width / scale - 468, Screen.height / scale - 32));
+                float right = exploring ? width - exploreWidth - 24 : width - 16;
+                BattleView.Draw(client, connection2, room, new Rect(452, 16, Mathf.Max(300f, right - 452), height - 32));
             }
         }
 

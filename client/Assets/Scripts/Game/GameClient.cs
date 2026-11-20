@@ -284,6 +284,12 @@ namespace Edbot.Game
             return _connection != null && _connection.SendUltimate(characterId, lane);
         }
 
+        /// <summary>탐사 행동. action: "gather"(채집), "ambush"(매복), "scout"(정찰).</summary>
+        public bool Explore(string action, int tile)
+        {
+            return _connection != null && _connection.SendExplore(action, tile);
+        }
+
         public bool MoveLane(string characterId, Lane lane)
         {
             return _connection != null && _connection.SendMoveLane(characterId, lane);

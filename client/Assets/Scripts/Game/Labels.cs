@@ -71,6 +71,11 @@ namespace Edbot.Game
                 case ErrorCodes.NotEnoughSteam: return "스팀포스가 부족하다.";
                 case ErrorCodes.NoTarget: return "대상이 없다.";
                 case ErrorCodes.NotAKnight: return "나이트만 레인을 옮길 수 있다.";
+                case ErrorCodes.InvalidTile: return "없는 칸이다.";
+                case ErrorCodes.NoActionGauge: return "행동 게이지가 부족하다.";
+                case ErrorCodes.TileBusy: return "이미 그 칸에서 행동 중이다.";
+                case ErrorCodes.NothingToGather: return "채집할 게 없는 칸이다.";
+                case ErrorCodes.AlreadyKnown: return "이미 알고 있는 칸이다.";
                 case ErrorCodes.Unauthorized: return "로그인이 필요하다.";
                 case "stopped": return null; // 내가 직접 나간 경우
                 default: return string.IsNullOrEmpty(codeOrReason) ? null : "연결이 끝났다: " + codeOrReason;
@@ -87,6 +92,50 @@ namespace Edbot.Game
                 case "deathmatchTime": return "데스매치 시간 종료 (남은 체력)";
                 default: return reason ?? "";
             }
+        }
+
+        public static string TileName(string kind)
+        {
+            switch (kind)
+            {
+                case "tree": return "나무";
+                case "rock": return "바위";
+                case "ore": return "광맥";
+                case "chest": return "보물상자";
+                case "empty": return "빈 땅";
+                default: return "?";
+            }
+        }
+
+        public static string ExploreEventText(ExploreEvent e)
+        {
+            string tile = "(" + (e.Tile % 4 + 1) + "," + (e.Tile / 4 + 1) + ")";
+            switch (e.Type)
+            {
+                case "gathered": return tile + " 채집 완료 " + Gain(e.Gain);
+                case "split": return tile + " 같은 칸을 채집해서 나눠 가졌다 " + Gain(e.Gain);
+                case "stolen": return tile + " 상대의 매복에 빼앗겼다!";
+                case "ambushHit": return tile + " 매복 성공! " + Gain(e.Gain);
+                case "ambushClash": return tile + " 서로 매복해서 둘 다 사라졌다";
+                case "ambushExpired": return tile + " 매복이 아무도 못 잡고 끝났다";
+                case "scouted": return tile + " 정찰: " + TileName((e.Detail ?? "").Split(',')[0]) + ((e.Detail ?? "").Contains("ambush") ? " — 상대 매복 있음!" : "");
+                case "trap": return tile + " 함정! " + Gain(e.Gain);
+                case "empty": return tile + " 빈 땅이었다";
+                default: return e.Type;
+            }
+        }
+
+        private static string Gain(ExploreResources r)
+        {
+            if (r == null) return "";
+            var parts = new System.Collections.Generic.List<string>();
+            if (r.Talent != 0) parts.Add("탈런트 " + (r.Talent > 0 ? "+" : "") + r.Talent);
+            if (r.Branch != 0) parts.Add("나뭇가지 +" + r.Branch);
+            if (r.Stone != 0) parts.Add("돌 +" + r.Stone);
+            if (r.Ore != 0) parts.Add("광석 +" + r.Ore);
+            if (r.Rare != 0) parts.Add("희귀 재료 +" + r.Rare);
+            if (r.Blueprints != 0) parts.Add("설계도 +" + r.Blueprints);
+            return parts.Count == 0 ? "" : "(" + string.Join(", ", parts) + ")";
         }
 
         public static string Countdown(long? remainingMs)

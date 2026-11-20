@@ -197,6 +197,12 @@ namespace Edbot.Net
             return TrySend(MessageCodec.Ultimate(characterId, lane));
         }
 
+        /// <summary>탐사 행동을 보낸다. action: "gather" | "ambush" | "scout".</summary>
+        public bool SendExplore(string action, int tile)
+        {
+            return TrySend(MessageCodec.Explore(action, tile));
+        }
+
         /// <summary>전투 중 나이트가 다른 레인으로 옮겨 간다.</summary>
         public bool SendMoveLane(string characterId, Lane lane)
         {

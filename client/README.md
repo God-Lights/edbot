@@ -91,3 +91,7 @@ EDBOT_SERVER=http://127.0.0.1:8787 dotnet test
 - 전투(`Phase.Battle`)와 데스매치는 `BattleView`(IMGUI)가 그립니다. 레인 3개, 타워, 유닛, 점수, 스팀포스, 내 캐릭터별 궁극기 버튼(안키오는 레인 선택), 나이트의 레인 이동 버튼이 있습니다. 내 본진이 항상 왼쪽에 오도록 seat 1이면 좌우를 뒤집습니다.
 - 새 메시지: `MessageCodec.Ultimate`, `MessageCodec.Move`, `RoomConnection.SendUltimate/SendMoveLane`.
 - Unity 에디터에서 실행해 본 것은 아닙니다. 순수 C#(`Net`)은 `dotnet test`로 검증했고, `Game` 스크립트는 컴파일만 확인했습니다.
+
+## 탐사 화면
+
+`ExploreView`(IMGUI)가 4x4 지도를 그립니다. 위쪽에서 채집/매복/정찰 중 하나를 고르고 칸을 누르면 `explore` 메시지가 갑니다. 행동 게이지, 내 자원, 내 행동의 남은 시간, 최근 이벤트가 보이고, 탐사·대장간·전투·데스매치 동안 계속 열려 있습니다. 상대의 자원과 행동은 오지 않습니다. (Unity 에디터에서는 아직 실행해 보지 않았습니다.)

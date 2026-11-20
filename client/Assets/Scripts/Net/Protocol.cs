@@ -239,6 +239,65 @@ namespace Edbot.Net
         }
     }
 
+    /// <summary>탐사 지도의 칸 하나.</summary>
+    public sealed class ExploreTileSnapshot
+    {
+        [JsonProperty("index")] public int Index { get; set; }
+        /// <summary>정체를 아는가. 안개 칸은 정찰하거나 채집하기 전에는 모른다.</summary>
+        [JsonProperty("known")] public bool Known { get; set; }
+        /// <summary>tree | rock | ore | chest | empty. 모르면 null.</summary>
+        [JsonProperty("kind")] public string Kind { get; set; }
+        [JsonProperty("depleted")] public bool Depleted { get; set; }
+        [JsonProperty("respawnInTicks")] public int? RespawnInTicks { get; set; }
+        /// <summary>내가 이 칸을 채집하는 중이면 끝날 때까지 남은 틱.</summary>
+        [JsonProperty("myGatherInTicks")] public int? MyGatherInTicks { get; set; }
+        /// <summary>내가 이 칸에 매복 중이면 끝날 때까지 남은 틱.</summary>
+        [JsonProperty("myAmbushInTicks")] public int? MyAmbushInTicks { get; set; }
+        /// <summary>정찰해서 상대의 매복을 알아냈다.</summary>
+        [JsonProperty("enemyAmbush")] public bool EnemyAmbush { get; set; }
+    }
+
+    public sealed class ExploreResources
+    {
+        [JsonProperty("talent")] public int Talent { get; set; }
+        [JsonProperty("branch")] public int Branch { get; set; }
+        [JsonProperty("stone")] public int Stone { get; set; }
+        [JsonProperty("ore")] public int Ore { get; set; }
+        [JsonProperty("ironIngot")] public int IronIngot { get; set; }
+        [JsonProperty("rare")] public int Rare { get; set; }
+        [JsonProperty("blueprints")] public int Blueprints { get; set; }
+    }
+
+    public sealed class ExploreEvent
+    {
+        [JsonProperty("seq")] public int Seq { get; set; }
+        [JsonProperty("tick")] public int Tick { get; set; }
+        /// <summary>gathered, split, stolen, ambushHit, ambushClash, ambushExpired, scouted, trap, empty</summary>
+        [JsonProperty("type")] public string Type { get; set; }
+        [JsonProperty("tile")] public int Tile { get; set; }
+        [JsonProperty("gain")] public ExploreResources Gain { get; set; }
+        [JsonProperty("detail")] public string Detail { get; set; }
+    }
+
+    /// <summary>탐사 상태. 내 자원과 내 행동만 들어 있다.</summary>
+    public sealed class ExploreSnapshot
+    {
+        [JsonProperty("tick")] public int Tick { get; set; }
+        [JsonProperty("ticksPerSecond")] public int TicksPerSecond { get; set; } = 10;
+        [JsonProperty("gauge")] public int Gauge { get; set; }
+        [JsonProperty("gaugeMax")] public int GaugeMax { get; set; }
+        /// <summary>다음 게이지가 찰 때까지 남은 틱. 가득 차 있으면 null.</summary>
+        [JsonProperty("gaugeNextInTicks")] public int? GaugeNextInTicks { get; set; }
+        [JsonProperty("tiles")] public List<ExploreTileSnapshot> Tiles { get; set; } = new List<ExploreTileSnapshot>();
+        [JsonProperty("resources")] public ExploreResources Resources { get; set; }
+        [JsonProperty("events")] public List<ExploreEvent> Events { get; set; } = new List<ExploreEvent>();
+
+        public double Seconds(int ticks)
+        {
+            return ticks / (double)(TicksPerSecond <= 0 ? 10 : TicksPerSecond);
+        }
+    }
+
     /// <summary>판이 끝난 뒤의 결과.</summary>
     public sealed class ResultSnapshot
     {
@@ -269,6 +328,9 @@ namespace Edbot.Net
 
         /// <summary>전투와 데스매치 중에만 있다.</summary>
         [JsonProperty("battle")] public BattleSnapshot Battle { get; set; }
+
+        /// <summary>탐사 단계부터 판이 끝날 때까지. 그 전에는 null.</summary>
+        [JsonProperty("explore")] public ExploreSnapshot Explore { get; set; }
 
         /// <summary>결과 단계에서만 있다.</summary>
         [JsonProperty("result")] public ResultSnapshot Result { get; set; }
@@ -352,6 +414,11 @@ namespace Edbot.Net
         public const string NotEnoughSteam = "not_enough_steam";
         public const string NoTarget = "no_target";
         public const string NotAKnight = "not_a_knight";
+        public const string InvalidTile = "invalid_tile";
+        public const string NoActionGauge = "no_action_gauge";
+        public const string TileBusy = "tile_busy";
+        public const string NothingToGather = "nothing_to_gather";
+        public const string AlreadyKnown = "already_known";
         public const string Unauthorized = "unauthorized";
 
         /// <summary>다시 시도해도 소용없는 오류. 이 오류를 받으면 자동 재접속을 멈춘다.</summary>
@@ -465,6 +532,12 @@ namespace Edbot.Net
             string json = "{\"t\":\"ultimate\",\"characterId\":" + JsonConvert.ToString(characterId);
             if (lane.HasValue) json += ",\"lane\":\"" + lane.Value.ToString().ToLowerInvariant() + "\"";
             return json + "}";
+        }
+
+        /// <summary>탐사 행동. action은 gather, ambush, scout 중 하나. tile은 0~15 (4x4, 왼쪽 위부터).</summary>
+        public static string Explore(string action, int tile)
+        {
+            return "{\"t\":\"explore\",\"action\":" + JsonConvert.ToString(action) + ",\"tile\":" + tile + "}";
         }
 
         /// <summary>나이트가 다른 레인으로 옮겨 간다.</summary>
