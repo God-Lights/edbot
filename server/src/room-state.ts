@@ -19,6 +19,10 @@ import {
   submitPlacement,
 } from "./game";
 import type { ActionResult, GameState } from "./game";
+import { createBattle, TICKS_PER_SECOND } from "./battle/core";
+import type { BattleState } from "./battle/core";
+import { toBattleSnapshot } from "./battle/snapshot";
+import { finishByTime, moveLane, startDeathmatch, stepBattle, useUltimate } from "./battle/sim";
 import { isTimedPhase, nextPhase, phaseDurationMs } from "./phases";
 import type {
   BanSnapshot,
@@ -27,6 +31,7 @@ import type {
   Lane,
   Phase,
   PublicPlayer,
+  ResultSnapshot,
   RoomSnapshot,
   Seat,
 } from "./protocol";
@@ -56,6 +61,13 @@ export interface RoomState {
   players: PlayerState[];
   /** 밴, 드래프트, 배치 상태. 로비에서는 null. */
   game: GameState | null;
+  /** 전투와 데스매치의 시뮬레이션. 그 외에는 null. */
+  battle: BattleState | null;
+  /** 시뮬레이션이 여기까지 진행됐다는 서버 시각(ms). 틱 하나는 tickMs. */
+  battleClock: number;
+  /** 다음에 상태를 보내려고 깨어날 시각(ms). */
+  battleSyncAt: number;
+  result: ResultSnapshot | null;
   createdAt: number;
   lastActiveAt: number;
 }
@@ -70,6 +82,10 @@ export function createRoom(code: string, now: number): RoomState {
     phaseEndsAt: null,
     players: [],
     game: null,
+    battle: null,
+    battleClock: now,
+    battleSyncAt: now,
+    result: null,
     createdAt: now,
     lastActiveAt: now,
   };
@@ -190,12 +206,74 @@ function enterPhase(
   if (phase === "lobby") {
     // 한 판이 끝나고 돌아온 로비. 다시 하려면 새로 준비해야 한다.
     state.game = null;
+    state.battle = null;
+    state.result = null;
     for (const p of state.players) p.ready = false;
   } else if (phase === "ban") {
     state.game = createGame(rng() < 0.5 ? 0 : 1); // 선공은 무작위
   } else if (phase === "draft" && state.game) {
     startDraft(state.game, startedAt, draftTurnMs(scale));
+  } else if (phase === "battle" && state.game) {
+    state.battle = createBattle(battleSetup(state.game));
+    state.battleClock = startedAt;
+    state.battleSyncAt = startedAt + battleSyncMs(scale);
+  } else if (phase === "deathmatch") {
+    state.battleSyncAt = startedAt + battleSyncMs(scale);
   }
+}
+
+/** 시뮬레이션 틱 하나에 해당하는 서버 시간. 1틱 = 0.1초 (PHASE_SCALE을 곱한다). */
+export function tickMs(scale = 1): number {
+  return Math.max(1, Math.round((1000 / TICKS_PER_SECOND) * scale));
+}
+
+/** 전투 중 클라이언트에 상태를 보내는 간격. */
+export function battleSyncMs(scale = 1): number {
+  return Math.max(tickMs(scale), Math.round(250 * scale));
+}
+
+function battleSetup(game: GameState) {
+  const team = (seat: Seat) =>
+    game.picks[seat].map((characterId) => ({
+      characterId,
+      lane: game.lanes[seat][characterId] ?? ("center" as Lane),
+    }));
+  // 후공 팀은 동률일 때 이기는 보정을 받는다.
+  return { teams: [team(0), team(1)] as [ReturnType<typeof team>, ReturnType<typeof team>], secondPicker: (game.firstPicker === 0 ? 1 : 0) as Seat };
+}
+
+/** 전투가 끝났을 때 결과를 정리하고 다음 단계로 간다. 동점이면 데스매치. */
+function settleBattle(state: RoomState, at: number, scale: number, rng: () => number): void {
+  const battle = state.battle;
+  if (!battle || !battle.finished) return;
+  if (battle.mode === "battle" && battle.winner === null) {
+    startDeathmatch(battle);
+    enterPhase(state, "deathmatch", at, scale, rng);
+    return;
+  }
+  state.result = {
+    winner: battle.winner,
+    reason: battle.reason ?? "time",
+    score: [battle.score[0], battle.score[1]],
+    kills: [battle.kills[0], battle.kills[1]],
+  };
+  enterPhase(state, "result", at, scale, rng);
+}
+
+/** 시뮬레이션을 until(서버 시각)까지 진행한다. 중간에 끝나면 결과를 정리하고 true. */
+function runBattleTo(state: RoomState, until: number, scale: number, rng: () => number): boolean {
+  const battle = state.battle;
+  if (!battle) return false;
+  const step = tickMs(scale);
+  while (!battle.finished && state.battleClock + step <= until) {
+    state.battleClock += step;
+    stepBattle(battle);
+  }
+  if (battle.finished) {
+    settleBattle(state, state.battleClock, scale, rng);
+    return true;
+  }
+  return false;
 }
 
 /** 단계를 떠나기 전에 정리한다. 하지 못한 선택은 기본값으로 채운다. */
@@ -250,6 +328,28 @@ export function advancePhase(
   let changed = false;
   for (;;) {
     const game = state.game;
+    const inBattle = state.phase === "battle" || state.phase === "deathmatch";
+    if (inBattle && state.battle) {
+      const end = state.phaseEndsAt ?? Infinity;
+      const before = state.phase;
+      const finishedEarly = runBattleTo(state, Math.min(now, end), scale, rng);
+      if (finishedEarly || state.phase !== before) {
+        changed = true;
+        continue;
+      }
+      if (end <= now) {
+        // 시간 종료: 전투는 점수, 데스매치는 남은 체력으로 승부를 가른다.
+        finishByTime(state.battle);
+        settleBattle(state, end, scale, rng);
+        changed = true;
+        continue;
+      }
+      if (now >= state.battleSyncAt) {
+        state.battleSyncAt = now + battleSyncMs(scale);
+        changed = true;
+      }
+      break;
+    }
     const turnDue =
       state.phase === "draft" && game && game.turnEndsAt !== null ? game.turnEndsAt : Infinity;
     const phaseDue = state.phaseEndsAt ?? Infinity;
@@ -353,6 +453,72 @@ export function playerLock(
   );
 }
 
+// ---- 전투 중의 선택 ----
+
+const COMMAND_MESSAGES: Record<string, string> = {
+  wrong_phase: "지금은 할 수 없다.",
+  not_your_character: "내 캐릭터가 아니다.",
+  unit_dead: "쓰러진 캐릭터다.",
+  unit_disabled: "움직일 수 없는 상태다.",
+  not_implemented: "아직 쓸 수 없는 궁극기다.",
+  on_cooldown: "아직 쓸 수 없다. (재사용 대기)",
+  not_enough_steam: "스팀포스가 부족하다.",
+  no_target: "대상이 없다.",
+  invalid_lane: "갈 수 없는 레인이다.",
+  not_a_knight: "나이트만 레인을 옮길 수 있다.",
+};
+
+function runBattleCommand(
+  state: RoomState,
+  playerId: string,
+  now: number,
+  scale: number,
+  rng: () => number,
+  act: (battle: BattleState, seat: Seat) => { ok: true } | { ok: false; code: string },
+): ActionOutcome {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return { ok: false, code: "bad_message", message: "방에 없는 플레이어다." };
+  // 명령이 들어온 시각까지 시뮬레이션을 먼저 진행해서, 그 순간의 상태에서 판정한다.
+  advancePhase(state, now, scale, rng);
+  if ((state.phase !== "battle" && state.phase !== "deathmatch") || !state.battle) return WRONG_PHASE;
+  const result = act(state.battle, player.seat);
+  if (!result.ok) {
+    return { ok: false, code: result.code as ErrorCode, message: COMMAND_MESSAGES[result.code] ?? "할 수 없다." };
+  }
+  state.lastActiveAt = now;
+  return { ok: true, advanced: false };
+}
+
+/** 궁극기를 쓴다. 안키오는 갈 레인도 보낸다. */
+export function playerUltimate(
+  state: RoomState,
+  playerId: string,
+  characterId: string,
+  lane: Lane | undefined,
+  now: number,
+  scale = 1,
+  rng: () => number = Math.random,
+): ActionOutcome {
+  return runBattleCommand(state, playerId, now, scale, rng, (battle, seat) =>
+    useUltimate(battle, seat, characterId, lane),
+  );
+}
+
+/** 나이트가 다른 레인으로 옮겨 간다. */
+export function playerMoveLane(
+  state: RoomState,
+  playerId: string,
+  characterId: string,
+  lane: Lane,
+  now: number,
+  scale = 1,
+  rng: () => number = Math.random,
+): ActionOutcome {
+  return runBattleCommand(state, playerId, now, scale, rng, (battle, seat) =>
+    moveLane(battle, seat, characterId, lane),
+  );
+}
+
 // ---- 정리와 알람 ----
 
 /** 로비에서 유예 시간이 지난 끊긴 플레이어를 내보낸다. 바뀐 게 있으면 true. */
@@ -377,6 +543,9 @@ export function nextDeadline(state: RoomState): number | null {
   if (state.phaseEndsAt !== null) candidates.push(state.phaseEndsAt);
   if (state.phase === "draft" && state.game && state.game.turnEndsAt !== null) {
     candidates.push(state.game.turnEndsAt);
+  }
+  if ((state.phase === "battle" || state.phase === "deathmatch") && state.battle) {
+    candidates.push(state.battleSyncAt);
   }
   if (state.phase === "lobby") {
     for (const p of state.players) {
@@ -414,7 +583,8 @@ export function toGameSnapshot(state: RoomState, viewerSeat: Seat | null): GameS
   if (!game) return null;
 
   const bansRevealed = state.phase !== "ban";
-  const lanesRevealed = state.phase === "battle" || state.phase === "result";
+  const lanesRevealed =
+    state.phase === "battle" || state.phase === "deathmatch" || state.phase === "result";
   const inDraft = state.phase === "draft";
 
   const ban = (seat: Seat): BanSnapshot => ({
@@ -447,5 +617,7 @@ export function toSnapshot(state: RoomState, now: number, viewerId?: string): Ro
     serverTime: now,
     players: state.players.map(toPublicPlayer),
     game: toGameSnapshot(state, viewer ? viewer.seat : null),
+    battle: state.battle ? toBattleSnapshot(state.battle, viewer ? viewer.seat : null) : null,
+    result: state.result,
   };
 }

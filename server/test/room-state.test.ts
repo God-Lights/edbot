@@ -166,8 +166,9 @@ describe("advancePhase", () => {
       expect(advancePhase(state, now)).toBe(true);
       seen.push(state.phase);
     }
-    expect(seen).toEqual([...PHASE_ORDER, "lobby"]);
-    expect(now).toBe(240_000);
+    // 동점이면 battle 뒤에 데스매치가 끼어들 수 있다. 그 외에는 PHASE_ORDER 그대로다.
+    expect(seen.filter((p) => p !== "deathmatch")).toEqual([...PHASE_ORDER, "lobby"]);
+    expect(now).toBeGreaterThanOrEqual(240_000);
     expect(state.phaseEndsAt).toBeNull();
     expect(state.players.every((p) => !p.ready)).toBe(true);
   });

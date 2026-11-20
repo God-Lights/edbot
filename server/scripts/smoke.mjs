@@ -268,6 +268,23 @@ async function activeGame(ids) {
   );
   check(explore.room.game.lanes[seatB] === null, "탐사 단계에서도 상대의 배치는 숨겨져 있다");
 
+  // ---- 전투: 서버가 시뮬레이션을 돌리고 상태를 계속 보낸다
+  const battle = await a.waitFor(isState("battle"), 15000);
+  const bs = battle.room.battle;
+  check(bs && bs.units.length === 10 && bs.towers.length === 18, "전투가 시작되면 유닛 10, 타워 18이 담긴 battle 상태가 온다");
+  check(bs.steam === 10, "내 스팀포스가 보인다 (10)");
+  const later = await a.waitFor((m) => m.t === "state" && m.room.battle && m.room.battle.tick > bs.tick + 5, 10000);
+  check(later.room.battle.tick > bs.tick, "시간이 지나면 틱이 늘어난다");
+  const myUlt = picks[seatA].find((id) => !["richmond", "ankio"].includes(id) && id !== "toka-loga");
+  const ultAt = a.messages.length;
+  a.send({ t: "ultimate", characterId: myUlt });
+  const ultState = await a.waitFor((m) => (m.t === "state" && m.room.battle && m.room.battle.steam < 6) || m.t === "error", 5000, ultAt);
+  check(ultState.t === "state" || ["on_cooldown", "no_target", "invalid_lane"].includes(ultState.code), "궁극기 명령이 처리된다");
+  a.send({ t: "ultimate", characterId: picks[seatB][0] });
+  check((await a.waitFor((m) => m.t === "error", 5000, ultAt)).code, "상대 캐릭터의 궁극기는 거절된다");
+  const finalState = await a.waitFor((m) => m.t === "state" && (m.room.phase === "result" || m.room.phase === "deathmatch"), 30000);
+  check(["result", "deathmatch"].includes(finalState.room.phase), "전투가 끝나면 결과(또는 동점일 때 데스매치)로 넘어간다");
+
   a.ws.close();
   b.ws.close();
 }
