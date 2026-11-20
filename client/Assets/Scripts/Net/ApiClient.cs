@@ -94,6 +94,19 @@ namespace Edbot.Net
             }
         }
 
+        /// <summary>무기 목록과 레시피를 가져온다.</summary>
+        public async Task<List<WeaponInfo>> GetWeaponsAsync(CancellationToken ct = default(CancellationToken))
+        {
+            using (var response = await _http.GetAsync(_baseUrl + "/api/weapons", ct).ConfigureAwait(false))
+            {
+                response.EnsureSuccessStatusCode();
+                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                var weapons = MessageCodec.ParseWeapons(body);
+                if (weapons == null) throw new HttpRequestException("무기 데이터를 해석할 수 없다.");
+                return weapons;
+            }
+        }
+
         public void Dispose()
         {
             _http.Dispose();

@@ -92,7 +92,9 @@ namespace Edbot.Game
                 if (!unit.Summon)
                 {
                     var info = client.FindCharacter(unit.CharacterId);
-                    GUI.Label(new Rect(rect.x - 20, rect.y + size + 2, 60, 18), info != null ? info.NameEn.Split(' ')[0] : unit.CharacterId);
+                    string label = info != null ? info.NameEn.Split(' ')[0] : unit.CharacterId;
+                    if (!string.IsNullOrEmpty(unit.Weapon)) label += "*";
+                    GUI.Label(new Rect(rect.x - 20, rect.y + size + 2, 70, 18), label);
                 }
             }
         }

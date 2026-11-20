@@ -197,6 +197,11 @@ namespace Edbot.Net
             return TrySend(MessageCodec.Ultimate(characterId, lane));
         }
 
+        public bool SendForgeBuy(int quantity = 1) { return TrySend(MessageCodec.ForgeBuy(quantity)); }
+        public bool SendForgeSmelt() { return TrySend(MessageCodec.ForgeSmelt()); }
+        public bool SendForgeCraft(string weaponId) { return TrySend(MessageCodec.ForgeCraft(weaponId)); }
+        public bool SendForgeEquip(string weaponId, string characterId) { return TrySend(MessageCodec.ForgeEquip(weaponId, characterId)); }
+
         /// <summary>탐사 행동을 보낸다. action: "gather" | "ambush" | "scout".</summary>
         public bool SendExplore(string action, int tile)
         {

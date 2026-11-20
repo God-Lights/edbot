@@ -51,6 +51,9 @@ namespace Edbot.Game
         /// <summary>캐릭터 12명의 데이터. 방에 들어갈 때 서버에서 가져온다. 아직이면 null.</summary>
         public IReadOnlyList<CharacterInfo> Roster { get; private set; }
 
+        /// <summary>무기 9종의 데이터(레시피 포함). 아직이면 null.</summary>
+        public IReadOnlyList<WeaponInfo> Weapons { get; private set; }
+
         private bool _loadingRoster;
 
         /// <summary>화면에 띄울 마지막 안내/오류 문구.</summary>
@@ -232,6 +235,7 @@ namespace Edbot.Game
             LastMessage = null;
 
             LoadRosterAsync();
+            LoadWeaponsAsync();
 
             var connection = new RoomConnection();
             connection.AuthToken = AuthToken;
@@ -313,6 +317,37 @@ namespace Edbot.Game
             var character = FindCharacter(characterId);
             return character == null ? characterId : character.NameKo + " (" + Labels.PieceName(character.Piece) + ")";
         }
+
+        private async void LoadWeaponsAsync()
+        {
+            if (Weapons != null) return;
+            try
+            {
+                using (var api = new ApiClient(serverUrl))
+                {
+                    Weapons = await api.GetWeaponsAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("무기 데이터를 불러오지 못했다: " + ex.Message);
+            }
+        }
+
+        public WeaponInfo FindWeapon(string weaponId)
+        {
+            if (Weapons == null || weaponId == null) return null;
+            foreach (var weapon in Weapons)
+            {
+                if (weapon.Id == weaponId) return weapon;
+            }
+            return null;
+        }
+
+        public bool BuyOre(int quantity = 1) { return _connection != null && _connection.SendForgeBuy(quantity); }
+        public bool Smelt() { return _connection != null && _connection.SendForgeSmelt(); }
+        public bool Craft(string weaponId) { return _connection != null && _connection.SendForgeCraft(weaponId); }
+        public bool Equip(string weaponId, string characterId) { return _connection != null && _connection.SendForgeEquip(weaponId, characterId); }
 
         private async void LoadRosterAsync()
         {

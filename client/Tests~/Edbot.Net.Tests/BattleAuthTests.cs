@@ -122,6 +122,52 @@ namespace Edbot.Net.Tests
         }
     }
 
+    public class ForgeProtocolTests
+    {
+        [Fact]
+        public void ParsesForgeSnapshotAndWeapons()
+        {
+            const string json = @"{""t"":""state"",""room"":{""code"":""ABCD"",""phase"":""forge"",""phaseStartedAt"":1,""phaseEndsAt"":2,""serverTime"":1,
+              ""players"":[],""game"":null,""battle"":null,""result"":null,""explore"":null,
+              ""forge"":{""steam"":7.5,""steamMax"":10,""smelters"":[{""remainingTicks"":80},null],
+                ""inventory"":{""wood-bow"":1},""equipped"":{""dwargon"":""stone-axe""},
+                ""equipping"":{""lappus"":{""weaponId"":""wood-bow"",""remainingTicks"":20}},
+                ""orePrice"":3,""ticksPerSecond"":10,""events"":[{""seq"":1,""tick"":5,""type"":""smelted"",""detail"":null}]}}}";
+            var forge = ((StateMessage)MessageCodec.Parse(json)).Room.Forge;
+            Assert.Equal(7.5, forge.Steam);
+            Assert.Equal(80, forge.Smelters[0].RemainingTicks);
+            Assert.Null(forge.Smelters[1]);
+            Assert.Equal(1, forge.Inventory["wood-bow"]);
+            Assert.Equal("stone-axe", forge.Equipped["dwargon"]);
+            Assert.Equal(2.0, forge.Seconds(forge.Equipping["lappus"].RemainingTicks));
+            Assert.Equal(3, forge.OrePrice);
+
+            var weapons = MessageCodec.ParseWeapons(@"{""weapons"":[{""id"":""stone-axe"",""nameKo"":""돌도끼"",""kind"":""heavy"",""tier"":1,""atkBonus"":0.12,""recipe"":{""branch"":1,""stone"":2}}]}");
+            var axe = weapons[0];
+            Assert.Equal("돌도끼", axe.NameKo);
+            Assert.True(axe.CanCraft(new ExploreResources { Branch = 3, Stone = 3 }));
+            Assert.False(axe.CanCraft(new ExploreResources { Branch = 3, Stone = 1 }));
+            Assert.Null(MessageCodec.ParseWeapons("nope"));
+        }
+
+        [Fact]
+        public void BuildsForgeCommands()
+        {
+            Assert.Equal(@"{""t"":""forge"",""action"":""buy"",""quantity"":2}", MessageCodec.ForgeBuy(2));
+            Assert.Equal(@"{""t"":""forge"",""action"":""smelt""}", MessageCodec.ForgeSmelt());
+            Assert.Equal(@"{""t"":""forge"",""action"":""craft"",""weaponId"":""wood-bow""}", MessageCodec.ForgeCraft("wood-bow"));
+            Assert.Equal(@"{""t"":""forge"",""action"":""equip"",""weaponId"":""a"",""characterId"":""b""}", MessageCodec.ForgeEquip("a", "b"));
+        }
+
+        [Fact]
+        public void UnitSnapshotCarriesWeapon()
+        {
+            var battle = Newtonsoft.Json.JsonConvert.DeserializeObject<UnitSnapshot>(@"{""id"":""0:x"",""characterId"":""x"",""seat"":0,""lane"":""center"",""pos"":1,""hp"":1,""maxHp"":1,""alive"":true,""weapon"":""wood-bow"",""effects"":[]}",
+                new Newtonsoft.Json.JsonSerializerSettings { Converters = { new Newtonsoft.Json.Converters.StringEnumConverter() } });
+            Assert.Equal("wood-bow", battle.Weapon);
+        }
+    }
+
     public class AuthClientTests
     {
         private static HttpResponseMessage Json(HttpStatusCode code, string body)

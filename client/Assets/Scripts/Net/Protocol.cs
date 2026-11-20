@@ -152,6 +152,8 @@ namespace Edbot.Net
         [JsonProperty("promoted")] public bool Promoted { get; set; }
         [JsonProperty("summon")] public bool Summon { get; set; }
         [JsonProperty("effects")] public List<string> Effects { get; set; } = new List<string>();
+        /// <summary>끼고 있는 무기. 내 캐릭터는 항상 보이고, 상대는 맞붙어 있을 때만 보인다.</summary>
+        [JsonProperty("weapon")] public string Weapon { get; set; }
         /// <summary>궁극기를 다시 쓸 수 있게 되는 틱. 내 캐릭터에게만 들어 있다.</summary>
         [JsonProperty("ultReadyTick")] public int? UltReadyTick { get; set; }
         /// <summary>나이트의 레인 이동을 다시 쓸 수 있게 되는 틱. 내 캐릭터에게만 들어 있다.</summary>
@@ -298,6 +300,87 @@ namespace Edbot.Net
         }
     }
 
+    public sealed class SmelterSnapshot
+    {
+        [JsonProperty("remainingTicks")] public int RemainingTicks { get; set; }
+    }
+
+    public sealed class EquippingSnapshot
+    {
+        [JsonProperty("weaponId")] public string WeaponId { get; set; }
+        [JsonProperty("remainingTicks")] public int RemainingTicks { get; set; }
+    }
+
+    public sealed class ForgeEventSnapshot
+    {
+        [JsonProperty("seq")] public int Seq { get; set; }
+        [JsonProperty("tick")] public int Tick { get; set; }
+        /// <summary>smelted, equipped, equipFailed</summary>
+        [JsonProperty("type")] public string Type { get; set; }
+        [JsonProperty("detail")] public string Detail { get; set; }
+    }
+
+    /// <summary>대장간 상태. 내 것만 들어 있다.</summary>
+    public sealed class ForgeSnapshot
+    {
+        [JsonProperty("steam")] public double Steam { get; set; }
+        [JsonProperty("steamMax")] public double SteamMax { get; set; }
+        /// <summary>재련대 2개. 비어 있으면 null.</summary>
+        [JsonProperty("smelters")] public List<SmelterSnapshot> Smelters { get; set; } = new List<SmelterSnapshot>();
+        /// <summary>무기 id -> 개수.</summary>
+        [JsonProperty("inventory")] public Dictionary<string, int> Inventory { get; set; } = new Dictionary<string, int>();
+        /// <summary>캐릭터 id -> 끼고 있는 무기 id.</summary>
+        [JsonProperty("equipped")] public Dictionary<string, string> Equipped { get; set; } = new Dictionary<string, string>();
+        [JsonProperty("equipping")] public Dictionary<string, EquippingSnapshot> Equipping { get; set; } = new Dictionary<string, EquippingSnapshot>();
+        [JsonProperty("orePrice")] public int OrePrice { get; set; }
+        [JsonProperty("ticksPerSecond")] public int TicksPerSecond { get; set; } = 10;
+        [JsonProperty("events")] public List<ForgeEventSnapshot> Events { get; set; } = new List<ForgeEventSnapshot>();
+
+        public double Seconds(int ticks)
+        {
+            return ticks / (double)(TicksPerSecond <= 0 ? 10 : TicksPerSecond);
+        }
+    }
+
+    /// <summary>무기 한 개의 데이터. 서버의 GET /api/weapons 가 돌려준다.</summary>
+    public sealed class WeaponInfo
+    {
+        [JsonProperty("id")] public string Id { get; set; }
+        [JsonProperty("nameKo")] public string NameKo { get; set; }
+        /// <summary>heavy(중량) | polearm(장병) | ranged(원거리)</summary>
+        [JsonProperty("kind")] public string Kind { get; set; }
+        /// <summary>1, 2 또는 "special".</summary>
+        [JsonProperty("tier")] public string Tier { get; set; }
+        [JsonProperty("atkBonus")] public double AtkBonus { get; set; }
+        /// <summary>재료 이름(branch, stone, ironIngot, rare, blueprints) -> 개수.</summary>
+        [JsonProperty("recipe")] public Dictionary<string, int> Recipe { get; set; } = new Dictionary<string, int>();
+        [JsonProperty("effectText")] public string EffectText { get; set; }
+
+        /// <summary>내 재료로 만들 수 있는가.</summary>
+        public bool CanCraft(ExploreResources r)
+        {
+            if (r == null) return false;
+            foreach (var pair in Recipe)
+            {
+                if (Have(r, pair.Key) < pair.Value) return false;
+            }
+            return true;
+        }
+
+        private static int Have(ExploreResources r, string key)
+        {
+            switch (key)
+            {
+                case "branch": return r.Branch;
+                case "stone": return r.Stone;
+                case "ironIngot": return r.IronIngot;
+                case "rare": return r.Rare;
+                case "blueprints": return r.Blueprints;
+                default: return 0;
+            }
+        }
+    }
+
     /// <summary>판이 끝난 뒤의 결과.</summary>
     public sealed class ResultSnapshot
     {
@@ -331,6 +414,9 @@ namespace Edbot.Net
 
         /// <summary>탐사 단계부터 판이 끝날 때까지. 그 전에는 null.</summary>
         [JsonProperty("explore")] public ExploreSnapshot Explore { get; set; }
+
+        /// <summary>대장간. 탐사와 함께 시작해서 판이 끝날 때까지.</summary>
+        [JsonProperty("forge")] public ForgeSnapshot Forge { get; set; }
 
         /// <summary>결과 단계에서만 있다.</summary>
         [JsonProperty("result")] public ResultSnapshot Result { get; set; }
@@ -419,6 +505,15 @@ namespace Edbot.Net
         public const string TileBusy = "tile_busy";
         public const string NothingToGather = "nothing_to_gather";
         public const string AlreadyKnown = "already_known";
+        public const string NotEnoughTalent = "not_enough_talent";
+        public const string NotEnoughMaterials = "not_enough_materials";
+        public const string NoFreeSmelter = "no_free_smelter";
+        public const string UnknownWeapon = "unknown_weapon";
+        public const string NoWeapon = "no_weapon";
+        public const string NotInZone = "not_in_zone";
+        public const string AlreadyEquipping = "already_equipping";
+        public const string AlreadyEquipped = "already_equipped";
+        public const string InvalidQuantity = "invalid_quantity";
         public const string Unauthorized = "unauthorized";
 
         /// <summary>다시 시도해도 소용없는 오류. 이 오류를 받으면 자동 재접속을 멈춘다.</summary>
@@ -482,6 +577,19 @@ namespace Edbot.Net
             }
         }
 
+        /// <summary>GET /api/weapons 의 응답을 해석한다. 형식이 틀리면 null.</summary>
+        public static List<WeaponInfo> ParseWeapons(string json)
+        {
+            try
+            {
+                return JObject.Parse(json)["weapons"].ToObject<List<WeaponInfo>>(Serializer);
+            }
+            catch (Exception ex) when (ex is JsonException || ex is NullReferenceException || ex is ArgumentException)
+            {
+                return null;
+            }
+        }
+
         /// <summary>GET /api/characters 의 응답을 해석한다. 형식이 틀리면 null.</summary>
         public static List<CharacterInfo> ParseCharacters(string json)
         {
@@ -532,6 +640,31 @@ namespace Edbot.Net
             string json = "{\"t\":\"ultimate\",\"characterId\":" + JsonConvert.ToString(characterId);
             if (lane.HasValue) json += ",\"lane\":\"" + lane.Value.ToString().ToLowerInvariant() + "\"";
             return json + "}";
+        }
+
+        /// <summary>대장간: 광석 구입.</summary>
+        public static string ForgeBuy(int quantity = 1)
+        {
+            return "{\"t\":\"forge\",\"action\":\"buy\",\"quantity\":" + quantity + "}";
+        }
+
+        /// <summary>대장간: 재련 시작.</summary>
+        public static string ForgeSmelt()
+        {
+            return "{\"t\":\"forge\",\"action\":\"smelt\"}";
+        }
+
+        /// <summary>대장간: 무기 조합.</summary>
+        public static string ForgeCraft(string weaponId)
+        {
+            return "{\"t\":\"forge\",\"action\":\"craft\",\"weaponId\":" + JsonConvert.ToString(weaponId) + "}";
+        }
+
+        /// <summary>대장간: 무기 장착(3초).</summary>
+        public static string ForgeEquip(string weaponId, string characterId)
+        {
+            return "{\"t\":\"forge\",\"action\":\"equip\",\"weaponId\":" + JsonConvert.ToString(weaponId) +
+                   ",\"characterId\":" + JsonConvert.ToString(characterId) + "}";
         }
 
         /// <summary>탐사 행동. action은 gather, ambush, scout 중 하나. tile은 0~15 (4x4, 왼쪽 위부터).</summary>

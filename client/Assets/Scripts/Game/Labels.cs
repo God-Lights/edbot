@@ -76,6 +76,15 @@ namespace Edbot.Game
                 case ErrorCodes.TileBusy: return "이미 그 칸에서 행동 중이다.";
                 case ErrorCodes.NothingToGather: return "채집할 게 없는 칸이다.";
                 case ErrorCodes.AlreadyKnown: return "이미 알고 있는 칸이다.";
+                case ErrorCodes.NotEnoughTalent: return "탈런트가 부족하다.";
+                case ErrorCodes.NotEnoughMaterials: return "재료가 부족하다.";
+                case ErrorCodes.NoFreeSmelter: return "빈 재련대가 없다.";
+                case ErrorCodes.UnknownWeapon: return "없는 무기다.";
+                case ErrorCodes.NoWeapon: return "그 무기를 가지고 있지 않다.";
+                case ErrorCodes.NotInZone: return "본진이나 아군 가드 타워 근처에서만 장착할 수 있다.";
+                case ErrorCodes.AlreadyEquipping: return "이미 무기를 끼우는 중이다.";
+                case ErrorCodes.AlreadyEquipped: return "이미 끼고 있는 무기다.";
+                case ErrorCodes.InvalidQuantity: return "살 수 있는 개수가 아니다.";
                 case ErrorCodes.Unauthorized: return "로그인이 필요하다.";
                 case "stopped": return null; // 내가 직접 나간 경우
                 default: return string.IsNullOrEmpty(codeOrReason) ? null : "연결이 끝났다: " + codeOrReason;
@@ -136,6 +145,30 @@ namespace Edbot.Game
             if (r.Rare != 0) parts.Add("희귀 재료 +" + r.Rare);
             if (r.Blueprints != 0) parts.Add("설계도 +" + r.Blueprints);
             return parts.Count == 0 ? "" : "(" + string.Join(", ", parts) + ")";
+        }
+
+        public static string MaterialName(string key)
+        {
+            switch (key)
+            {
+                case "branch": return "나뭇가지";
+                case "stone": return "돌";
+                case "ironIngot": return "철괴";
+                case "rare": return "희귀 재료";
+                case "blueprints": return "설계도";
+                default: return key;
+            }
+        }
+
+        public static string KindName(string kind)
+        {
+            switch (kind)
+            {
+                case "heavy": return "중량";
+                case "polearm": return "장병";
+                case "ranged": return "원거리";
+                default: return kind;
+            }
         }
 
         public static string Countdown(long? remainingMs)

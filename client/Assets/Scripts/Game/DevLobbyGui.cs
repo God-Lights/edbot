@@ -162,6 +162,10 @@ namespace Edbot.Game
                     break;
             }
 
+            bool forgeOpen = room.Forge != null &&
+                             (room.Phase == Phase.Explore || room.Phase == Phase.Forge || room.Phase == Phase.Battle || room.Phase == Phase.Deathmatch);
+            if (forgeOpen) ForgeView.Draw(client, room, seat);
+
             GUILayout.Space(8);
             if (GUILayout.Button("나가기")) client.Leave();
         }
