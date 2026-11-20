@@ -9,6 +9,8 @@
     "types": "wrangler types",
     "typecheck": "wrangler types && tsc --noEmit",
     "test": "vitest run",
+    "db:migrate": "wrangler d1 migrations apply DB --remote",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "smoke": "node scripts/smoke.mjs"
   },
   "devDependencies": {

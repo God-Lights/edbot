@@ -3,6 +3,7 @@ import { AuthStore } from "./auth-store";
 import { USER_HEADER, authRequired, authStore, bearerToken, identify, loginRedirectUrl } from "./auth";
 import type { AuthEnv } from "./auth";
 import { WEAPONS } from "./forge/weapons";
+import { getLeaderboard, getPlayerStats, getRecentMatches } from "./ranking/store";
 import { approvedPage, donePage, failedPage, homePage } from "./pages";
 import { Room } from "./room";
 
@@ -126,6 +127,32 @@ export default {
     // GET /api/characters -> 캐릭터 12명의 데이터 (이름, 기물, 능력치).
     if (request.method === "GET" && parts.length === 2 && parts[0] === "api" && parts[1] === "characters") {
       return json({ characters: CHARACTERS });
+    }
+
+    // GET /api/leaderboard?limit=20 -> 레이팅 순위. 로그인했다면 내 줄에 isMe가 붙는다.
+    if (request.method === "GET" && url.pathname === "/api/leaderboard") {
+      const me = await identify(env, request);
+      const limit = Number(url.searchParams.get("limit") ?? 20);
+      try {
+        const entries = await getLeaderboard(env.DB, Number.isFinite(limit) ? limit : 20, me?.id ?? null);
+        return json({ entries });
+      } catch {
+        return json({ error: "ranking_unavailable" }, 503);
+      }
+    }
+    // GET /api/me/stats, /api/me/matches -> 내 전적 (로그인 필요)
+    if (request.method === "GET" && parts.length === 3 && parts[0] === "api" && parts[1] === "me") {
+      const me = await identify(env, request);
+      if (!me) return json({ error: "unauthorized", loginUrl: `${origin}/auth/login` }, 401);
+      try {
+        if (parts[2] === "stats") return json({ stats: await getPlayerStats(env.DB, me.id) });
+        if (parts[2] === "matches") {
+          const limit = Number(url.searchParams.get("limit") ?? 10);
+          return json({ matches: await getRecentMatches(env.DB, me.id, Number.isFinite(limit) ? limit : 10) });
+        }
+      } catch {
+        return json({ error: "ranking_unavailable" }, 503);
+      }
     }
 
     // GET /api/weapons -> 무기 목록과 레시피.

@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { USER_HEADER } from "./auth";
+import { recordMatch } from "./ranking/store";
 import { parseClientMessage } from "./protocol";
 import type { ErrorCode, ServerMessage } from "./protocol";
 import {
@@ -19,6 +20,7 @@ import {
   pruneLobby,
   setDisconnected,
   setReady,
+  takeMatchRecord,
   toSnapshot,
 } from "./room-state";
 import type { ActionOutcome, RoomState } from "./room-state";
@@ -208,6 +210,25 @@ export class Room extends DurableObject<Env> {
     }
     await this.persist();
     this.broadcast();
+    await this.recordIfFinished();
+  }
+
+  /** 판이 끝났으면 전적과 레이팅을 D1에 저장하고, 레이팅 변화를 결과에 담아 다시 알린다. */
+  private async recordIfFinished(): Promise<void> {
+    if (!this.state) return;
+    const match = takeMatchRecord(this.state, Date.now());
+    if (!match) return;
+    try {
+      const ratings = await recordMatch(this.env.DB, match);
+      if (ratings && this.state.result) {
+        this.state.result.ratings = [ratings[0], ratings[1]];
+      }
+    } catch (error) {
+      // 랭킹 저장이 실패해도 판 진행에는 영향이 없다. (예: 아직 마이그레이션을 적용하지 않았을 때)
+      console.error("전적 저장 실패", error instanceof Error ? error.message : error);
+    }
+    await this.persist();
+    this.broadcast();
   }
 
   async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
@@ -249,6 +270,7 @@ export class Room extends DurableObject<Env> {
     if (pruned || advanced) {
       await this.persist();
       this.broadcast();
+      await this.recordIfFinished();
     } else {
       await this.reschedule();
     }

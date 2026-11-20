@@ -13,6 +13,9 @@
     { "tag": "v1", "new_sqlite_classes": ["Room"] },
     { "tag": "v2", "new_sqlite_classes": ["AuthStore"] }
   ],
+  // 전적과 랭킹. database_id를 적지 않으면 배포할 때 wrangler가 DB를 자동으로 만들어 준다.
+  // 테이블은 migrations/ 의 SQL로 만든다: npm run db:migrate (로컬은 npm run db:migrate:local)
+  "d1_databases": [{ "binding": "DB", "database_name": "edbot", "migrations_dir": "migrations" }],
   // 커스텀 도메인. officialgl.com 존이 이 Cloudflare 계정에 있어야 한다.
   "routes": [{ "pattern": "edgame-api.officialgl.com", "custom_domain": true }],
   "vars": {

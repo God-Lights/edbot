@@ -19,6 +19,7 @@ import {
   submitPlacement,
 } from "./game";
 import type { ActionResult, GameState } from "./game";
+import type { MatchInput } from "./ranking/store";
 import { createBattle, TICKS_PER_SECOND } from "./battle/core";
 import type { BattleState } from "./battle/core";
 import { toBattleSnapshot } from "./battle/snapshot";
@@ -86,6 +87,10 @@ export interface RoomState {
   /** 다음에 상태를 보내려고 깨어날 시각(ms). */
   battleSyncAt: number;
   result: ResultSnapshot | null;
+  /** 이 판이 시작된 서버 시각(ms). 전적을 저장할 때 판을 가리키는 키의 일부. */
+  matchStartedAt: number;
+  /** 전적을 저장했는가(또는 저장할 필요가 없다고 판단했는가). */
+  recorded: boolean;
   createdAt: number;
   lastActiveAt: number;
 }
@@ -107,6 +112,8 @@ export function createRoom(code: string, now: number): RoomState {
     battleClock: now,
     battleSyncAt: now,
     result: null,
+    matchStartedAt: now,
+    recorded: false,
     createdAt: now,
     lastActiveAt: now,
   };
@@ -245,6 +252,8 @@ function enterPhase(
     for (const p of state.players) p.ready = false;
   } else if (phase === "ban") {
     state.game = createGame(rng() < 0.5 ? 0 : 1); // 선공은 무작위
+    state.matchStartedAt = startedAt;
+    state.recorded = false;
   } else if (phase === "draft" && state.game) {
     startDraft(state.game, startedAt, draftTurnMs(scale));
   } else if (phase === "explore" && state.game) {
@@ -303,6 +312,7 @@ function settleBattle(state: RoomState, at: number, scale: number, rng: () => nu
     return;
   }
   state.result = {
+    ratings: [null, null],
     winner: battle.winner,
     reason: battle.reason ?? "time",
     score: [battle.score[0], battle.score[1]],
@@ -742,6 +752,33 @@ export function playerMoveLane(
   return runBattleCommand(state, playerId, now, scale, rng, (battle, seat) =>
     moveLane(battle, seat, characterId, lane),
   );
+}
+
+// ---- 전적 ----
+
+/**
+ * 끝난 판을 전적으로 남길 수 있으면 저장할 내용을 만든다.
+ * 두 사람 모두 GL 계정으로 로그인한 판만 기록하고(개발 서버의 익명 판은 기록하지 않는다), 한 번만 만든다.
+ */
+export function takeMatchRecord(state: RoomState, now: number): MatchInput | null {
+  if (state.recorded || state.phase !== "result" || !state.result || !state.game) return null;
+  state.recorded = true; // 저장이 실패해도 같은 판을 반복해서 시도하지 않는다
+  const [a, b] = [0, 1].map((seat) => state.players.find((p) => p.seat === seat));
+  if (!a?.userId || !b?.userId || a.userId === b.userId) return null;
+  return {
+    roomCode: state.code,
+    startedAt: state.matchStartedAt,
+    endedAt: now,
+    users: [
+      { userId: a.userId, nickname: a.name },
+      { userId: b.userId, nickname: b.name },
+    ],
+    winnerSeat: state.result.winner === null ? null : (state.result.winner as 0 | 1),
+    reason: state.result.reason,
+    score: [state.result.score[0] ?? 0, state.result.score[1] ?? 0],
+    kills: [state.result.kills[0] ?? 0, state.result.kills[1] ?? 0],
+    picks: [[...state.game.picks[0]], [...state.game.picks[1]]],
+  };
 }
 
 // ---- 정리와 알람 ----

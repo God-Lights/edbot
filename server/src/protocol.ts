@@ -222,6 +222,8 @@ export interface ForgeSnapshot {
 }
 
 export interface ResultSnapshot {
+  /** seat 순서로 레이팅 변화. 로그인하지 않은 판이거나 아직 저장 전이면 null. */
+  ratings: Array<{ before: number; after: number } | null>;
   winner: Seat | null;
   /** towers | time | deathmatch | deathmatchTime */
   reason: string;
