@@ -93,6 +93,8 @@ namespace Edbot.Game
                 _name = GUILayout.TextField(_name, 16);
             }
 
+            DrawRanking(client);
+
             GUI.enabled = !client.IsCreatingRoom;
             if (GUILayout.Button(client.IsCreatingRoom ? "방을 만드는 중..." : "방 만들기"))
             {
@@ -109,6 +111,51 @@ namespace Edbot.Game
                 client.Join(_code, _name);
             }
             GUI.enabled = true;
+        }
+
+        private bool _showRanking;
+
+        private void DrawRanking(GameClient client)
+        {
+            if (GUILayout.Button(_showRanking ? "랭킹 닫기" : "랭킹 보기"))
+            {
+                _showRanking = !_showRanking;
+                if (_showRanking) client.RefreshRanking();
+            }
+            if (!_showRanking) return;
+
+            if (client.IsLoadingRanking) GUILayout.Label("불러오는 중...");
+            var stats = client.MyStats;
+            if (client.User != null)
+            {
+                GUILayout.Label(stats == null
+                    ? "내 전적: 아직 한 판도 하지 않았다."
+                    : "내 전적: " + stats.Rank + "위  레이팅 " + stats.Rating + "  " + stats.Wins + "승 " + stats.Losses + "패 " + stats.Draws + "무");
+            }
+            else
+            {
+                GUILayout.Label("로그인하면 내 전적이 기록된다.");
+            }
+
+            if (client.Leaderboard != null)
+            {
+                foreach (var entry in client.Leaderboard)
+                {
+                    GUILayout.Label((entry.IsMe ? "▶ " : "") + entry.Rank + "위  " + entry.Nickname + "  " + entry.Rating + "  (" + entry.Wins + "승 " + entry.Losses + "패)");
+                }
+                if (client.Leaderboard.Count == 0) GUILayout.Label("아직 기록이 없다.");
+            }
+            if (client.MyMatches != null && client.MyMatches.Count > 0)
+            {
+                GUILayout.Label("최근 판");
+                foreach (var match in client.MyMatches)
+                {
+                    int mine = match.Score.Count > 0 ? match.Score[0] : 0;
+                    int theirs = match.Score.Count > 1 ? match.Score[1] : 0;
+                    GUILayout.Label("  " + Labels.MatchResult(match.Result) + "  vs " + match.Opponent + "  " + mine + ":" + theirs +
+                                    "  " + Labels.Delta(match.RatingAfter - match.RatingBefore));
+                }
+            }
         }
 
         private void DrawRoom(GameClient client, RoomConnection connection)
@@ -287,6 +334,8 @@ namespace Edbot.Game
             GUILayout.Label(outcome + "   (" + Labels.ResultReason(result.Reason) + ")");
             GUILayout.Label("점수 " + result.Score[0] + " : " + result.Score[1] + "   처치 " + result.Kills[0] + " : " + result.Kills[1]
                             + "   (왼쪽이 seat 0)");
+            var rating = seat >= 0 && seat < result.Ratings.Count ? result.Ratings[seat] : null;
+            if (rating != null) GUILayout.Label("레이팅 " + rating.Before + " → " + rating.After + " (" + Labels.Delta(rating.Delta) + ")");
             GUILayout.Label("잠시 뒤 로비로 돌아간다.");
         }
 

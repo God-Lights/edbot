@@ -171,6 +171,22 @@ namespace Edbot.Game
             }
         }
 
+        public static string MatchResult(string result)
+        {
+            switch (result)
+            {
+                case "win": return "승";
+                case "loss": return "패";
+                case "draw": return "무";
+                default: return result;
+            }
+        }
+
+        public static string Delta(int delta)
+        {
+            return delta > 0 ? "+" + delta : delta.ToString();
+        }
+
         public static string Countdown(long? remainingMs)
         {
             if (!remainingMs.HasValue) return "-";

@@ -94,6 +94,37 @@ namespace Edbot.Net
             }
         }
 
+        private async Task<JObject> GetJsonAsync(string path, CancellationToken ct)
+        {
+            using (var response = await _http.GetAsync(_baseUrl + path, ct).ConfigureAwait(false))
+            {
+                if (response.StatusCode == HttpStatusCode.Unauthorized) throw new UnauthorizedException();
+                response.EnsureSuccessStatusCode();
+                return JObject.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
+            }
+        }
+
+        /// <summary>레이팅 순위 상위 limit명. 로그인했다면 내 줄에 IsMe가 붙는다.</summary>
+        public async Task<List<LeaderboardEntry>> GetLeaderboardAsync(int limit = 20, CancellationToken ct = default(CancellationToken))
+        {
+            var body = await GetJsonAsync("/api/leaderboard?limit=" + limit, ct).ConfigureAwait(false);
+            return body["entries"].ToObject<List<LeaderboardEntry>>();
+        }
+
+        /// <summary>내 레이팅과 순위. 아직 한 판도 안 했으면 null. 로그인이 필요하다.</summary>
+        public async Task<PlayerStats> GetMyStatsAsync(CancellationToken ct = default(CancellationToken))
+        {
+            var body = await GetJsonAsync("/api/me/stats", ct).ConfigureAwait(false);
+            return body["stats"] == null || body["stats"].Type == JTokenType.Null ? null : body["stats"].ToObject<PlayerStats>();
+        }
+
+        /// <summary>내 최근 판. 로그인이 필요하다.</summary>
+        public async Task<List<MatchSummary>> GetMyMatchesAsync(int limit = 10, CancellationToken ct = default(CancellationToken))
+        {
+            var body = await GetJsonAsync("/api/me/matches?limit=" + limit, ct).ConfigureAwait(false);
+            return body["matches"].ToObject<List<MatchSummary>>();
+        }
+
         /// <summary>무기 목록과 레시피를 가져온다.</summary>
         public async Task<List<WeaponInfo>> GetWeaponsAsync(CancellationToken ct = default(CancellationToken))
         {

@@ -168,6 +168,66 @@ namespace Edbot.Net.Tests
         }
     }
 
+    public class RankingTests
+    {
+        private static HttpResponseMessage Json(string body)
+        {
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
+        }
+
+        [Fact]
+        public async Task LeaderboardAndStats()
+        {
+            var handler = new StubHandler(r => r.RequestUri.AbsolutePath.EndsWith("leaderboard")
+                ? Json(@"{""entries"":[{""rank"":1,""nickname"":""에드"",""rating"":1020,""games"":1,""wins"":1,""losses"":0,""draws"":0,""isMe"":true}]}")
+                : Json(@"{""stats"":{""nickname"":""에드"",""rating"":1020,""rank"":1,""games"":1,""wins"":1,""losses"":0,""draws"":0}}"));
+            using (var api = new ApiClient("https://x", handler, "tok"))
+            {
+                var board = await api.GetLeaderboardAsync(5);
+                Assert.Equal("에드", board[0].Nickname);
+                Assert.True(board[0].IsMe);
+                Assert.Contains("limit=5", handler.Last.RequestUri.Query);
+                var stats = await api.GetMyStatsAsync();
+                Assert.Equal(1020, stats.Rating);
+                Assert.Equal("tok", handler.Last.Headers.Authorization.Parameter);
+            }
+        }
+
+        [Fact]
+        public async Task StatsAreNullBeforeFirstGameAndMatchesParse()
+        {
+            using (var api = new ApiClient("https://x", new StubHandler(r => Json(@"{""stats"":null}"))))
+                Assert.Null(await api.GetMyStatsAsync());
+            const string matches = @"{""matches"":[{""endedAt"":5,""opponent"":""민수"",""result"":""win"",""reason"":""towers"",""score"":[17,3],""kills"":[4,2],
+              ""picks"":[""a""],""opponentPicks"":[""b""],""ratingBefore"":1000,""ratingAfter"":1020}]}";
+            using (var api = new ApiClient("https://x", new StubHandler(r => Json(matches))))
+            {
+                var list = await api.GetMyMatchesAsync();
+                Assert.Equal("win", list[0].Result);
+                Assert.Equal(17, list[0].Score[0]);
+                Assert.Equal(20, list[0].RatingAfter - list[0].RatingBefore);
+            }
+        }
+
+        [Fact]
+        public async Task Unauthorized()
+        {
+            using (var api = new ApiClient("https://x", new StubHandler(r => new HttpResponseMessage(HttpStatusCode.Unauthorized))))
+                await Assert.ThrowsAsync<UnauthorizedException>(() => api.GetMyStatsAsync());
+        }
+
+        [Fact]
+        public void ResultCarriesRatings()
+        {
+            const string json = @"{""t"":""state"",""room"":{""code"":""ABCD"",""phase"":""result"",""phaseStartedAt"":1,""phaseEndsAt"":2,""serverTime"":1,
+              ""players"":[],""game"":null,""battle"":null,
+              ""result"":{""ratings"":[{""before"":1000,""after"":1020},null],""winner"":0,""reason"":""time"",""score"":[3,1],""kills"":[1,0]}}}";
+            var result = ((StateMessage)MessageCodec.Parse(json)).Room.Result;
+            Assert.Equal(20, result.Ratings[0].Delta);
+            Assert.Null(result.Ratings[1]);
+        }
+    }
+
     public class AuthClientTests
     {
         private static HttpResponseMessage Json(HttpStatusCode code, string body)

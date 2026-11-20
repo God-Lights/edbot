@@ -336,6 +336,48 @@ namespace Edbot.Game
             }
         }
 
+        // ---- 랭킹 ----
+
+        public IReadOnlyList<LeaderboardEntry> Leaderboard { get; private set; }
+        public PlayerStats MyStats { get; private set; }
+        public IReadOnlyList<MatchSummary> MyMatches { get; private set; }
+        public bool IsLoadingRanking { get; private set; }
+
+        /// <summary>랭킹과 내 전적을 새로 불러온다. 로그인하지 않았으면 순위만 가져온다.</summary>
+        public async void RefreshRanking()
+        {
+            if (IsLoadingRanking) return;
+            IsLoadingRanking = true;
+            try
+            {
+                using (var api = new ApiClient(serverUrl, null, AuthToken))
+                {
+                    Leaderboard = await api.GetLeaderboardAsync(10);
+                    if (!string.IsNullOrEmpty(AuthToken))
+                    {
+                        try
+                        {
+                            MyStats = await api.GetMyStatsAsync();
+                            MyMatches = await api.GetMyMatchesAsync(5);
+                        }
+                        catch (UnauthorizedException)
+                        {
+                            HandleUnauthorized();
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LastMessage = "랭킹을 불러오지 못했다: " + ex.Message;
+                Debug.LogWarning(LastMessage);
+            }
+            finally
+            {
+                IsLoadingRanking = false;
+            }
+        }
+
         public WeaponInfo FindWeapon(string weaponId)
         {
             if (Weapons == null || weaponId == null) return null;

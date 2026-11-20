@@ -381,9 +381,20 @@ namespace Edbot.Net
         }
     }
 
+    /// <summary>한 판으로 바뀐 레이팅.</summary>
+    public sealed class RatingChange
+    {
+        [JsonProperty("before")] public int Before { get; set; }
+        [JsonProperty("after")] public int After { get; set; }
+        public int Delta { get { return After - Before; } }
+    }
+
     /// <summary>판이 끝난 뒤의 결과.</summary>
     public sealed class ResultSnapshot
     {
+        /// <summary>seat 순서의 레이팅 변화. 로그인하지 않은 판이거나 아직 저장 전이면 null.</summary>
+        [JsonProperty("ratings")] public List<RatingChange> Ratings { get; set; } = new List<RatingChange>();
+
         /// <summary>이긴 seat. 없으면 null.</summary>
         [JsonProperty("winner")] public int? Winner { get; set; }
         /// <summary>towers | time | deathmatch | deathmatchTime</summary>

@@ -99,3 +99,7 @@ EDBOT_SERVER=http://127.0.0.1:8787 dotnet test
 ## 대장간 화면
 
 `ForgeView`(IMGUI)가 왼쪽 패널 아래에 나옵니다. 광석 사기, 재련(재련대 2개의 남은 시간), 무기 조합(레시피와 효과가 버튼에 적혀 있고 재료가 모자라면 꺼짐), 인벤토리에서 무기를 고르고 캐릭터의 "끼우기"를 누르면 장착(3초)됩니다. 무기 목록은 `GET /api/weapons`로 받고, 전투 화면의 캐릭터 이름 옆 `*`는 무기를 끼고 있다는 표시입니다. Unity 에디터에서는 아직 실행해 보지 않았습니다.
+
+## 랭킹
+
+방 만들기 화면의 **랭킹 보기** 버튼이 상위 10명과 내 순위·전적·최근 5판을 보여 줍니다(`GameClient.RefreshRanking`, `ApiClient.GetLeaderboardAsync/GetMyStatsAsync/GetMyMatchesAsync`). 결과 화면에는 이번 판의 레이팅 변화가 나옵니다. 전적은 두 사람 모두 GL 계정으로 로그인한 판만 기록됩니다. Unity 에디터에서는 아직 실행해 보지 않았습니다.
