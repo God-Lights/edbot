@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using Edbot.Net;
 using UnityEngine;
+// UnityEngine에도 CharacterInfo가 있어서 우리 것을 가리키도록 별칭을 둔다.
+using CharacterInfo = Edbot.Net.CharacterInfo;
 
 namespace Edbot.Game
 {
