@@ -8,3 +8,5 @@
 |---|---|
 | [`server/`](server/README.md) | 온라인 대전 서버 (방 코드, WebSocket, 단계 타이머) |
 | [`client/`](client/README.md) | Unity 클라이언트 (서버 접속, 개발용 로비 화면) |
+
+서버는 `main`에 합치면 GitHub Actions가 Cloudflare에 배포합니다. 설정 방법은 [server/README.md](server/README.md#배포-github-actions)를 보세요.

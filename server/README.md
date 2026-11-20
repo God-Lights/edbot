@@ -49,8 +49,41 @@ npx wrangler dev --var PHASE_SCALE:0.05
 npm run smoke
 ```
 
-배포는 Cloudflare 계정에 로그인한 뒤 `npm run deploy` 입니다. 방 하나가 Durable Object 하나라서
-`wrangler.jsonc`의 `migrations`(SQLite 기반)가 첫 배포 때 함께 적용됩니다.
+## 배포 (GitHub Actions)
+
+배포는 GitHub Actions가 합니다. 워크플로는 `.github/workflows/` 에 있습니다.
+
+| 언제 | 워크플로 | 하는 일 |
+|---|---|---|
+| PR을 열거나 `main` 외의 브랜치에 푸시 | `ci.yml` | 서버 타입 검사·단위 테스트·배포 시험(`wrangler deploy --dry-run`), C# 단위 테스트, 로컬 서버에 서버 스모크와 C# 클라이언트를 붙여 한 판을 끝까지 돌리는 종단 간 테스트 |
+| `main`에 `server/` 변경이 합쳐질 때 (또는 Actions 탭에서 수동 실행) | `deploy.yml` | 타입 검사와 단위 테스트를 다시 한 뒤 Cloudflare Workers에 배포 |
+
+테스트가 하나라도 실패하면 배포는 일어나지 않습니다. 배포 단계는 저장소에 고정된 wrangler 버전(`npm run deploy`)을 쓰고
+별도의 서드파티 액션은 쓰지 않습니다.
+
+### 처음 한 번 설정하기
+
+1. **계정 ID 확인:** Cloudflare 대시보드 → Workers & Pages 개요 화면 오른쪽의 **Account ID** 를 복사한다.
+2. **API 토큰 만들기:** 대시보드 오른쪽 위 프로필 → My Profile → API Tokens → **Create Token** →
+   **Edit Cloudflare Workers** 템플릿 → 내 계정만 선택해서 만든다. 토큰은 만들 때 한 번만 보이니 바로 복사한다.
+3. **GitHub에 등록:** 저장소 Settings → Secrets and variables → Actions → **New repository secret** 으로 두 개를 만든다.
+   - `CLOUDFLARE_API_TOKEN` : 위에서 만든 토큰
+   - `CLOUDFLARE_ACCOUNT_ID` : 계정 ID
+4. **(권장) 배포 승인 걸기:** 저장소 Settings → Environments → `production` → **Required reviewers** 에 본인을 추가하면,
+   배포 전에 승인 버튼을 눌러야 올라간다. (첫 배포가 돌면 `production` 환경이 자동으로 생긴다.)
+5. `main`에 합치거나, Actions 탭 → **Deploy server** → Run workflow 로 첫 배포를 한다.
+
+시크릿이 없으면 배포 작업이 첫 단계에서 이유를 적고 멈춥니다. 토큰은 절대 저장소 파일에 적지 마세요.
+
+### 배포된 서버 쓰기
+
+배포가 끝나면 주소는 `https://edbot-server.<내 workers 서브도메인>.workers.dev` 입니다. (Actions 로그의 마지막 줄에 나옵니다.)
+Unity 개발용 화면의 **서버 주소** 칸에 이 주소를 그대로 넣으면 됩니다. `https://` 는 자동으로 `wss://` 로 바뀝니다.
+
+운영 서버의 `PHASE_SCALE` 은 `wrangler.jsonc` 의 `"1"` (실제 시간) 그대로 둡니다. 개발용 `--var PHASE_SCALE:0.1` 은 로컬 실행에만 씁니다.
+
+내 컴퓨터에서 직접 배포하려면 `npx wrangler login` 후 `npm run deploy` 도 됩니다.
+방 하나가 Durable Object 하나라서 `wrangler.jsonc`의 `migrations`(SQLite 기반)가 첫 배포 때 함께 적용됩니다.
 
 ## HTTP API
 
