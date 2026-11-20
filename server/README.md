@@ -43,7 +43,7 @@ npm run dev         # 로컬 서버 (http://localhost:8787)
 
 ```bash
 # 터미널 1: 시간을 20배 빠르게 (4분 → 12초)
-npx wrangler dev --var PHASE_SCALE:0.05
+npx wrangler dev --var PHASE_SCALE:0.05 --var REQUIRE_AUTH:false
 
 # 터미널 2: 한 판을 끝까지 돌려 보기
 npm run smoke
@@ -120,6 +120,8 @@ Unity 개발용 화면의 **서버 주소** 칸에 이 주소를 그대로 넣�
 | `pick` | `{ "t": "pick", "characterId": "lappus" }` 내 차례에 캐릭터 뽑기 | 드래프트 |
 | `place` | `{ "t": "place", "characterId": "lappus", "lane": "center" }` 내 캐릭터의 레인 정하기 (확정 전에는 바꿀 수 있다) | 배치 |
 | `lock` | `{ "t": "lock" }` 배치 확정. 정하지 않은 캐릭터는 기본 레인으로 간다 | 배치 |
+| `ultimate` | `{ "t": "ultimate", "characterId": "dwargon" }` 궁극기 발동 (스팀포스 5, 40초 재사용). 안키오는 `"lane"`도 보낸다 | 전투·데스매치 |
+| `move` | `{ "t": "move", "characterId": "...", "lane": "kingside" }` 나이트의 레인 이동 (12초 재사용) | 전투 |
 
 **오류 코드**
 
@@ -192,3 +194,62 @@ offset = 내 시각(수신 순간) - room.serverTime
 ## 다음 단계
 
 기획서의 로드맵 3단계부터 전투를 넣습니다. 레인 타워전, 가드 타워, 타워 스킬, 점수, 궁극기, 서버 틱 시뮬레이션이 들어갑니다.
+
+## 전투 (3단계)
+
+- 서버가 10Hz(0.1초/틱, `PHASE_SCALE`을 곱함)로 시뮬레이션을 돌린다. 코드는 `src/battle/` (`core.ts` 규칙 상수·타입, `abilities.ts` 패시브·스킬·궁극기, `sim.ts` 한 틱의 진행, `snapshot.ts` 클라이언트용 요약).
+- 전투 중 상태(`room.battle`)는 약 0.25초마다 전송된다. 이벤트에는 `seq`가 있어 이미 본 것을 거를 수 있다.
+- 내 스팀포스와 내 궁극기 준비 틱만 보인다. 상대 것은 숨겨진다.
+- 시간(120초)이 끝나면 점수가 높은 쪽이 승리, 동점이면 `deathmatch` 단계(60초)로 이어진다. 한쪽 본진 타워 3개가 모두 무너지면 바로 `result`.
+- `result` 단계의 스냅샷에는 `room.result`(승자, 이유, 점수)가 있다.
+- 리치몬드의 스킬·궁극기는 대장간(5단계)이 생길 때까지 쓸 수 없다 (`not_implemented`).
+
+## GL Account 로그인과 커스텀 도메인
+
+서버는 `https://edgame-api.officialgl.com` 에서 동작하고(`wrangler.jsonc`의 `routes`, 배포하면 도메인이 자동으로 연결됩니다. `officialgl.com` 존이 같은 Cloudflare 계정에 있어야 합니다), 로그인은 GL Account(`account.officialgl.com`)에 맡깁니다. 로그인·회원가입 화면은 만들지 않습니다. 연동 규칙: `god-lights/gl-account` 의 `docs/INTEGRATION.md`.
+
+**처음 한 번 할 일**
+1. 서비스 키를 만듭니다: `openssl rand -base64 48`
+2. GL Account Worker의 `SERVICE_API_KEYS`(쉼표로 구분)에 그 키를 추가합니다.
+3. 이 서버에 시크릿으로 넣습니다: `cd server && npx wrangler secret put GL_ACCOUNT_KEY`
+   (코드, 저장소, 로그에는 넣지 않습니다. 로컬은 `server/.dev.vars`, 이미 `.gitignore`에 있습니다.)
+
+**로그인 흐름** (자동으로 넘기지 않고 버튼을 눌러야 로그인 화면으로 갑니다)
+- 웹: `/` 에 "로그인하기" 버튼 -> `/auth/login` -> GL Account -> `/auth/done` 으로 돌아옴. `gl_session` 쿠키를 서버가 `verify-session` 으로 검증합니다 (결과는 30초만 캐시).
+- 게임 클라이언트(Unity): 브라우저 쿠키가 없으므로 "기기 로그인"을 씁니다.
+  1. `POST /api/auth/start` -> `{ loginId, loginUrl }`. 클라이언트가 `loginUrl`을 브라우저로 엽니다 (로그인하기 버튼을 눌렀을 때).
+  2. 브라우저에서 GL 로그인 후 "로그인 확인"을 누르면 승인됩니다.
+  3. 클라이언트는 `GET /api/auth/poll?id=<loginId>` 를 반복 호출 (202 대기 중, 200 `{ token, user }`, 404 만료). 토큰은 한 번만 받을 수 있고 7일 유효합니다.
+  4. 이후 `POST /api/rooms` 와 WebSocket(`/ws/:code`) 요청에 `Authorization: Bearer <token>` 헤더를 보냅니다. 없거나 틀리면 401 `{ error: "unauthorized", loginUrl }`.
+- `GET /api/auth/me` 현재 사용자, `POST /api/auth/logout` 게임 세션 끊기 (GL 계정 로그아웃은 account.officialgl.com 에서).
+- 방에서 이름은 GL 닉네임, 식별자는 `user.id`(UUID)입니다. 같은 계정이 다시 들어오면 원래 자리로 돌아옵니다.
+
+로컬 개발에서 로그인을 끄려면 `--var REQUIRE_AUTH:false` 또는 `.dev.vars` 에 `REQUIRE_AUTH=false` (운영에서는 켜져 있어야 합니다).
+
+## 탐사 (4단계)
+
+- 코드: `src/explore/explore.ts`(규칙), `src/explore/snapshot.ts`(보는 사람별 요약). 탐사 단계가 시작될 때 4x4 지도(시드로 생성, 안개 6칸)가 만들어지고, 대장간·전투·데스매치 동안에도 계속 흐르다가 로비로 돌아가면 사라진다.
+- 메시지: `{ "t": "explore", "action": "gather" | "ambush" | "scout", "tile": 0~15 }`. 행동 게이지(최대 3, 12초마다 +1)를 1 쓴다.
+- 채집 3초, 매복 10초, 채집한 칸은 25초 뒤 재생, 보물상자는 한 번만. 겹치면 반씩 나누고(홀수는 특성이 높은 쪽, 같으면 후공), 매복한 쪽이 채집한 쪽의 수확을 가진다. 양쪽이 같은 칸에 매복하면 서로 무효.
+- 탐사 특성(팀 구성): 킹 10초마다 탈런트 +1, 퀸 정찰 시 안개 1칸 추가 확인, 룩 돌·광석 +1, 비숍 나뭇가지 +1, 나이트 매복으로 빼앗는 양 +1.
+- 자원(탈런트, 나뭇가지, 돌, 광석, 희귀 재료, 설계도)은 `room.explore.resources`에 내 것만 보인다. 시작 탈런트 15, 10초마다 +2, 처치 +2. 대장간(5단계)이 이 자원을 쓴다.
+- 상대의 매복은 정찰한 안개 칸에서만 보이고, 상대의 자원과 행동은 어디에도 나오지 않는다.
+
+## 대장간 (5단계)
+
+- 코드: `src/forge/weapons.ts`(무기와 레시피, 상성), `src/forge/forge.ts`(상점, 재련, 조합, 장착), `src/forge/snapshot.ts`. 탐사 상태 안에 들어 있어서 탐사와 같은 시계로 흐르고, 탐사 자원(탈런트, 나뭇가지, 돌, 광석, 철괴, 희귀 재료, 설계도)을 같이 씁니다. 탐사 단계부터 열립니다(기획서는 배치부터).
+- 메시지 `forge`: `buy`(광석 구입, 탈런트 4, 리치몬드 팀은 3) / `smelt`(광석 1 + 탈런트 2 + 스팀포스 3, 15초, 재련대 2개) / `craft`(무기 즉시 조합) / `equip`(3초, 캐릭터당 무기 1개, 본진이나 아군 가드 타워 범위 안에서만).
+- 무기 9종: 일반 6(돌도끼·나무 창·나무 활 +12%, 철 도끼·철 창·철 석궁 +25%)과 설계도로 여는 특수 3(화염 도끼 화상, 서리 활 둔화, 흡혈 창 흡혈, 공격력 +8%). 목록은 `GET /api/weapons`.
+- 상성: 중량 > 장병 > 원거리 > 중량. 유리하면 피해 x1.2, 불리하면 x0.85, 무기가 없으면 상성이 없습니다. 상대의 무기는 맞붙기(같은 레인에서 6 안) 전에는 보이지 않습니다.
+- 스팀포스는 전투 전에는 대장간이, 전투가 시작되면 전투가 관리합니다(재련과 궁극기가 같은 풀을 씁니다).
+- 리치몬드: 금고(상점 -25%), 투자(탈런트 3으로 싸우는 아군 공격력 +25%, 10초), 황금 계약(탈런트 +8, 재련 5초 단축).
+
+## 전적과 랭킹 (6단계)
+
+- 저장: Cloudflare D1(`DB`). 스키마는 `migrations/0001_init.sql`(`players`, `matches`). 로컬은 `npm run db:migrate:local`, 운영은 `npm run db:migrate`(배포 워크플로가 배포 뒤에 자동으로 실행합니다). `wrangler.jsonc`에 `database_id`가 없어서 첫 배포 때 wrangler가 DB를 자동으로 만듭니다. 이때 `CLOUDFLARE_API_TOKEN`에 D1 편집 권한이 있어야 합니다.
+- 기록 조건: 두 사람 모두 GL 계정으로 로그인한 판만 판이 끝날 때 한 번 기록합니다(`REQUIRE_AUTH=false`인 개발 판은 기록하지 않음). 같은 판(방 코드 + 시작 시각)은 두 번 저장되지 않고, 저장이 실패해도 게임 진행에는 영향이 없습니다.
+- 레이팅: Elo, 시작 1000, K는 처음 10판 40 이후 24, 무승부 0.5. 결과 단계의 `room.result.ratings`에 판 전후 레이팅이 담깁니다.
+- API
+  - `GET /api/leaderboard?limit=20` 레이팅 순위 (로그인했다면 내 줄에 `isMe`; 사용자 id는 내보내지 않음)
+  - `GET /api/me/stats` 내 레이팅, 순위, 승·패·무 (로그인 필요)
+  - `GET /api/me/matches?limit=10` 내 최근 판 (상대 닉네임, 점수, 처치, 뽑은 캐릭터, 레이팅 변화)

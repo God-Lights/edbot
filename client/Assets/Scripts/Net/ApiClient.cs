@@ -9,17 +9,28 @@ using Newtonsoft.Json.Linq;
 
 namespace Edbot.Net
 {
+    /// <summary>로그인이 필요하거나 로그인이 만료되었다.</summary>
+    public sealed class UnauthorizedException : Exception
+    {
+        public UnauthorizedException() : base("로그인이 필요하다.") { }
+    }
+
     /// <summary>서버의 HTTP API (방 만들기, 방 정보 조회).</summary>
     public sealed class ApiClient : IDisposable
     {
         private readonly HttpClient _http;
         private readonly string _baseUrl;
 
-        public ApiClient(string serverUrl, HttpMessageHandler handler = null)
+        /// <param name="authToken">GL 로그인으로 받은 게임 세션 토큰. 방을 만들 때 필요하다.</param>
+        public ApiClient(string serverUrl, HttpMessageHandler handler = null, string authToken = null)
         {
             _baseUrl = NormalizeServerUrl(serverUrl);
             _http = handler != null ? new HttpClient(handler) : new HttpClient();
             _http.Timeout = TimeSpan.FromSeconds(10);
+            if (!string.IsNullOrEmpty(authToken))
+            {
+                _http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authToken);
+            }
         }
 
         /// <summary>"127.0.0.1:8787" 처럼 적어도 되도록 주소를 다듬는다. 끝의 '/'는 뺀다.</summary>
@@ -46,6 +57,7 @@ namespace Edbot.Net
             using (var response = await _http.PostAsync(_baseUrl + "/api/rooms", new StringContent(""), ct).ConfigureAwait(false))
             {
                 string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                if (response.StatusCode == HttpStatusCode.Unauthorized) throw new UnauthorizedException();
                 if (!response.IsSuccessStatusCode)
                 {
                     throw new HttpRequestException("방을 만들 수 없다 (" + (int)response.StatusCode + ")");
@@ -79,6 +91,50 @@ namespace Edbot.Net
                 var characters = MessageCodec.ParseCharacters(body);
                 if (characters == null) throw new HttpRequestException("캐릭터 데이터를 해석할 수 없다.");
                 return characters;
+            }
+        }
+
+        private async Task<JObject> GetJsonAsync(string path, CancellationToken ct)
+        {
+            using (var response = await _http.GetAsync(_baseUrl + path, ct).ConfigureAwait(false))
+            {
+                if (response.StatusCode == HttpStatusCode.Unauthorized) throw new UnauthorizedException();
+                response.EnsureSuccessStatusCode();
+                return JObject.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
+            }
+        }
+
+        /// <summary>레이팅 순위 상위 limit명. 로그인했다면 내 줄에 IsMe가 붙는다.</summary>
+        public async Task<List<LeaderboardEntry>> GetLeaderboardAsync(int limit = 20, CancellationToken ct = default(CancellationToken))
+        {
+            var body = await GetJsonAsync("/api/leaderboard?limit=" + limit, ct).ConfigureAwait(false);
+            return body["entries"].ToObject<List<LeaderboardEntry>>();
+        }
+
+        /// <summary>내 레이팅과 순위. 아직 한 판도 안 했으면 null. 로그인이 필요하다.</summary>
+        public async Task<PlayerStats> GetMyStatsAsync(CancellationToken ct = default(CancellationToken))
+        {
+            var body = await GetJsonAsync("/api/me/stats", ct).ConfigureAwait(false);
+            return body["stats"] == null || body["stats"].Type == JTokenType.Null ? null : body["stats"].ToObject<PlayerStats>();
+        }
+
+        /// <summary>내 최근 판. 로그인이 필요하다.</summary>
+        public async Task<List<MatchSummary>> GetMyMatchesAsync(int limit = 10, CancellationToken ct = default(CancellationToken))
+        {
+            var body = await GetJsonAsync("/api/me/matches?limit=" + limit, ct).ConfigureAwait(false);
+            return body["matches"].ToObject<List<MatchSummary>>();
+        }
+
+        /// <summary>무기 목록과 레시피를 가져온다.</summary>
+        public async Task<List<WeaponInfo>> GetWeaponsAsync(CancellationToken ct = default(CancellationToken))
+        {
+            using (var response = await _http.GetAsync(_baseUrl + "/api/weapons", ct).ConfigureAwait(false))
+            {
+                response.EnsureSuccessStatusCode();
+                string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                var weapons = MessageCodec.ParseWeapons(body);
+                if (weapons == null) throw new HttpRequestException("무기 데이터를 해석할 수 없다.");
+                return weapons;
             }
         }
 

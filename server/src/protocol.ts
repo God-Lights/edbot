@@ -9,6 +9,7 @@ export type Phase =
   | "explore"
   | "forge"
   | "battle"
+  | "deathmatch"
   | "result";
 
 /** 세 레인. 킹사이드는 체스에서 킹이 서 있는 쪽이다. */
@@ -35,7 +36,31 @@ export type ErrorCode =
   | "not_your_turn"
   | "already_done" // 이미 밴했거나 배치를 확정함
   | "not_your_character" // 내 팀에 없는 캐릭터
-  | "invalid_lane";
+  | "invalid_lane"
+  // ---- 전투 ----
+  | "unit_dead"
+  | "unit_disabled" // 기절 등으로 행동할 수 없다
+  | "not_implemented"
+  | "on_cooldown"
+  | "not_enough_steam"
+  | "no_target"
+  | "not_a_knight"
+  // ---- 탐사 ----
+  | "invalid_tile"
+  | "no_action_gauge"
+  | "tile_busy"
+  | "nothing_to_gather"
+  | "already_known"
+  // ---- 대장간 ----
+  | "not_enough_talent"
+  | "not_enough_materials"
+  | "no_free_smelter"
+  | "unknown_weapon"
+  | "no_weapon"
+  | "not_in_zone"
+  | "already_equipping"
+  | "already_equipped"
+  | "invalid_quantity";
 
 export interface PublicPlayer {
   id: string;
@@ -76,6 +101,136 @@ export interface GameSnapshot {
   placementLocked: [boolean, boolean];
 }
 
+export interface UnitSnapshot {
+  id: string;
+  characterId: string;
+  seat: Seat;
+  lane: Lane;
+  /** 레인 위의 위치 0~100. seat 0의 본진이 0, seat 1의 본진이 100. */
+  pos: number;
+  hp: number;
+  maxHp: number;
+  alive: boolean;
+  /** 죽어 있다면 되살아날 때까지 남은 틱. */
+  respawnInTicks: number | null;
+  shield: number;
+  promoted: boolean;
+  summon: boolean;
+  /** 걸려 있는 효과 이름들 (stun, slow, dot ...). */
+  effects: string[];
+  /** 끼고 있는 무기. 내 유닛은 항상 보이고, 상대 유닛은 맞붙어 있을 때만 보인다. */
+  weapon: string | null;
+  /** 궁극기를 다시 쓸 수 있게 되는 틱. 내 유닛에게만 들어 있다. */
+  ultReadyTick: number | null;
+  /** 나이트의 레인 이동을 다시 쓸 수 있게 되는 틱. 내 유닛에게만 들어 있다. */
+  laneMoveReadyTick: number | null;
+}
+
+export interface TowerSnapshot {
+  id: string;
+  seat: Seat;
+  lane: Lane;
+  kind: "guard" | "main";
+  pos: number;
+  hp: number;
+  maxHp: number;
+  alive: boolean;
+}
+
+export interface BattleEventSnapshot {
+  seq: number;
+  tick: number;
+  type: string;
+  seat: Seat | null;
+  unitId: string | null;
+  targetId: string | null;
+  text: string | null;
+}
+
+export interface BattleSnapshot {
+  mode: "battle" | "deathmatch";
+  /** 전투 시작부터 센 틱. 1초 = 10틱. */
+  tick: number;
+  ticksPerSecond: number;
+  score: [number, number];
+  kills: [number, number];
+  /** 내 스팀포스. 구경꾼이면 null. 상대의 스팀포스는 보이지 않는다. */
+  steam: number | null;
+  towers: TowerSnapshot[];
+  units: UnitSnapshot[];
+  /** 성채 같은 벽, 샘 같은 구역의 위치. */
+  walls: Array<{ lane: Lane; pos: number; seat: Seat }>;
+  wells: Array<{ lane: Lane; pos: number; seat: Seat }>;
+  /** 최근 이벤트. seq가 이미 본 것보다 큰 것만 처리하면 된다. */
+  events: BattleEventSnapshot[];
+}
+
+export interface ExploreTileSnapshot {
+  index: number;
+  /** 이 칸의 정체를 아는가. 안개 칸은 정찰하거나 채집하기 전에는 모른다. */
+  known: boolean;
+  /** tree | rock | ore | chest | empty. 모르면 null. */
+  kind: string | null;
+  /** 자원이 지금 없다 (채집됨). 아는 칸만. */
+  depleted: boolean;
+  respawnInTicks: number | null;
+  /** 내가 이 칸을 채집하는 중이면 끝날 때까지 남은 틱. */
+  myGatherInTicks: number | null;
+  /** 내가 이 칸에 매복 중이면 끝날 때까지 남은 틱. */
+  myAmbushInTicks: number | null;
+  /** 정찰해서 상대의 매복을 알아냈다. */
+  enemyAmbush: boolean;
+}
+
+export interface ExploreEventSnapshot {
+  seq: number;
+  tick: number;
+  type: string;
+  tile: number;
+  gain: Partial<Record<"talent" | "branch" | "stone" | "ore" | "ironIngot" | "rare" | "blueprints", number>> | null;
+  detail: string | null;
+}
+
+/** 탐사 상태. 내 자원과 내 행동만 들어 있고 상대 것은 없다. */
+export interface ExploreSnapshot {
+  tick: number;
+  ticksPerSecond: number;
+  gauge: number;
+  gaugeMax: number;
+  gaugeNextInTicks: number | null;
+  tiles: ExploreTileSnapshot[];
+  resources: Record<"talent" | "branch" | "stone" | "ore" | "ironIngot" | "rare" | "blueprints", number> | null;
+  events: ExploreEventSnapshot[];
+}
+
+export interface ForgeSnapshot {
+  /** 내 스팀포스. 전투가 시작되기 전에는 대장간의 것, 시작된 뒤에는 전투의 것. */
+  steam: number;
+  steamMax: number;
+  /** 재련대 2개. 비어 있으면 null, 돌아가는 중이면 끝날 때까지 남은 틱. */
+  smelters: Array<{ remainingTicks: number } | null>;
+  /** 무기 id -> 개수. */
+  inventory: Record<string, number>;
+  /** 캐릭터 id -> 끼고 있는 무기 id. */
+  equipped: Record<string, string>;
+  /** 캐릭터 id -> 끼우는 중인 무기와 남은 틱. */
+  equipping: Record<string, { weaponId: string; remainingTicks: number }>;
+  /** 지금 광석 하나의 가격. */
+  orePrice: number;
+  ticksPerSecond: number;
+  events: Array<{ seq: number; tick: number; type: string; detail: string | null }>;
+}
+
+export interface ResultSnapshot {
+  /** seat 순서로 레이팅 변화. 로그인하지 않은 판이거나 아직 저장 전이면 null. */
+  ratings: Array<{ before: number; after: number } | null>;
+  winner: Seat | null;
+  /** towers | time | deathmatch | deathmatchTime */
+  reason: string;
+  score: [number, number];
+  kills: [number, number];
+}
+
 export interface RoomSnapshot {
   code: string;
   phase: Phase;
@@ -87,6 +242,14 @@ export interface RoomSnapshot {
   players: PublicPlayer[];
   /** 로비에서는 null. */
   game: GameSnapshot | null;
+  /** 전투와 데스매치 중에만 있다. */
+  battle: BattleSnapshot | null;
+  /** 탐사 단계부터 판이 끝날 때까지. */
+  explore: ExploreSnapshot | null;
+  /** 대장간. 탐사와 함께 시작해서 판이 끝날 때까지. */
+  forge: ForgeSnapshot | null;
+  /** 결과 단계에서만 있다. */
+  result: ResultSnapshot | null;
 }
 
 // ---- 클라이언트 -> 서버 ----
@@ -101,7 +264,24 @@ export type ClientMessage =
   /** 배치 단계에서 내 캐릭터 한 명의 레인을 정한다. 확정하기 전에는 다시 바꿀 수 있다. */
   | { t: "place"; characterId: string; lane: Lane }
   /** 배치를 확정한다. 정하지 않은 캐릭터는 기본 레인으로 간다. 둘 다 확정하면 바로 다음 단계로 간다. */
-  | { t: "lock" };
+  | { t: "lock" }
+  /** 전투 중 궁극기를 쓴다. 스팀포스 5가 든다. 안키오는 갈 레인(lane)을 같이 보낸다. */
+  | { t: "ultimate"; characterId: string; lane?: Lane }
+  /** 전투 중 나이트가 다른 레인으로 옮겨 간다. */
+  | { t: "move"; characterId: string; lane: Lane }
+  /** 탐사: 칸(0~15, 4x4)에 채집·매복·정찰을 한다. 행동 게이지가 1 든다. */
+  | { t: "explore"; action: ExploreAction; tile: number }
+  /** 대장간: buy 광석 구입, smelt 재련 시작, craft 무기 조합, equip 무기 장착. */
+  | ForgeCommand;
+
+export type ForgeCommand =
+  | { t: "forge"; action: "buy"; quantity: number }
+  | { t: "forge"; action: "smelt" }
+  | { t: "forge"; action: "craft"; weaponId: string }
+  | { t: "forge"; action: "equip"; weaponId: string; characterId: string };
+
+export type ExploreAction = "gather" | "ambush" | "scout";
+export const EXPLORE_ACTIONS: readonly ExploreAction[] = ["gather", "ambush", "scout"];
 
 // ---- 서버 -> 클라이언트 ----
 
@@ -152,6 +332,45 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
     }
     case "lock":
       return { t: "lock" };
+    case "ultimate": {
+      const id = characterId(msg.characterId);
+      if (!id) return null;
+      if (msg.lane === undefined || msg.lane === null) return { t: "ultimate", characterId: id };
+      return isLane(msg.lane) ? { t: "ultimate", characterId: id, lane: msg.lane } : null;
+    }
+    case "forge": {
+      switch (msg.action) {
+        case "buy": {
+          const quantity = msg.quantity === undefined ? 1 : msg.quantity;
+          return typeof quantity === "number" && Number.isInteger(quantity) && quantity >= 1 && quantity <= 99
+            ? { t: "forge", action: "buy", quantity }
+            : null;
+        }
+        case "smelt":
+          return { t: "forge", action: "smelt" };
+        case "craft": {
+          const weaponId = characterId(msg.weaponId);
+          return weaponId ? { t: "forge", action: "craft", weaponId } : null;
+        }
+        case "equip": {
+          const weaponId = characterId(msg.weaponId);
+          const character = characterId(msg.characterId);
+          return weaponId && character ? { t: "forge", action: "equip", weaponId, characterId: character } : null;
+        }
+        default:
+          return null;
+      }
+    }
+    case "explore": {
+      const action = (EXPLORE_ACTIONS as readonly unknown[]).includes(msg.action) ? (msg.action as ExploreAction) : null;
+      const tile = msg.tile;
+      if (!action || typeof tile !== "number" || !Number.isInteger(tile) || tile < 0 || tile > 15) return null;
+      return { t: "explore", action, tile };
+    }
+    case "move": {
+      const id = characterId(msg.characterId);
+      return id && isLane(msg.lane) ? { t: "move", characterId: id, lane: msg.lane } : null;
+    }
     default:
       return null;
   }

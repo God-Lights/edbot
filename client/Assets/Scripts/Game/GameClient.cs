@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using Edbot.Net;
 using UnityEngine;
+// UnityEngine에도 CharacterInfo가 있어서 우리 것을 가리키도록 별칭을 둔다.
+using CharacterInfo = Edbot.Net.CharacterInfo;
 
 namespace Edbot.Game
 {
@@ -13,7 +15,7 @@ namespace Edbot.Game
     {
         public static GameClient Instance { get; private set; }
 
-        [SerializeField] private string serverUrl = "http://127.0.0.1:8787";
+        [SerializeField] private string serverUrl = "https://edgame-api.officialgl.com";
 
         public event Action<ConnectedEvent> Connected;
         public event Action<RoomSnapshot> StateChanged;
@@ -34,8 +36,25 @@ namespace Edbot.Game
 
         public bool IsCreatingRoom { get; private set; }
 
+        // ---- GL Account 로그인 ----
+
+        private const string TokenPref = "edbot.authToken";
+        private System.Threading.CancellationTokenSource _loginCts;
+
+        /// <summary>로그인한 사용자. 로그인하지 않았으면 null.</summary>
+        public AuthUser User { get; private set; }
+
+        /// <summary>게임 세션 토큰. 서버가 로그인을 요구하지 않는 개발 서버에서는 없어도 된다.</summary>
+        public string AuthToken { get; private set; }
+
+        /// <summary>브라우저에서 로그인하기를 기다리는 중인가.</summary>
+        public bool IsLoggingIn { get; private set; }
+
         /// <summary>캐릭터 12명의 데이터. 방에 들어갈 때 서버에서 가져온다. 아직이면 null.</summary>
         public IReadOnlyList<CharacterInfo> Roster { get; private set; }
+
+        /// <summary>무기 9종의 데이터(레시피 포함). 아직이면 null.</summary>
+        public IReadOnlyList<WeaponInfo> Weapons { get; private set; }
 
         private bool _loadingRoster;
 
@@ -53,6 +72,7 @@ namespace Edbot.Game
             DontDestroyOnLoad(gameObject);
             // 창이 포커스를 잃어도 연결과 타이머가 계속 돌아야 한다.
             Application.runInBackground = true;
+            RestoreLogin();
         }
 
         private void Update()
@@ -69,8 +89,115 @@ namespace Edbot.Game
 
         private void OnDestroy()
         {
+            if (_loginCts != null) _loginCts.Cancel();
             if (Instance == this) Instance = null;
             StopConnection();
+        }
+
+        /// <summary>저장해 둔 토큰이 아직 유효한지 확인한다. 만료되었으면 지운다.</summary>
+        private async void RestoreLogin()
+        {
+            string token = PlayerPrefs.GetString(TokenPref, "");
+            if (string.IsNullOrEmpty(token)) return;
+            try
+            {
+                using (var auth = new AuthClient(serverUrl))
+                {
+                    var user = await auth.GetMeAsync(token);
+                    if (user == null)
+                    {
+                        PlayerPrefs.DeleteKey(TokenPref);
+                        return;
+                    }
+                    AuthToken = token;
+                    User = user;
+                }
+            }
+            catch (Exception ex)
+            {
+                // 서버에 닿지 못한 것일 수 있어서 토큰은 지우지 않는다.
+                Debug.LogWarning("로그인 상태를 확인하지 못했다: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// 로그인하기 버튼을 눌렀을 때. 브라우저로 GL Account 로그인 화면을 열고,
+        /// 로그인을 마치면 게임이 토큰을 받아 온다. (자동으로 열지 않는다.)
+        /// </summary>
+        public async void BeginLogin()
+        {
+            if (IsLoggingIn) return;
+            IsLoggingIn = true;
+            LastMessage = null;
+            _loginCts = new System.Threading.CancellationTokenSource();
+            var ct = _loginCts.Token;
+            try
+            {
+                using (var auth = new AuthClient(serverUrl))
+                {
+                    var start = await auth.StartAsync(ct);
+                    Application.OpenURL(start.LoginUrl);
+                    LastMessage = "브라우저에서 로그인한 뒤 '로그인 확인'을 눌러 주세요.";
+                    var deadline = DateTime.UtcNow.AddSeconds(Mathf.Max(30, start.ExpiresInSeconds));
+                    while (DateTime.UtcNow < deadline)
+                    {
+                        await System.Threading.Tasks.Task.Delay(2000, ct);
+                        var result = await auth.PollAsync(start.LoginId, ct);
+                        if (result.Status == LoginPollStatus.Pending) continue;
+                        if (result.Status == LoginPollStatus.Expired) break;
+                        AuthToken = result.Token;
+                        User = result.User;
+                        PlayerPrefs.SetString(TokenPref, result.Token);
+                        PlayerPrefs.Save();
+                        LastMessage = null;
+                        return;
+                    }
+                    LastMessage = "로그인 시간이 지났다. 다시 눌러 주세요.";
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                LastMessage = "로그인할 수 없다: " + ex.Message;
+                Debug.LogWarning(LastMessage);
+            }
+            finally
+            {
+                IsLoggingIn = false;
+            }
+        }
+
+        public void CancelLogin()
+        {
+            if (_loginCts != null) _loginCts.Cancel();
+        }
+
+        /// <summary>게임 세션을 끊는다. (GL 계정 로그아웃은 account.officialgl.com 에서)</summary>
+        public async void Logout()
+        {
+            string token = AuthToken;
+            AuthToken = null;
+            User = null;
+            PlayerPrefs.DeleteKey(TokenPref);
+            if (string.IsNullOrEmpty(token)) return;
+            try
+            {
+                using (var auth = new AuthClient(serverUrl)) await auth.LogoutAsync(token);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("로그아웃 요청에 실패했다: " + ex.Message);
+            }
+        }
+
+        private void HandleUnauthorized()
+        {
+            AuthToken = null;
+            User = null;
+            PlayerPrefs.DeleteKey(TokenPref);
+            LastMessage = "로그인이 필요하다. 로그인하기를 눌러 주세요.";
         }
 
         /// <summary>새 방을 만들고 바로 들어간다.</summary>
@@ -81,12 +208,16 @@ namespace Edbot.Game
             LastMessage = null;
             try
             {
-                using (var api = new ApiClient(serverUrl))
+                using (var api = new ApiClient(serverUrl, null, AuthToken))
                 {
                     string code = await api.CreateRoomAsync();
                     // await 뒤에는 Unity 메인 스레드로 돌아와 있다.
                     Join(code, playerName);
                 }
+            }
+            catch (UnauthorizedException)
+            {
+                HandleUnauthorized();
             }
             catch (Exception ex)
             {
@@ -106,12 +237,15 @@ namespace Edbot.Game
             LastMessage = null;
 
             LoadRosterAsync();
+            LoadWeaponsAsync();
 
             var connection = new RoomConnection();
+            connection.AuthToken = AuthToken;
             _connection = connection;
             try
             {
-                connection.Start(ApiClient.ToWebSocketBase(serverUrl), roomCode, playerName);
+                // 로그인했다면 서버가 GL 닉네임을 이름으로 쓴다.
+                connection.Start(ApiClient.ToWebSocketBase(serverUrl), roomCode, User != null ? User.Nickname : playerName);
             }
             catch (Exception ex)
             {
@@ -151,6 +285,22 @@ namespace Edbot.Game
             return _connection != null && _connection.SendLock();
         }
 
+        public bool UseUltimate(string characterId, Lane? lane = null)
+        {
+            return _connection != null && _connection.SendUltimate(characterId, lane);
+        }
+
+        /// <summary>탐사 행동. action: "gather"(채집), "ambush"(매복), "scout"(정찰).</summary>
+        public bool Explore(string action, int tile)
+        {
+            return _connection != null && _connection.SendExplore(action, tile);
+        }
+
+        public bool MoveLane(string characterId, Lane lane)
+        {
+            return _connection != null && _connection.SendMoveLane(characterId, lane);
+        }
+
         /// <summary>id로 캐릭터를 찾는다. 데이터가 아직 없거나 모르는 id면 null.</summary>
         public CharacterInfo FindCharacter(string characterId)
         {
@@ -169,6 +319,79 @@ namespace Edbot.Game
             var character = FindCharacter(characterId);
             return character == null ? characterId : character.NameKo + " (" + Labels.PieceName(character.Piece) + ")";
         }
+
+        private async void LoadWeaponsAsync()
+        {
+            if (Weapons != null) return;
+            try
+            {
+                using (var api = new ApiClient(serverUrl))
+                {
+                    Weapons = await api.GetWeaponsAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("무기 데이터를 불러오지 못했다: " + ex.Message);
+            }
+        }
+
+        // ---- 랭킹 ----
+
+        public IReadOnlyList<LeaderboardEntry> Leaderboard { get; private set; }
+        public PlayerStats MyStats { get; private set; }
+        public IReadOnlyList<MatchSummary> MyMatches { get; private set; }
+        public bool IsLoadingRanking { get; private set; }
+
+        /// <summary>랭킹과 내 전적을 새로 불러온다. 로그인하지 않았으면 순위만 가져온다.</summary>
+        public async void RefreshRanking()
+        {
+            if (IsLoadingRanking) return;
+            IsLoadingRanking = true;
+            try
+            {
+                using (var api = new ApiClient(serverUrl, null, AuthToken))
+                {
+                    Leaderboard = await api.GetLeaderboardAsync(10);
+                    if (!string.IsNullOrEmpty(AuthToken))
+                    {
+                        try
+                        {
+                            MyStats = await api.GetMyStatsAsync();
+                            MyMatches = await api.GetMyMatchesAsync(5);
+                        }
+                        catch (UnauthorizedException)
+                        {
+                            HandleUnauthorized();
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LastMessage = "랭킹을 불러오지 못했다: " + ex.Message;
+                Debug.LogWarning(LastMessage);
+            }
+            finally
+            {
+                IsLoadingRanking = false;
+            }
+        }
+
+        public WeaponInfo FindWeapon(string weaponId)
+        {
+            if (Weapons == null || weaponId == null) return null;
+            foreach (var weapon in Weapons)
+            {
+                if (weapon.Id == weaponId) return weapon;
+            }
+            return null;
+        }
+
+        public bool BuyOre(int quantity = 1) { return _connection != null && _connection.SendForgeBuy(quantity); }
+        public bool Smelt() { return _connection != null && _connection.SendForgeSmelt(); }
+        public bool Craft(string weaponId) { return _connection != null && _connection.SendForgeCraft(weaponId); }
+        public bool Equip(string weaponId, string characterId) { return _connection != null && _connection.SendForgeEquip(weaponId, characterId); }
 
         private async void LoadRosterAsync()
         {

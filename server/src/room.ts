@@ -1,4 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
+import { USER_HEADER } from "./auth";
+import { recordMatch } from "./ranking/store";
 import { parseClientMessage } from "./protocol";
 import type { ErrorCode, ServerMessage } from "./protocol";
 import {
@@ -9,11 +11,16 @@ import {
   nextDeadline,
   playerBan,
   playerLock,
+  playerExplore,
+  playerForge,
+  playerMoveLane,
   playerPick,
   playerPlace,
+  playerUltimate,
   pruneLobby,
   setDisconnected,
   setReady,
+  takeMatchRecord,
   toSnapshot,
 } from "./room-state";
 import type { ActionOutcome, RoomState } from "./room-state";
@@ -83,9 +90,21 @@ export class Room extends DurableObject<Env> {
 
     const url = new URL(request.url);
     const now = Date.now();
+    // Worker가 GL Account로 확인한 사용자. 로그인한 사람은 닉네임이 이름이 된다.
+    let glUser: { id: string; nickname: string } | null = null;
+    try {
+      const raw = request.headers.get(USER_HEADER);
+      if (raw) glUser = JSON.parse(raw) as { id: string; nickname: string };
+    } catch {
+      glUser = null;
+    }
     const result = joinRoom(
       this.state,
-      { name: url.searchParams.get("name") ?? "", token: url.searchParams.get("token") ?? undefined },
+      {
+        name: glUser?.nickname ?? url.searchParams.get("name") ?? "",
+        token: url.searchParams.get("token") ?? undefined,
+        userId: glUser?.id,
+      },
       now,
       () => crypto.randomUUID(),
     );
@@ -156,6 +175,27 @@ export class Room extends DurableObject<Env> {
       case "lock":
         await this.finishAction(ws, playerLock(this.state, playerId, now, scale));
         return;
+      case "ultimate":
+        await this.finishAction(
+          ws,
+          playerUltimate(this.state, playerId, msg.characterId, msg.lane, now, scale),
+        );
+        return;
+      case "forge":
+        await this.finishAction(ws, playerForge(this.state, playerId, msg, now, scale));
+        return;
+      case "explore":
+        await this.finishAction(
+          ws,
+          playerExplore(this.state, playerId, msg.action, msg.tile, now, scale),
+        );
+        return;
+      case "move":
+        await this.finishAction(
+          ws,
+          playerMoveLane(this.state, playerId, msg.characterId, msg.lane, now, scale),
+        );
+        return;
     }
   }
 
@@ -167,6 +207,25 @@ export class Room extends DurableObject<Env> {
     if (!result.ok) {
       sendTo(ws, { t: "error", code: result.code, message: result.message });
       return;
+    }
+    await this.persist();
+    this.broadcast();
+    await this.recordIfFinished();
+  }
+
+  /** 판이 끝났으면 전적과 레이팅을 D1에 저장하고, 레이팅 변화를 결과에 담아 다시 알린다. */
+  private async recordIfFinished(): Promise<void> {
+    if (!this.state) return;
+    const match = takeMatchRecord(this.state, Date.now());
+    if (!match) return;
+    try {
+      const ratings = await recordMatch(this.env.DB, match);
+      if (ratings && this.state.result) {
+        this.state.result.ratings = [ratings[0], ratings[1]];
+      }
+    } catch (error) {
+      // 랭킹 저장이 실패해도 판 진행에는 영향이 없다. (예: 아직 마이그레이션을 적용하지 않았을 때)
+      console.error("전적 저장 실패", error instanceof Error ? error.message : error);
     }
     await this.persist();
     this.broadcast();
@@ -211,6 +270,7 @@ export class Room extends DurableObject<Env> {
     if (pruned || advanced) {
       await this.persist();
       this.broadcast();
+      await this.recordIfFinished();
     } else {
       await this.reschedule();
     }

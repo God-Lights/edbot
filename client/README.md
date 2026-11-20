@@ -83,3 +83,23 @@ EDBOT_SERVER=http://127.0.0.1:8787 dotnet test
 - 검증됨: 네트워크 코어 전체 (단위 테스트 56개 + 실제 서버 통합 테스트 2개).
 - 아직 아님: `Assets/Scripts/Game/` 의 Unity 코드는 이 환경에 에디터가 없어서 **에디터에서 실행해 보지 못했습니다.**
   UnityEngine의 필요한 부분만 흉내 낸 임시 스텁으로 컴파일만 확인했습니다. 처음 열었을 때 오류가 있으면 알려 주세요.
+
+## 로그인 (GL Account)와 전투 화면
+
+- 서버 주소 기본값은 `https://edgame-api.officialgl.com` 입니다. 로컬 개발 서버(`--var REQUIRE_AUTH:false`)에는 `http://127.0.0.1:8787` 로 바꾸면 로그인 없이 쓸 수 있습니다.
+- **로그인하기** 버튼을 누르면 브라우저로 `account.officialgl.com` 로그인 화면이 열리고, 로그인한 뒤 서버 페이지의 **로그인 확인**을 누르면 게임이 토큰을 받습니다 (`AuthClient`, `GameClient.BeginLogin`). 자동으로 열리지 않습니다. 토큰은 `PlayerPrefs`에 저장되고, 방을 만들거나 들어갈 때 `Authorization: Bearer` 헤더로 보냅니다. 로그인하면 이름은 GL 닉네임이 됩니다.
+- 전투(`Phase.Battle`)와 데스매치는 `BattleView`(IMGUI)가 그립니다. 레인 3개, 타워, 유닛, 점수, 스팀포스, 내 캐릭터별 궁극기 버튼(안키오는 레인 선택), 나이트의 레인 이동 버튼이 있습니다. 내 본진이 항상 왼쪽에 오도록 seat 1이면 좌우를 뒤집습니다.
+- 새 메시지: `MessageCodec.Ultimate`, `MessageCodec.Move`, `RoomConnection.SendUltimate/SendMoveLane`.
+- Unity 에디터에서 실행해 본 것은 아닙니다. 순수 C#(`Net`)은 `dotnet test`로 검증했고, `Game` 스크립트는 컴파일만 확인했습니다.
+
+## 탐사 화면
+
+`ExploreView`(IMGUI)가 4x4 지도를 그립니다. 위쪽에서 채집/매복/정찰 중 하나를 고르고 칸을 누르면 `explore` 메시지가 갑니다. 행동 게이지, 내 자원, 내 행동의 남은 시간, 최근 이벤트가 보이고, 탐사·대장간·전투·데스매치 동안 계속 열려 있습니다. 상대의 자원과 행동은 오지 않습니다. (Unity 에디터에서는 아직 실행해 보지 않았습니다.)
+
+## 대장간 화면
+
+`ForgeView`(IMGUI)가 왼쪽 패널 아래에 나옵니다. 광석 사기, 재련(재련대 2개의 남은 시간), 무기 조합(레시피와 효과가 버튼에 적혀 있고 재료가 모자라면 꺼짐), 인벤토리에서 무기를 고르고 캐릭터의 "끼우기"를 누르면 장착(3초)됩니다. 무기 목록은 `GET /api/weapons`로 받고, 전투 화면의 캐릭터 이름 옆 `*`는 무기를 끼고 있다는 표시입니다. Unity 에디터에서는 아직 실행해 보지 않았습니다.
+
+## 랭킹
+
+방 만들기 화면의 **랭킹 보기** 버튼이 상위 10명과 내 순위·전적·최근 5판을 보여 줍니다(`GameClient.RefreshRanking`, `ApiClient.GetLeaderboardAsync/GetMyStatsAsync/GetMyMatchesAsync`). 결과 화면에는 이번 판의 레이팅 변화가 나옵니다. 전적은 두 사람 모두 GL 계정으로 로그인한 판만 기록됩니다. Unity 에디터에서는 아직 실행해 보지 않았습니다.

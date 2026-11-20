@@ -27,9 +27,17 @@ namespace Edbot.Net
 
     public sealed class ClientWebSocketTransportFactory : ITransportFactory
     {
+        private readonly Func<string> _authToken;
+
+        /// <param name="authToken">접속할 때마다 불러서 Authorization 헤더에 넣을 토큰을 얻는다. 없으면 null.</param>
+        public ClientWebSocketTransportFactory(Func<string> authToken = null)
+        {
+            _authToken = authToken;
+        }
+
         public IWebSocketTransport Create()
         {
-            return new ClientWebSocketTransport();
+            return new ClientWebSocketTransport(_authToken == null ? null : _authToken());
         }
     }
 
@@ -40,6 +48,11 @@ namespace Edbot.Net
         // ClientWebSocket은 동시에 두 번 보내면 예외가 나서 보내기를 한 줄로 세운다.
         private readonly SemaphoreSlim _sendLock = new SemaphoreSlim(1, 1);
         private readonly byte[] _buffer = new byte[16 * 1024];
+
+        public ClientWebSocketTransport(string authToken = null)
+        {
+            if (!string.IsNullOrEmpty(authToken)) _socket.Options.SetRequestHeader("Authorization", "Bearer " + authToken);
+        }
 
         public Task ConnectAsync(Uri uri, CancellationToken ct)
         {

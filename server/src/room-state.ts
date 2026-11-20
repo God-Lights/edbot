@@ -19,14 +19,30 @@ import {
   submitPlacement,
 } from "./game";
 import type { ActionResult, GameState } from "./game";
+import type { MatchInput } from "./ranking/store";
+import { createBattle, TICKS_PER_SECOND } from "./battle/core";
+import type { BattleState } from "./battle/core";
+import { toBattleSnapshot } from "./battle/snapshot";
+import { awardKill, createExplore, startAmbush, startGather, startScout, stepExplore } from "./explore/explore";
+import type { ExploreState } from "./explore/explore";
+import { toExploreSnapshot } from "./explore/snapshot";
+import { buyOre, craftWeapon, finishEquips, hasten, startEquip, startSmelting } from "./forge/forge";
+import type { ForgeResult, SteamPool } from "./forge/forge";
+import { toForgeSnapshot } from "./forge/snapshot";
+import { computeMods } from "./battle/abilities";
+import { basePosition, inAlliedZone, unitById } from "./battle/core";
+import { finishByTime, moveLane, startDeathmatch, stepBattle, useUltimate } from "./battle/sim";
 import { isTimedPhase, nextPhase, phaseDurationMs } from "./phases";
 import type {
   BanSnapshot,
+  ExploreAction,
+  ForgeCommand,
   ErrorCode,
   GameSnapshot,
   Lane,
   Phase,
   PublicPlayer,
+  ResultSnapshot,
   RoomSnapshot,
   Seat,
 } from "./protocol";
@@ -42,6 +58,8 @@ export interface PlayerState {
   id: string;
   token: string;
   name: string;
+  /** GL Account 사용자 id (UUID). 로그인 없이 개발할 때는 없다. */
+  userId?: string;
   seat: Seat;
   connected: boolean;
   ready: boolean;
@@ -56,6 +74,23 @@ export interface RoomState {
   players: PlayerState[];
   /** 밴, 드래프트, 배치 상태. 로비에서는 null. */
   game: GameState | null;
+  /** 전투와 데스매치의 시뮬레이션. 그 외에는 null. */
+  battle: BattleState | null;
+  /** 탐사 지도와 자원. 탐사 단계부터 판이 끝날 때까지. 그 외에는 null. */
+  explore: ExploreState | null;
+  /** 탐사가 여기까지 진행됐다는 서버 시각(ms). 틱 하나는 tickMs. */
+  exploreClock: number;
+  /** 킬 보상을 이미 준 전투 이벤트 번호. */
+  killsAwardedSeq: number;
+  /** 시뮬레이션이 여기까지 진행됐다는 서버 시각(ms). 틱 하나는 tickMs. */
+  battleClock: number;
+  /** 다음에 상태를 보내려고 깨어날 시각(ms). */
+  battleSyncAt: number;
+  result: ResultSnapshot | null;
+  /** 이 판이 시작된 서버 시각(ms). 전적을 저장할 때 판을 가리키는 키의 일부. */
+  matchStartedAt: number;
+  /** 전적을 저장했는가(또는 저장할 필요가 없다고 판단했는가). */
+  recorded: boolean;
   createdAt: number;
   lastActiveAt: number;
 }
@@ -70,6 +105,15 @@ export function createRoom(code: string, now: number): RoomState {
     phaseEndsAt: null,
     players: [],
     game: null,
+    battle: null,
+    explore: null,
+    exploreClock: now,
+    killsAwardedSeq: 0,
+    battleClock: now,
+    battleSyncAt: now,
+    result: null,
+    matchStartedAt: now,
+    recorded: false,
     createdAt: now,
     lastActiveAt: now,
   };
@@ -91,7 +135,7 @@ export type JoinResult =
  */
 export function joinRoom(
   state: RoomState,
-  request: { name: string; token?: string },
+  request: { name: string; token?: string; userId?: string },
   now: number,
   newId: () => string,
 ): JoinResult {
@@ -102,6 +146,17 @@ export function joinRoom(
       existing.disconnectedAt = null;
       state.lastActiveAt = now;
       return { ok: true, player: existing, reconnected: true };
+    }
+  }
+
+  if (request.userId) {
+    // 같은 GL 계정이면 토큰을 잃어버려도(다른 기기 등) 원래 자리로 돌아온다.
+    const same = state.players.find((p) => p.userId === request.userId);
+    if (same) {
+      same.connected = true;
+      same.disconnectedAt = null;
+      state.lastActiveAt = now;
+      return { ok: true, player: same, reconnected: true };
     }
   }
 
@@ -118,6 +173,7 @@ export function joinRoom(
     id: newId(),
     token: newId(),
     name: sanitizeName(request.name),
+    userId: request.userId,
     seat,
     connected: true,
     ready: false,
@@ -190,12 +246,161 @@ function enterPhase(
   if (phase === "lobby") {
     // 한 판이 끝나고 돌아온 로비. 다시 하려면 새로 준비해야 한다.
     state.game = null;
+    state.battle = null;
+    state.explore = null;
+    state.result = null;
     for (const p of state.players) p.ready = false;
   } else if (phase === "ban") {
     state.game = createGame(rng() < 0.5 ? 0 : 1); // 선공은 무작위
+    state.matchStartedAt = startedAt;
+    state.recorded = false;
   } else if (phase === "draft" && state.game) {
     startDraft(state.game, startedAt, draftTurnMs(scale));
+  } else if (phase === "explore" && state.game) {
+    state.explore = createExplore({
+      seed: Math.floor(rng() * 0x7fffffff),
+      teams: [[...state.game.picks[0]], [...state.game.picks[1]]],
+      secondPicker: state.game.firstPicker === 0 ? 1 : 0,
+    });
+    state.exploreClock = startedAt;
+    state.killsAwardedSeq = 0;
+    state.battleSyncAt = startedAt + battleSyncMs(scale);
+  } else if (phase === "forge") {
+    state.battleSyncAt = startedAt + battleSyncMs(scale);
+  } else if (phase === "battle" && state.game) {
+    state.battle = createBattle(battleSetup(state.game, state.explore));
+    if (state.explore) state.explore.forge.steamActive = false; // 이제부터 스팀포스는 전투가 관리한다
+    state.battleClock = startedAt;
+    state.battleSyncAt = startedAt + battleSyncMs(scale);
+  } else if (phase === "deathmatch") {
+    state.battleSyncAt = startedAt + battleSyncMs(scale);
   }
+}
+
+/** 시뮬레이션 틱 하나에 해당하는 서버 시간. 1틱 = 0.1초 (PHASE_SCALE을 곱한다). */
+export function tickMs(scale = 1): number {
+  return Math.max(1, Math.round((1000 / TICKS_PER_SECOND) * scale));
+}
+
+/** 전투 중 클라이언트에 상태를 보내는 간격. */
+export function battleSyncMs(scale = 1): number {
+  return Math.max(tickMs(scale), Math.round(250 * scale));
+}
+
+function battleSetup(game: GameState, explore: ExploreState | null) {
+  const team = (seat: Seat) =>
+    game.picks[seat].map((characterId) => ({
+      characterId,
+      lane: game.lanes[seat][characterId] ?? ("center" as Lane),
+      weapon: explore?.forge.equipped[seat][characterId] ?? null,
+    }));
+  // 후공 팀은 동률일 때 이기는 보정을 받는다.
+  return {
+    teams: [team(0), team(1)] as [ReturnType<typeof team>, ReturnType<typeof team>],
+    steam: explore ? ([explore.forge.steam[0], explore.forge.steam[1]] as [number, number]) : undefined,
+    secondPicker: (game.firstPicker === 0 ? 1 : 0) as Seat,
+  };
+}
+
+/** 전투가 끝났을 때 결과를 정리하고 다음 단계로 간다. 동점이면 데스매치. */
+function settleBattle(state: RoomState, at: number, scale: number, rng: () => number): void {
+  const battle = state.battle;
+  if (!battle || !battle.finished) return;
+  if (battle.mode === "battle" && battle.winner === null) {
+    startDeathmatch(battle);
+    enterPhase(state, "deathmatch", at, scale, rng);
+    return;
+  }
+  state.result = {
+    ratings: [null, null],
+    winner: battle.winner,
+    reason: battle.reason ?? "time",
+    score: [battle.score[0], battle.score[1]],
+    kills: [battle.kills[0], battle.kills[1]],
+  };
+  enterPhase(state, "result", at, scale, rng);
+}
+
+/** 탐사를 until(서버 시각)까지 진행한다. 탐사는 탐사·대장간·전투·데스매치 동안 계속 흐른다. */
+function runExploreTo(state: RoomState, until: number, scale: number): void {
+  const explore = state.explore;
+  if (!explore) return;
+  const step = tickMs(scale);
+  while (state.exploreClock + step <= until) {
+    state.exploreClock += step;
+    stepExplore(explore);
+    completeEquips(state);
+  }
+}
+
+/** 이 캐릭터에게 지금 무기를 끼울 수 있는가: 본진이나 아군 가드 타워 범위 안이어야 한다. (전투 전에는 어디서나) */
+function canEquipNow(state: RoomState, seat: Seat, characterId: string): boolean {
+  const battle = state.battle;
+  if (!battle) return true;
+  const unit = unitById(battle, `${seat}:${characterId}`);
+  if (!unit || !unit.alive) return true; // 쓰러진 캐릭터는 곧 본진에서 되살아난다
+  return Math.abs(unit.pos - basePosition(seat)) <= 12 || inAlliedZone(battle, unit);
+}
+
+/** 끝난 장착을 처리하고, 이미 시작된 전투의 캐릭터에게 무기를 끼운다. */
+function completeEquips(state: RoomState): void {
+  const explore = state.explore;
+  if (!explore) return;
+  const done = finishEquips(explore.forge, explore.tick, (seat, id) => canEquipNow(state, seat, id));
+  for (const { seat, characterId, weaponId } of done) {
+    const unit = state.battle ? unitById(state.battle, `${seat}:${characterId}`) : undefined;
+    if (unit && state.battle) {
+      unit.weapon = weaponId;
+      unit.mods = computeMods(state.battle, unit);
+    }
+  }
+}
+
+/** 전투가 쓰고 얻은 탈런트와 재련 단축을 탐사 자원에 반영한다. */
+function syncBattleOut(state: RoomState): void {
+  const battle = state.battle;
+  const explore = state.explore;
+  if (!battle || !explore) return;
+  for (const seat of [0, 1] as const) {
+    if (battle.talentDelta[seat] !== 0) {
+      explore.resources[seat].talent = Math.max(0, explore.resources[seat].talent + battle.talentDelta[seat]);
+      battle.talentDelta[seat] = 0;
+    }
+    if (battle.smeltHaste[seat] > 0) {
+      hasten(explore.forge, seat, battle.smeltHaste[seat]);
+      battle.smeltHaste[seat] = 0;
+    }
+    battle.talent[seat] = explore.resources[seat].talent;
+  }
+}
+
+/** 새로 일어난 처치에 탈런트를 준다. */
+function awardKills(state: RoomState): void {
+  if (!state.explore || !state.battle) return;
+  for (const event of state.battle.events) {
+    if (event.seq <= state.killsAwardedSeq) continue;
+    if (event.type === "kill" && event.seat !== undefined) awardKill(state.explore, event.seat);
+    state.killsAwardedSeq = event.seq;
+  }
+}
+
+/** 시뮬레이션을 until(서버 시각)까지 진행한다. 중간에 끝나면 결과를 정리하고 true. */
+function runBattleTo(state: RoomState, until: number, scale: number, rng: () => number): boolean {
+  const battle = state.battle;
+  if (!battle) return false;
+  const step = tickMs(scale);
+  while (!battle.finished && state.battleClock + step <= until) {
+    state.battleClock += step;
+    syncBattleOut(state); // 탐사 쪽에서 바뀐 탈런트를 전투가 볼 수 있게 맞춘다
+    stepBattle(battle);
+    awardKills(state);
+    syncBattleOut(state);
+  }
+  if (battle.finished) {
+    settleBattle(state, state.battleClock, scale, rng);
+    return true;
+  }
+  return false;
 }
 
 /** 단계를 떠나기 전에 정리한다. 하지 못한 선택은 기본값으로 채운다. */
@@ -250,11 +455,42 @@ export function advancePhase(
   let changed = false;
   for (;;) {
     const game = state.game;
+    const inBattle = state.phase === "battle" || state.phase === "deathmatch";
+    if (inBattle && state.battle) {
+      const end = state.phaseEndsAt ?? Infinity;
+      const before = state.phase;
+      runExploreTo(state, Math.min(now, end), scale);
+      const finishedEarly = runBattleTo(state, Math.min(now, end), scale, rng);
+      if (finishedEarly || state.phase !== before) {
+        changed = true;
+        continue;
+      }
+      if (end <= now) {
+        // 시간 종료: 전투는 점수, 데스매치는 남은 체력으로 승부를 가른다.
+        finishByTime(state.battle);
+        settleBattle(state, end, scale, rng);
+        changed = true;
+        continue;
+      }
+      if (now >= state.battleSyncAt) {
+        state.battleSyncAt = now + battleSyncMs(scale);
+        changed = true;
+      }
+      break;
+    }
     const turnDue =
       state.phase === "draft" && game && game.turnEndsAt !== null ? game.turnEndsAt : Infinity;
     const phaseDue = state.phaseEndsAt ?? Infinity;
     const due = Math.min(turnDue, phaseDue);
-    if (due > now) break;
+    const exploring = state.explore !== null && (state.phase === "explore" || state.phase === "forge");
+    if (exploring) runExploreTo(state, Math.min(due, now), scale);
+    if (due > now) {
+      if (exploring && now >= state.battleSyncAt) {
+        state.battleSyncAt = now + battleSyncMs(scale);
+        changed = true;
+      }
+      break;
+    }
 
     changed = true;
     if (game && turnDue <= phaseDue) {
@@ -353,6 +589,198 @@ export function playerLock(
   );
 }
 
+// ---- 전투 중의 선택 ----
+
+const COMMAND_MESSAGES: Record<string, string> = {
+  wrong_phase: "지금은 할 수 없다.",
+  not_your_character: "내 캐릭터가 아니다.",
+  unit_dead: "쓰러진 캐릭터다.",
+  unit_disabled: "움직일 수 없는 상태다.",
+  not_implemented: "아직 쓸 수 없는 궁극기다.",
+  on_cooldown: "아직 쓸 수 없다. (재사용 대기)",
+  not_enough_steam: "스팀포스가 부족하다.",
+  no_target: "대상이 없다.",
+  invalid_lane: "갈 수 없는 레인이다.",
+  not_a_knight: "나이트만 레인을 옮길 수 있다.",
+  invalid_tile: "없는 칸이다.",
+  no_action_gauge: "행동 게이지가 부족하다.",
+  tile_busy: "이미 그 칸에서 행동 중이다.",
+  nothing_to_gather: "채집할 게 없는 칸이다.",
+  already_known: "이미 알고 있는 칸이다.",
+  not_enough_talent: "탈런트가 부족하다.",
+  not_enough_materials: "재료가 부족하다.",
+  no_free_smelter: "빈 재련대가 없다.",
+  unknown_weapon: "없는 무기다.",
+  no_weapon: "그 무기를 가지고 있지 않다.",
+  not_in_zone: "본진이나 아군 가드 타워 근처에서만 장착할 수 있다.",
+  already_equipping: "이미 무기를 끼우는 중이다.",
+  already_equipped: "이미 끼고 있는 무기다.",
+  invalid_quantity: "살 수 있는 개수가 아니다.",
+};
+
+function runBattleCommand(
+  state: RoomState,
+  playerId: string,
+  now: number,
+  scale: number,
+  rng: () => number,
+  act: (battle: BattleState, seat: Seat) => { ok: true } | { ok: false; code: string },
+): ActionOutcome {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return { ok: false, code: "bad_message", message: "방에 없는 플레이어다." };
+  // 명령이 들어온 시각까지 시뮬레이션을 먼저 진행해서, 그 순간의 상태에서 판정한다.
+  advancePhase(state, now, scale, rng);
+  if ((state.phase !== "battle" && state.phase !== "deathmatch") || !state.battle) return WRONG_PHASE;
+  state.battle.talent[player.seat] = state.explore?.resources[player.seat].talent ?? 0;
+  const result = act(state.battle, player.seat);
+  syncBattleOut(state);
+  if (!result.ok) {
+    return { ok: false, code: result.code as ErrorCode, message: COMMAND_MESSAGES[result.code] ?? "할 수 없다." };
+  }
+  state.lastActiveAt = now;
+  return { ok: true, advanced: false };
+}
+
+function steamPool(state: RoomState): SteamPool {
+  const forge = state.explore!.forge;
+  const battle = state.battle;
+  if (battle && !forge.steamActive) {
+    return { get: (seat) => battle.steam[seat], spend: (seat, n) => void (battle.steam[seat] -= n) };
+  }
+  return { get: (seat) => forge.steam[seat], spend: (seat, n) => void (forge.steam[seat] -= n) };
+}
+
+/** 대장간 명령: 광석 구입, 재련, 조합, 장착. 탐사·대장간·전투·데스매치 중에 할 수 있다. */
+export function playerForge(
+  state: RoomState,
+  playerId: string,
+  command: ForgeCommand,
+  now: number,
+  scale = 1,
+  rng: () => number = Math.random,
+): ActionOutcome {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return { ok: false, code: "bad_message", message: "방에 없는 플레이어다." };
+  advancePhase(state, now, scale, rng);
+  const active = ["explore", "forge", "battle", "deathmatch"].includes(state.phase);
+  const explore = state.explore;
+  if (!active || !explore || !state.game) return WRONG_PHASE;
+  const seat = player.seat;
+  syncBattleOut(state);
+  const resources = explore.resources[seat];
+
+  let result: ForgeResult;
+  switch (command.action) {
+    case "buy":
+      result = buyOre(explore.forge, resources, seat, command.quantity);
+      break;
+    case "smelt":
+      result = startSmelting(explore.forge, resources, steamPool(state), seat, explore.tick);
+      break;
+    case "craft":
+      result = craftWeapon(explore.forge, resources, seat, command.weaponId);
+      break;
+    case "equip":
+      result = startEquip(
+        explore.forge,
+        seat,
+        state.game.picks[seat],
+        command.characterId,
+        command.weaponId,
+        explore.tick,
+        canEquipNow(state, seat, command.characterId),
+      );
+      break;
+  }
+  if (!result.ok) {
+    return { ok: false, code: result.code as ErrorCode, message: COMMAND_MESSAGES[result.code] ?? "할 수 없다." };
+  }
+  if (state.battle) state.battle.talent[seat] = resources.talent;
+  state.lastActiveAt = now;
+  return { ok: true, advanced: false };
+}
+
+/** 탐사 행동. 탐사·대장간·전투·데스매치 중에 할 수 있다. */
+export function playerExplore(
+  state: RoomState,
+  playerId: string,
+  action: ExploreAction,
+  tile: number,
+  now: number,
+  scale = 1,
+  rng: () => number = Math.random,
+): ActionOutcome {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return { ok: false, code: "bad_message", message: "방에 없는 플레이어다." };
+  advancePhase(state, now, scale, rng); // 그 순간까지 탐사를 먼저 진행한다
+  const active = ["explore", "forge", "battle", "deathmatch"].includes(state.phase);
+  if (!active || !state.explore) return WRONG_PHASE;
+  const act = action === "gather" ? startGather : action === "ambush" ? startAmbush : startScout;
+  const result = act(state.explore, player.seat, tile);
+  if (!result.ok) {
+    return { ok: false, code: result.code as ErrorCode, message: COMMAND_MESSAGES[result.code] ?? "할 수 없다." };
+  }
+  state.lastActiveAt = now;
+  return { ok: true, advanced: false };
+}
+
+/** 궁극기를 쓴다. 안키오는 갈 레인도 보낸다. */
+export function playerUltimate(
+  state: RoomState,
+  playerId: string,
+  characterId: string,
+  lane: Lane | undefined,
+  now: number,
+  scale = 1,
+  rng: () => number = Math.random,
+): ActionOutcome {
+  return runBattleCommand(state, playerId, now, scale, rng, (battle, seat) =>
+    useUltimate(battle, seat, characterId, lane),
+  );
+}
+
+/** 나이트가 다른 레인으로 옮겨 간다. */
+export function playerMoveLane(
+  state: RoomState,
+  playerId: string,
+  characterId: string,
+  lane: Lane,
+  now: number,
+  scale = 1,
+  rng: () => number = Math.random,
+): ActionOutcome {
+  return runBattleCommand(state, playerId, now, scale, rng, (battle, seat) =>
+    moveLane(battle, seat, characterId, lane),
+  );
+}
+
+// ---- 전적 ----
+
+/**
+ * 끝난 판을 전적으로 남길 수 있으면 저장할 내용을 만든다.
+ * 두 사람 모두 GL 계정으로 로그인한 판만 기록하고(개발 서버의 익명 판은 기록하지 않는다), 한 번만 만든다.
+ */
+export function takeMatchRecord(state: RoomState, now: number): MatchInput | null {
+  if (state.recorded || state.phase !== "result" || !state.result || !state.game) return null;
+  state.recorded = true; // 저장이 실패해도 같은 판을 반복해서 시도하지 않는다
+  const [a, b] = [0, 1].map((seat) => state.players.find((p) => p.seat === seat));
+  if (!a?.userId || !b?.userId || a.userId === b.userId) return null;
+  return {
+    roomCode: state.code,
+    startedAt: state.matchStartedAt,
+    endedAt: now,
+    users: [
+      { userId: a.userId, nickname: a.name },
+      { userId: b.userId, nickname: b.name },
+    ],
+    winnerSeat: state.result.winner === null ? null : (state.result.winner as 0 | 1),
+    reason: state.result.reason,
+    score: [state.result.score[0] ?? 0, state.result.score[1] ?? 0],
+    kills: [state.result.kills[0] ?? 0, state.result.kills[1] ?? 0],
+    picks: [[...state.game.picks[0]], [...state.game.picks[1]]],
+  };
+}
+
 // ---- 정리와 알람 ----
 
 /** 로비에서 유예 시간이 지난 끊긴 플레이어를 내보낸다. 바뀐 게 있으면 true. */
@@ -378,6 +806,10 @@ export function nextDeadline(state: RoomState): number | null {
   if (state.phase === "draft" && state.game && state.game.turnEndsAt !== null) {
     candidates.push(state.game.turnEndsAt);
   }
+  const syncing =
+    ((state.phase === "battle" || state.phase === "deathmatch") && state.battle !== null) ||
+    ((state.phase === "explore" || state.phase === "forge") && state.explore !== null);
+  if (syncing) candidates.push(state.battleSyncAt);
   if (state.phase === "lobby") {
     for (const p of state.players) {
       if (!p.connected && p.disconnectedAt !== null) {
@@ -414,7 +846,8 @@ export function toGameSnapshot(state: RoomState, viewerSeat: Seat | null): GameS
   if (!game) return null;
 
   const bansRevealed = state.phase !== "ban";
-  const lanesRevealed = state.phase === "battle" || state.phase === "result";
+  const lanesRevealed =
+    state.phase === "battle" || state.phase === "deathmatch" || state.phase === "result";
   const inDraft = state.phase === "draft";
 
   const ban = (seat: Seat): BanSnapshot => ({
@@ -436,6 +869,12 @@ export function toGameSnapshot(state: RoomState, viewerSeat: Seat | null): GameS
   };
 }
 
+function viewerSteam(state: RoomState, seat: Seat | null): number {
+  if (seat === null || !state.explore) return 0;
+  const forge = state.explore.forge;
+  return state.battle && !forge.steamActive ? state.battle.steam[seat] : forge.steam[seat];
+}
+
 /** 클라이언트에게 보낼 공개 상태. token 같은 비밀 값은 넣지 않는다. */
 export function toSnapshot(state: RoomState, now: number, viewerId?: string): RoomSnapshot {
   const viewer = viewerId ? state.players.find((p) => p.id === viewerId) : undefined;
@@ -447,5 +886,9 @@ export function toSnapshot(state: RoomState, now: number, viewerId?: string): Ro
     serverTime: now,
     players: state.players.map(toPublicPlayer),
     game: toGameSnapshot(state, viewer ? viewer.seat : null),
+    battle: state.battle ? toBattleSnapshot(state.battle, viewer ? viewer.seat : null) : null,
+    explore: state.explore ? toExploreSnapshot(state.explore, viewer ? viewer.seat : null) : null,
+    forge: state.explore ? toForgeSnapshot(state.explore.forge, state.explore.tick, viewer ? viewer.seat : null, viewerSteam(state, viewer ? viewer.seat : null)) : null,
+    result: state.result,
   };
 }
