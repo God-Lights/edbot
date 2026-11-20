@@ -392,10 +392,9 @@ describe("궁극기와 스팀포스", () => {
     expect(useUltimate(s, 0, "ancient-lord")).toEqual({ ok: true });
   });
 
-  it("쓰러진 캐릭터, 내 팀에 없는 캐릭터, 아직 만들 수 없는 궁극기는 거절한다", () => {
+  it("쓰러진 캐릭터, 내 팀에 없는 캐릭터는 거절한다", () => {
     const s = battle(["ancient-lord", "richmond"], ["lappus"]);
     expect(useUltimate(s, 0, "lappus")).toEqual({ ok: false, code: "not_your_character" });
-    expect(useUltimate(s, 0, "richmond")).toEqual({ ok: false, code: "not_implemented" });
     unit(s, 0, "ancient-lord").alive = false;
     expect(useUltimate(s, 0, "ancient-lord")).toEqual({ ok: false, code: "unit_dead" });
     s.finished = true;

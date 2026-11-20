@@ -116,6 +116,8 @@ export interface Unit {
   shield: number;
   shieldUntilTick: number;
   promoted: boolean;
+  /** 끼고 있는 무기 id. 없으면 null. 부활해도 유지된다. */
+  weapon: string | null;
   /** 마지막으로 이 유닛에게 피해를 준 쪽. 처치 점수를 누구에게 줄지 정하는 데 쓴다. */
   lastAttackerSeat: Seat | null;
   lastAttackerId: string | null;
@@ -222,6 +224,14 @@ export interface BattleState {
   nextSummonNumber: number;
   /** 데스매치에서 처음 처치한 seat. 시간 안에 승부가 안 나고 체력도 같을 때의 판정에 쓴다. */
   firstDeathmatchKill: Seat | null;
+  /**
+   * 탈런트는 탐사 쪽 자원이라 전투는 사본만 본다. 방이 틱마다 [talent]를 채워 주고,
+   * 전투가 쓰고 얻은 양을 [talentDelta]에 쌓아 두면 방이 가져가서 반영한다.
+   */
+  talent: [number, number];
+  talentDelta: [number, number];
+  /** 리치몬드의 황금 계약: 진행 중인 재련을 단축할 틱. 방이 가져간다. */
+  smeltHaste: [number, number];
   /** 모든 판정이 같을 때 이기는 쪽. 드래프트 후공 팀. */
   secondPicker: Seat;
   tuning: BattleTuning;
@@ -237,6 +247,8 @@ export interface Hit {
   noReflect?: boolean;
   /** 피해 감소 효과를 무시하는 비율(0~1). 부캉죠스의 "물어뜯기". */
   penetration?: number;
+  /** 기본 공격인가. 무기의 특수 효과는 기본 공격에만 붙는다. */
+  basic?: boolean;
   /** 근접 공격인가. 제노사우로스의 산성 점액이 근접 공격자에게만 반응한다. */
   melee?: boolean;
 }
@@ -263,7 +275,10 @@ export const DEFAULT_TUNING: BattleTuning = { unitDamageScale: 0.6, towerHpScale
 
 export interface BattleSetup {
   /** seat별 5명의 캐릭터 id와 레인. */
-  teams: [Array<{ characterId: string; lane: Lane }>, Array<{ characterId: string; lane: Lane }>];
+  teams: [
+    Array<{ characterId: string; lane: Lane; weapon?: string | null }>,
+    Array<{ characterId: string; lane: Lane; weapon?: string | null }>,
+  ];
   secondPicker: Seat;
   /** 전투가 시작될 때 쌓여 있는 스팀포스. 기본 10. */
   steam?: [number, number];
@@ -317,6 +332,7 @@ export function makeUnit(characterId: string, seat: Seat, lane: Lane): Unit {
     shield: 0,
     shieldUntilTick: 0,
     promoted: false,
+    weapon: null,
     lastAttackerSeat: null,
     lastAttackerId: null,
     summon: null,
@@ -358,7 +374,11 @@ function makeTowers(seat: Seat, hpScale: number): Tower[] {
 export function createBattle(setup: BattleSetup): BattleState {
   const units: Unit[] = [];
   for (const seat of [0, 1] as const) {
-    for (const member of setup.teams[seat]) units.push(makeUnit(member.characterId, seat, member.lane));
+    for (const member of setup.teams[seat]) {
+      const unit = makeUnit(member.characterId, seat, member.lane);
+      unit.weapon = member.weapon ?? null;
+      units.push(unit);
+    }
   }
   const tuning: BattleTuning = { ...DEFAULT_TUNING, ...setup.tuning };
   return {
@@ -383,6 +403,9 @@ export function createBattle(setup: BattleSetup): BattleState {
     heals: [],
     nextSummonNumber: 1,
     firstDeathmatchKill: null,
+    talent: [0, 0],
+    talentDelta: [0, 0],
+    smeltHaste: [0, 0],
     secondPicker: setup.secondPicker,
     tuning,
   };

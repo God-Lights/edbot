@@ -2,6 +2,7 @@
 // 수치는 기획서의 "캐릭터 시트 (초안)"를 그대로 따른다. 모두 초안이라 플레이 테스트로 조정한다.
 
 import { characterById } from "../characters";
+import { weaponById } from "../forge/weapons";
 import type { Lane, Seat } from "../protocol";
 import {
   DT,
@@ -98,6 +99,7 @@ export function computeMods(state: BattleState, unit: Unit): Mods {
   }
 
   if (unit.promoted) mods.atk *= 1.25;
+  mods.atk *= 1 + (weaponById(unit.weapon)?.atkBonus ?? 0);
 
   // 패시브: 자기 자신
   if (unit.characterId === "dwargon") {
@@ -123,6 +125,20 @@ export function computeMods(state: BattleState, unit: Unit): Mods {
 
 export function currentAtk(unit: Unit): number {
   return unit.atk * unit.mods.atk;
+}
+
+const INVEST_COST = 3;
+
+/** 지금 쓸 수 있는 탈런트. 방이 채워 준 사본에서 이번 틱까지 쓴 양을 뺀다. */
+function availableTalent(state: BattleState, seat: Seat): number {
+  return state.talent[seat] + state.talentDelta[seat];
+}
+
+/** 투자할 아군: 적과 싸우고 있는 아군 중 공격력이 가장 높은 쪽 (자신 포함). */
+function investTarget(state: BattleState, unit: Unit): Unit | undefined {
+  return alliesNear(state, unit, 12, true)
+    .filter((ally) => enemiesNear(state, ally, 10).length > 0 && !ally.effects.some((e) => e.type === "atkUp"))
+    .sort((a, b) => b.atk - a.atk || (a.id < b.id ? -1 : 1))[0];
 }
 
 // ---------------------------------------------------------------------------
@@ -160,11 +176,16 @@ export const SKILLS: Record<string, SkillDef> = {
     },
   },
 
-  // 투자 (15초): 탈런트를 써야 해서 대장간(5단계)이 생기기 전에는 쓰지 않는다.
+  // 투자 (15초): 탈런트 3을 써서 싸우는 아군 1명의 공격력을 10초 동안 +25%
   richmond: {
     cooldownTicks: seconds(15),
-    shouldUse: () => false,
-    use: () => {},
+    shouldUse: (state, unit) => availableTalent(state, unit.seat) >= INVEST_COST && investTarget(state, unit) !== undefined,
+    use: (state, unit) => {
+      const target = investTarget(state, unit);
+      if (!target) return;
+      state.talentDelta[unit.seat] -= INVEST_COST;
+      addEffect(target, { type: "atkUp", value: 0.25, untilTick: state.tick + seconds(10) });
+    },
   },
 
   // 가시 채찍 (8초): 전방 부채꼴에 피해와 출혈 3초
@@ -332,8 +353,14 @@ export const ULTIMATES: Record<string, UltimateDef> = {
     },
   },
 
-  // 황금 계약: 탈런트와 재련이 필요해서 대장간(5단계)이 생기기 전에는 쓸 수 없다.
-  richmond: { implemented: false, use: () => {} },
+  // 황금 계약: 탈런트 +8을 즉시 받고, 진행 중인 재련을 모두 5초 단축한다
+  richmond: {
+    implemented: true,
+    use: (state, unit) => {
+      state.talentDelta[unit.seat] += 8;
+      state.smeltHaste[unit.seat] += seconds(5);
+    },
+  },
 
   // 만개: 6초 동안 주변 적에게 가시 폭풍으로 지속 피해, 처치하면 체력 회복
   rosmaktia: {
@@ -502,6 +529,7 @@ export function spawnSummon(
   const summon: Unit = {
     id: `${owner.seat}:summon-${kind}:${number}`,
     characterId: `summon-${kind}`,
+    weapon: null,
     seat: owner.seat,
     lane: owner.lane,
     pos: Math.max(0, Math.min(LANE_LENGTH, owner.pos + forward(owner.seat) * offset)),

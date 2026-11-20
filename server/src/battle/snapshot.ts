@@ -8,6 +8,9 @@ const RECENT_EVENTS = 40;
 const round1 = (n: number): number => Math.round(n * 10) / 10;
 
 export function toBattleSnapshot(state: BattleState, viewerSeat: Seat | null): BattleSnapshot {
+  /** 상대 유닛의 무기는 맞붙어 있을 때(같은 레인에서 6 안에 내 편이 있을 때)만 보인다. */
+  const engaged = (u: (typeof state.units)[number]): boolean =>
+    state.units.some((o) => o.alive && o.seat !== u.seat && o.lane === u.lane && Math.abs(o.pos - u.pos) <= 6);
   const units: UnitSnapshot[] = state.units.map((u) => {
     const mine = viewerSeat !== null && u.seat === viewerSeat;
     return {
@@ -25,6 +28,7 @@ export function toBattleSnapshot(state: BattleState, viewerSeat: Seat | null): B
       promoted: u.promoted,
       summon: u.summon !== null,
       effects: [...new Set(u.effects.map((e) => e.type))],
+      weapon: mine || engaged(u) ? u.weapon : null,
       ultReadyTick: mine ? u.ultReadyTick : null,
       laneMoveReadyTick: mine ? u.laneMoveReadyTick : null,
     };

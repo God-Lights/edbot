@@ -12,6 +12,7 @@
 // 먼저 행동하는 쪽이 유리하지 않다.
 
 import { characterById } from "../characters";
+import { matchupMultiplier, weaponById } from "../forge/weapons";
 import type { Lane, Seat } from "../protocol";
 import {
   ATTACK_INTERVAL_TICKS,
@@ -327,6 +328,7 @@ function unitAct(state: BattleState, unit: Unit, moves: Array<{ unit: Unit; pos:
           srcUnitId: unit.id,
           penetration: unit.characterId === "bwtkan-jaws" ? 0.2 : undefined, // 물어뜯기
           melee,
+          basic: true,
         });
       } else {
         queueHit(state, {
@@ -373,6 +375,8 @@ function resolve(state: BattleState): void {
     let multiplier = unit.mods.dmgTaken;
     if (hit.penetration && multiplier < 1) multiplier = 1 - (1 - multiplier) * (1 - hit.penetration);
     let amount = hit.amount * multiplier * state.tuning.unitDamageScale;
+    const source = hit.srcUnitId ? unitById(state, hit.srcUnitId) : undefined;
+    if (source) amount *= matchupMultiplier(source.weapon, unit.weapon); // 무기 상성
 
     if (unit.shield > 0) {
       const absorbed = Math.min(unit.shield, amount);
@@ -382,6 +386,9 @@ function resolve(state: BattleState): void {
     unit.hp -= amount;
     unit.lastAttackerSeat = hit.srcSeat;
     if (hit.srcUnitId) unit.lastAttackerId = hit.srcUnitId;
+
+    // 특수 무기: 기본 공격에 붙는 효과
+    if (hit.basic && source && source.alive) applyWeaponEffect(state, source, unit, amount);
 
     // 반사: 로즈막티아의 가시, 제노사우로스의 산성 점액
     if (!hit.noReflect && hit.srcUnitId) {
@@ -413,6 +420,20 @@ function resolve(state: BattleState): void {
   }
 
   checkFinished(state);
+}
+
+function applyWeaponEffect(state: BattleState, source: Unit, target: Unit, dealt: number): void {
+  switch (weaponById(source.weapon)?.effect) {
+    case "burn":
+      addEffect(target, { type: "dot", value: 6, untilTick: state.tick + seconds(3) });
+      break;
+    case "slow":
+      addEffect(target, { type: "slow", value: 0.2, untilTick: state.tick + seconds(2) });
+      break;
+    case "lifesteal":
+      source.hp = Math.min(source.maxHp, source.hp + dealt * 0.1);
+      break;
+  }
 }
 
 function killUnit(state: BattleState, unit: Unit): void {

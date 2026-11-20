@@ -2,6 +2,7 @@ import { CHARACTERS } from "./characters";
 import { AuthStore } from "./auth-store";
 import { USER_HEADER, authRequired, authStore, bearerToken, identify, loginRedirectUrl } from "./auth";
 import type { AuthEnv } from "./auth";
+import { WEAPONS } from "./forge/weapons";
 import { approvedPage, donePage, failedPage, homePage } from "./pages";
 import { Room } from "./room";
 
@@ -125,6 +126,11 @@ export default {
     // GET /api/characters -> 캐릭터 12명의 데이터 (이름, 기물, 능력치).
     if (request.method === "GET" && parts.length === 2 && parts[0] === "api" && parts[1] === "characters") {
       return json({ characters: CHARACTERS });
+    }
+
+    // GET /api/weapons -> 무기 목록과 레시피.
+    if (request.method === "GET" && parts.length === 2 && parts[0] === "api" && parts[1] === "weapons") {
+      return json({ weapons: WEAPONS });
     }
 
     // GET /api/rooms/:code -> 방이 있는지, 들어갈 수 있는지.

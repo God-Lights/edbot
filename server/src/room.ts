@@ -11,6 +11,7 @@ import {
   playerBan,
   playerLock,
   playerExplore,
+  playerForge,
   playerMoveLane,
   playerPick,
   playerPlace,
@@ -177,6 +178,9 @@ export class Room extends DurableObject<Env> {
           ws,
           playerUltimate(this.state, playerId, msg.characterId, msg.lane, now, scale),
         );
+        return;
+      case "forge":
+        await this.finishAction(ws, playerForge(this.state, playerId, msg, now, scale));
         return;
       case "explore":
         await this.finishAction(

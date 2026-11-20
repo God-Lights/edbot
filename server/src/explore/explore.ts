@@ -2,6 +2,8 @@
 // 시간은 전투와 같은 틱(0.1초)으로 센다. 규칙 출처: 기획서의 "탐사 규칙".
 
 import { characterById } from "../characters";
+import { createForge, stepForge } from "../forge/forge";
+import type { ForgeState } from "../forge/forge";
 import type { Seat } from "../protocol";
 
 export const TICKS_PER_SECOND = 10;
@@ -116,6 +118,8 @@ export interface ExploreState {
   secondPicker: Seat;
   events: ExploreEvent[];
   nextEventSeq: number;
+  /** 대장간. 탐사 자원(resources)을 함께 쓰고 같은 시계로 흐른다. */
+  forge: ForgeState;
 }
 
 export type ExploreFailureCode =
@@ -188,6 +192,7 @@ export function createExplore(setup: ExploreSetup): ExploreState {
     secondPicker: setup.secondPicker,
     events: [],
     nextEventSeq: 1,
+    forge: createForge(setup.teams),
   };
 }
 
@@ -419,6 +424,7 @@ function resolveGather(state: ExploreState, gather: GatherAction): void {
 export function stepExplore(state: ExploreState): void {
   state.tick += 1;
   const t = state.tick;
+  stepForge(state.forge, state.resources, t);
 
   // 행동 게이지
   for (const seat of [0, 1] as const) {

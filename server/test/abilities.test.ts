@@ -119,12 +119,24 @@ describe("스킬 (자동 시전)", () => {
     expect(unit(s, 0, "ancient-lord").skillReadyTick).toBe(1 + seconds(20));
   });
 
-  it("리치몬드의 투자는 대장간이 생기기 전에는 쓰지 않는다", () => {
-    const s = battle(["richmond"], ["lappus"]);
+  it("리치몬드의 투자: 탈런트 3을 쓰고 싸우는 아군의 공격력을 10초 동안 +25%", () => {
+    const s = battle(["richmond", "xenosaurs"], ["lappus"]);
     onlySkills(s, "richmond");
+    s.talent[0] = 10;
+    place(s, 1, "lappus", 8);
+    run(s, 1);
+    expect(s.talentDelta[0]).toBe(-3);
+    const boosted = s.units.filter((u) => u.seat === 0 && hasEffect(u, "atkUp"));
+    expect(boosted).toHaveLength(1);
+  });
+
+  it("탈런트가 모자라면 투자하지 않는다", () => {
+    const s = battle(["richmond", "xenosaurs"], ["lappus"]);
+    onlySkills(s, "richmond");
+    s.talent[0] = 2;
     place(s, 1, "lappus", 8);
     run(s, 30);
-    expect(unit(s, 0, "richmond").skillReadyTick).toBe(0);
+    expect(s.talentDelta[0]).toBe(0);
   });
 
   it("가시 채찍: 가까운 적에게 피해와 출혈", () => {
@@ -403,9 +415,11 @@ describe("궁극기", () => {
     expect(s.hatches).toHaveLength(0);
   });
 
-  it("리치몬드의 궁극기는 대장간이 생기기 전에는 쓸 수 없다", () => {
+  it("황금 계약: 탈런트 +8을 받고 재련을 5초 단축한다", () => {
     const s = battle(["richmond"], ["lappus"]);
-    expect(useUltimate(s, 0, "richmond")).toEqual({ ok: false, code: "not_implemented" });
-    expect(s.steam[0]).toBe(10);
+    expect(useUltimate(s, 0, "richmond")).toEqual({ ok: true });
+    expect(s.talentDelta[0]).toBe(8);
+    expect(s.smeltHaste[0]).toBe(seconds(5));
+    expect(s.steam[0]).toBe(5);
   });
 });

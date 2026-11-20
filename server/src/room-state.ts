@@ -25,11 +25,17 @@ import { toBattleSnapshot } from "./battle/snapshot";
 import { awardKill, createExplore, startAmbush, startGather, startScout, stepExplore } from "./explore/explore";
 import type { ExploreState } from "./explore/explore";
 import { toExploreSnapshot } from "./explore/snapshot";
+import { buyOre, craftWeapon, finishEquips, hasten, startEquip, startSmelting } from "./forge/forge";
+import type { ForgeResult, SteamPool } from "./forge/forge";
+import { toForgeSnapshot } from "./forge/snapshot";
+import { computeMods } from "./battle/abilities";
+import { basePosition, inAlliedZone, unitById } from "./battle/core";
 import { finishByTime, moveLane, startDeathmatch, stepBattle, useUltimate } from "./battle/sim";
 import { isTimedPhase, nextPhase, phaseDurationMs } from "./phases";
 import type {
   BanSnapshot,
   ExploreAction,
+  ForgeCommand,
   ErrorCode,
   GameSnapshot,
   Lane,
@@ -253,7 +259,8 @@ function enterPhase(
   } else if (phase === "forge") {
     state.battleSyncAt = startedAt + battleSyncMs(scale);
   } else if (phase === "battle" && state.game) {
-    state.battle = createBattle(battleSetup(state.game));
+    state.battle = createBattle(battleSetup(state.game, state.explore));
+    if (state.explore) state.explore.forge.steamActive = false; // 이제부터 스팀포스는 전투가 관리한다
     state.battleClock = startedAt;
     state.battleSyncAt = startedAt + battleSyncMs(scale);
   } else if (phase === "deathmatch") {
@@ -271,14 +278,19 @@ export function battleSyncMs(scale = 1): number {
   return Math.max(tickMs(scale), Math.round(250 * scale));
 }
 
-function battleSetup(game: GameState) {
+function battleSetup(game: GameState, explore: ExploreState | null) {
   const team = (seat: Seat) =>
     game.picks[seat].map((characterId) => ({
       characterId,
       lane: game.lanes[seat][characterId] ?? ("center" as Lane),
+      weapon: explore?.forge.equipped[seat][characterId] ?? null,
     }));
   // 후공 팀은 동률일 때 이기는 보정을 받는다.
-  return { teams: [team(0), team(1)] as [ReturnType<typeof team>, ReturnType<typeof team>], secondPicker: (game.firstPicker === 0 ? 1 : 0) as Seat };
+  return {
+    teams: [team(0), team(1)] as [ReturnType<typeof team>, ReturnType<typeof team>],
+    steam: explore ? ([explore.forge.steam[0], explore.forge.steam[1]] as [number, number]) : undefined,
+    secondPicker: (game.firstPicker === 0 ? 1 : 0) as Seat,
+  };
 }
 
 /** 전투가 끝났을 때 결과를 정리하고 다음 단계로 간다. 동점이면 데스매치. */
@@ -307,6 +319,48 @@ function runExploreTo(state: RoomState, until: number, scale: number): void {
   while (state.exploreClock + step <= until) {
     state.exploreClock += step;
     stepExplore(explore);
+    completeEquips(state);
+  }
+}
+
+/** 이 캐릭터에게 지금 무기를 끼울 수 있는가: 본진이나 아군 가드 타워 범위 안이어야 한다. (전투 전에는 어디서나) */
+function canEquipNow(state: RoomState, seat: Seat, characterId: string): boolean {
+  const battle = state.battle;
+  if (!battle) return true;
+  const unit = unitById(battle, `${seat}:${characterId}`);
+  if (!unit || !unit.alive) return true; // 쓰러진 캐릭터는 곧 본진에서 되살아난다
+  return Math.abs(unit.pos - basePosition(seat)) <= 12 || inAlliedZone(battle, unit);
+}
+
+/** 끝난 장착을 처리하고, 이미 시작된 전투의 캐릭터에게 무기를 끼운다. */
+function completeEquips(state: RoomState): void {
+  const explore = state.explore;
+  if (!explore) return;
+  const done = finishEquips(explore.forge, explore.tick, (seat, id) => canEquipNow(state, seat, id));
+  for (const { seat, characterId, weaponId } of done) {
+    const unit = state.battle ? unitById(state.battle, `${seat}:${characterId}`) : undefined;
+    if (unit && state.battle) {
+      unit.weapon = weaponId;
+      unit.mods = computeMods(state.battle, unit);
+    }
+  }
+}
+
+/** 전투가 쓰고 얻은 탈런트와 재련 단축을 탐사 자원에 반영한다. */
+function syncBattleOut(state: RoomState): void {
+  const battle = state.battle;
+  const explore = state.explore;
+  if (!battle || !explore) return;
+  for (const seat of [0, 1] as const) {
+    if (battle.talentDelta[seat] !== 0) {
+      explore.resources[seat].talent = Math.max(0, explore.resources[seat].talent + battle.talentDelta[seat]);
+      battle.talentDelta[seat] = 0;
+    }
+    if (battle.smeltHaste[seat] > 0) {
+      hasten(explore.forge, seat, battle.smeltHaste[seat]);
+      battle.smeltHaste[seat] = 0;
+    }
+    battle.talent[seat] = explore.resources[seat].talent;
   }
 }
 
@@ -327,8 +381,10 @@ function runBattleTo(state: RoomState, until: number, scale: number, rng: () => 
   const step = tickMs(scale);
   while (!battle.finished && state.battleClock + step <= until) {
     state.battleClock += step;
+    syncBattleOut(state); // 탐사 쪽에서 바뀐 탈런트를 전투가 볼 수 있게 맞춘다
     stepBattle(battle);
     awardKills(state);
+    syncBattleOut(state);
   }
   if (battle.finished) {
     settleBattle(state, state.battleClock, scale, rng);
@@ -541,6 +597,15 @@ const COMMAND_MESSAGES: Record<string, string> = {
   tile_busy: "이미 그 칸에서 행동 중이다.",
   nothing_to_gather: "채집할 게 없는 칸이다.",
   already_known: "이미 알고 있는 칸이다.",
+  not_enough_talent: "탈런트가 부족하다.",
+  not_enough_materials: "재료가 부족하다.",
+  no_free_smelter: "빈 재련대가 없다.",
+  unknown_weapon: "없는 무기다.",
+  no_weapon: "그 무기를 가지고 있지 않다.",
+  not_in_zone: "본진이나 아군 가드 타워 근처에서만 장착할 수 있다.",
+  already_equipping: "이미 무기를 끼우는 중이다.",
+  already_equipped: "이미 끼고 있는 무기다.",
+  invalid_quantity: "살 수 있는 개수가 아니다.",
 };
 
 function runBattleCommand(
@@ -556,10 +621,71 @@ function runBattleCommand(
   // 명령이 들어온 시각까지 시뮬레이션을 먼저 진행해서, 그 순간의 상태에서 판정한다.
   advancePhase(state, now, scale, rng);
   if ((state.phase !== "battle" && state.phase !== "deathmatch") || !state.battle) return WRONG_PHASE;
+  state.battle.talent[player.seat] = state.explore?.resources[player.seat].talent ?? 0;
   const result = act(state.battle, player.seat);
+  syncBattleOut(state);
   if (!result.ok) {
     return { ok: false, code: result.code as ErrorCode, message: COMMAND_MESSAGES[result.code] ?? "할 수 없다." };
   }
+  state.lastActiveAt = now;
+  return { ok: true, advanced: false };
+}
+
+function steamPool(state: RoomState): SteamPool {
+  const forge = state.explore!.forge;
+  const battle = state.battle;
+  if (battle && !forge.steamActive) {
+    return { get: (seat) => battle.steam[seat], spend: (seat, n) => void (battle.steam[seat] -= n) };
+  }
+  return { get: (seat) => forge.steam[seat], spend: (seat, n) => void (forge.steam[seat] -= n) };
+}
+
+/** 대장간 명령: 광석 구입, 재련, 조합, 장착. 탐사·대장간·전투·데스매치 중에 할 수 있다. */
+export function playerForge(
+  state: RoomState,
+  playerId: string,
+  command: ForgeCommand,
+  now: number,
+  scale = 1,
+  rng: () => number = Math.random,
+): ActionOutcome {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return { ok: false, code: "bad_message", message: "방에 없는 플레이어다." };
+  advancePhase(state, now, scale, rng);
+  const active = ["explore", "forge", "battle", "deathmatch"].includes(state.phase);
+  const explore = state.explore;
+  if (!active || !explore || !state.game) return WRONG_PHASE;
+  const seat = player.seat;
+  syncBattleOut(state);
+  const resources = explore.resources[seat];
+
+  let result: ForgeResult;
+  switch (command.action) {
+    case "buy":
+      result = buyOre(explore.forge, resources, seat, command.quantity);
+      break;
+    case "smelt":
+      result = startSmelting(explore.forge, resources, steamPool(state), seat, explore.tick);
+      break;
+    case "craft":
+      result = craftWeapon(explore.forge, resources, seat, command.weaponId);
+      break;
+    case "equip":
+      result = startEquip(
+        explore.forge,
+        seat,
+        state.game.picks[seat],
+        command.characterId,
+        command.weaponId,
+        explore.tick,
+        canEquipNow(state, seat, command.characterId),
+      );
+      break;
+  }
+  if (!result.ok) {
+    return { ok: false, code: result.code as ErrorCode, message: COMMAND_MESSAGES[result.code] ?? "할 수 없다." };
+  }
+  if (state.battle) state.battle.talent[seat] = resources.talent;
   state.lastActiveAt = now;
   return { ok: true, advanced: false };
 }
@@ -706,6 +832,12 @@ export function toGameSnapshot(state: RoomState, viewerSeat: Seat | null): GameS
   };
 }
 
+function viewerSteam(state: RoomState, seat: Seat | null): number {
+  if (seat === null || !state.explore) return 0;
+  const forge = state.explore.forge;
+  return state.battle && !forge.steamActive ? state.battle.steam[seat] : forge.steam[seat];
+}
+
 /** 클라이언트에게 보낼 공개 상태. token 같은 비밀 값은 넣지 않는다. */
 export function toSnapshot(state: RoomState, now: number, viewerId?: string): RoomSnapshot {
   const viewer = viewerId ? state.players.find((p) => p.id === viewerId) : undefined;
@@ -719,6 +851,7 @@ export function toSnapshot(state: RoomState, now: number, viewerId?: string): Ro
     game: toGameSnapshot(state, viewer ? viewer.seat : null),
     battle: state.battle ? toBattleSnapshot(state.battle, viewer ? viewer.seat : null) : null,
     explore: state.explore ? toExploreSnapshot(state.explore, viewer ? viewer.seat : null) : null,
+    forge: state.explore ? toForgeSnapshot(state.explore.forge, state.explore.tick, viewer ? viewer.seat : null, viewerSteam(state, viewer ? viewer.seat : null)) : null,
     result: state.result,
   };
 }

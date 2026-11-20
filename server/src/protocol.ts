@@ -50,7 +50,17 @@ export type ErrorCode =
   | "no_action_gauge"
   | "tile_busy"
   | "nothing_to_gather"
-  | "already_known";
+  | "already_known"
+  // ---- 대장간 ----
+  | "not_enough_talent"
+  | "not_enough_materials"
+  | "no_free_smelter"
+  | "unknown_weapon"
+  | "no_weapon"
+  | "not_in_zone"
+  | "already_equipping"
+  | "already_equipped"
+  | "invalid_quantity";
 
 export interface PublicPlayer {
   id: string;
@@ -108,6 +118,8 @@ export interface UnitSnapshot {
   summon: boolean;
   /** 걸려 있는 효과 이름들 (stun, slow, dot ...). */
   effects: string[];
+  /** 끼고 있는 무기. 내 유닛은 항상 보이고, 상대 유닛은 맞붙어 있을 때만 보인다. */
+  weapon: string | null;
   /** 궁극기를 다시 쓸 수 있게 되는 틱. 내 유닛에게만 들어 있다. */
   ultReadyTick: number | null;
   /** 나이트의 레인 이동을 다시 쓸 수 있게 되는 틱. 내 유닛에게만 들어 있다. */
@@ -191,6 +203,24 @@ export interface ExploreSnapshot {
   events: ExploreEventSnapshot[];
 }
 
+export interface ForgeSnapshot {
+  /** 내 스팀포스. 전투가 시작되기 전에는 대장간의 것, 시작된 뒤에는 전투의 것. */
+  steam: number;
+  steamMax: number;
+  /** 재련대 2개. 비어 있으면 null, 돌아가는 중이면 끝날 때까지 남은 틱. */
+  smelters: Array<{ remainingTicks: number } | null>;
+  /** 무기 id -> 개수. */
+  inventory: Record<string, number>;
+  /** 캐릭터 id -> 끼고 있는 무기 id. */
+  equipped: Record<string, string>;
+  /** 캐릭터 id -> 끼우는 중인 무기와 남은 틱. */
+  equipping: Record<string, { weaponId: string; remainingTicks: number }>;
+  /** 지금 광석 하나의 가격. */
+  orePrice: number;
+  ticksPerSecond: number;
+  events: Array<{ seq: number; tick: number; type: string; detail: string | null }>;
+}
+
 export interface ResultSnapshot {
   winner: Seat | null;
   /** towers | time | deathmatch | deathmatchTime */
@@ -214,6 +244,8 @@ export interface RoomSnapshot {
   battle: BattleSnapshot | null;
   /** 탐사 단계부터 판이 끝날 때까지. */
   explore: ExploreSnapshot | null;
+  /** 대장간. 탐사와 함께 시작해서 판이 끝날 때까지. */
+  forge: ForgeSnapshot | null;
   /** 결과 단계에서만 있다. */
   result: ResultSnapshot | null;
 }
@@ -236,7 +268,15 @@ export type ClientMessage =
   /** 전투 중 나이트가 다른 레인으로 옮겨 간다. */
   | { t: "move"; characterId: string; lane: Lane }
   /** 탐사: 칸(0~15, 4x4)에 채집·매복·정찰을 한다. 행동 게이지가 1 든다. */
-  | { t: "explore"; action: ExploreAction; tile: number };
+  | { t: "explore"; action: ExploreAction; tile: number }
+  /** 대장간: buy 광석 구입, smelt 재련 시작, craft 무기 조합, equip 무기 장착. */
+  | ForgeCommand;
+
+export type ForgeCommand =
+  | { t: "forge"; action: "buy"; quantity: number }
+  | { t: "forge"; action: "smelt" }
+  | { t: "forge"; action: "craft"; weaponId: string }
+  | { t: "forge"; action: "equip"; weaponId: string; characterId: string };
 
 export type ExploreAction = "gather" | "ambush" | "scout";
 export const EXPLORE_ACTIONS: readonly ExploreAction[] = ["gather", "ambush", "scout"];
@@ -295,6 +335,29 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       if (!id) return null;
       if (msg.lane === undefined || msg.lane === null) return { t: "ultimate", characterId: id };
       return isLane(msg.lane) ? { t: "ultimate", characterId: id, lane: msg.lane } : null;
+    }
+    case "forge": {
+      switch (msg.action) {
+        case "buy": {
+          const quantity = msg.quantity === undefined ? 1 : msg.quantity;
+          return typeof quantity === "number" && Number.isInteger(quantity) && quantity >= 1 && quantity <= 99
+            ? { t: "forge", action: "buy", quantity }
+            : null;
+        }
+        case "smelt":
+          return { t: "forge", action: "smelt" };
+        case "craft": {
+          const weaponId = characterId(msg.weaponId);
+          return weaponId ? { t: "forge", action: "craft", weaponId } : null;
+        }
+        case "equip": {
+          const weaponId = characterId(msg.weaponId);
+          const character = characterId(msg.characterId);
+          return weaponId && character ? { t: "forge", action: "equip", weaponId, characterId: character } : null;
+        }
+        default:
+          return null;
+      }
     }
     case "explore": {
       const action = (EXPLORE_ACTIONS as readonly unknown[]).includes(msg.action) ? (msg.action as ExploreAction) : null;
