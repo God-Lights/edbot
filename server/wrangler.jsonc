@@ -4,11 +4,21 @@
   "main": "src/index.ts",
   "compatibility_date": "2025-11-01",
   "durable_objects": {
-    "bindings": [{ "name": "ROOM", "class_name": "Room" }]
+    "bindings": [
+      { "name": "ROOM", "class_name": "Room" },
+      { "name": "AUTH", "class_name": "AuthStore" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Room"] },
+    { "tag": "v2", "new_sqlite_classes": ["AuthStore"] }
+  ],
+  // 커스텀 도메인. officialgl.com 존이 이 Cloudflare 계정에 있어야 한다.
+  "routes": [{ "pattern": "edgame-api.officialgl.com", "custom_domain": true }],
   "vars": {
     // 단계 시간 배율. 1이면 실제 시간, 0.05면 20배 빠르게 (개발·스모크 테스트용).
     "PHASE_SCALE": "1"
+    // GL_ACCOUNT_KEY는 시크릿이라 여기에 쓰지 않는다: npx wrangler secret put GL_ACCOUNT_KEY
+    // 로그인 검사를 끄려면(로컬 개발) .dev.vars 에 REQUIRE_AUTH=false
   }
 }

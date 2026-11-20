@@ -47,6 +47,8 @@ export interface PlayerState {
   id: string;
   token: string;
   name: string;
+  /** GL Account 사용자 id (UUID). 로그인 없이 개발할 때는 없다. */
+  userId?: string;
   seat: Seat;
   connected: boolean;
   ready: boolean;
@@ -107,7 +109,7 @@ export type JoinResult =
  */
 export function joinRoom(
   state: RoomState,
-  request: { name: string; token?: string },
+  request: { name: string; token?: string; userId?: string },
   now: number,
   newId: () => string,
 ): JoinResult {
@@ -118,6 +120,17 @@ export function joinRoom(
       existing.disconnectedAt = null;
       state.lastActiveAt = now;
       return { ok: true, player: existing, reconnected: true };
+    }
+  }
+
+  if (request.userId) {
+    // 같은 GL 계정이면 토큰을 잃어버려도(다른 기기 등) 원래 자리로 돌아온다.
+    const same = state.players.find((p) => p.userId === request.userId);
+    if (same) {
+      same.connected = true;
+      same.disconnectedAt = null;
+      state.lastActiveAt = now;
+      return { ok: true, player: same, reconnected: true };
     }
   }
 
@@ -134,6 +147,7 @@ export function joinRoom(
     id: newId(),
     token: newId(),
     name: sanitizeName(request.name),
+    userId: request.userId,
     seat,
     connected: true,
     ready: false,

@@ -1,7 +1,13 @@
 import { CHARACTERS } from "./characters";
+import { AuthStore } from "./auth-store";
+import { USER_HEADER, authRequired, authStore, bearerToken, identify, loginRedirectUrl } from "./auth";
+import type { AuthEnv } from "./auth";
+import { approvedPage, donePage, failedPage, homePage } from "./pages";
 import { Room } from "./room";
 
-export { Room };
+export { AuthStore, Room };
+
+
 
 // 헷갈리는 글자(0/O, 1/I/L)를 뺀 알파벳. 4자리면 약 80만 가지.
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -17,7 +23,7 @@ export function generateRoomCode(): string {
 const CORS_HEADERS = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, POST, OPTIONS",
-  "access-control-allow-headers": "content-type",
+  "access-control-allow-headers": "content-type, authorization",
 };
 
 function json(body: unknown, status = 200): Response {
@@ -32,12 +38,77 @@ function roomStub(env: Env, code: string) {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, rawEnv: Env): Promise<Response> {
+    const env = rawEnv as Env & AuthEnv;
     const url = new URL(request.url);
     const parts = url.pathname.split("/").filter(Boolean);
+    const origin = url.origin;
+    const enabled = authRequired(env);
 
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
+
+    // ---- GL Account 로그인 ----
+
+    // GET / -> 현재 로그인 상태. 자동으로 로그인 화면으로 보내지 않고, 버튼을 눌러야 간다.
+    if (request.method === "GET" && url.pathname === "/") {
+      return homePage(await identify(env, request), enabled);
+    }
+    // GET /auth/login[?login=id] -> (버튼을 눌렀을 때) GL Account 로그인 화면으로.
+    if (request.method === "GET" && url.pathname === "/auth/login") {
+      const loginId = url.searchParams.get("login");
+      const back = new URL("/auth/done", origin);
+      if (loginId) back.searchParams.set("login", loginId);
+      return Response.redirect(loginRedirectUrl(back.toString()), 302);
+    }
+    // GET /auth/done -> 로그인하고 돌아오는 곳.
+    if (request.method === "GET" && url.pathname === "/auth/done") {
+      return donePage(await identify(env, request), url.searchParams.get("login"));
+    }
+    // POST /auth/approve -> 게임 클라이언트의 로그인 요청을 승인한다.
+    if (request.method === "POST" && url.pathname === "/auth/approve") {
+      if (request.headers.get("origin") !== origin) return failedPage();
+      const form = await request.formData().catch(() => null);
+      const loginId = form?.get("login");
+      const user = await identify(env, request);
+      if (!user || typeof loginId !== "string" || !(await authStore(env).approve(loginId, user))) {
+        return failedPage();
+      }
+      return approvedPage();
+    }
+    // POST /api/auth/start -> 게임 클라이언트가 로그인을 시작한다. 브라우저로 loginUrl을 열게 하고 poll로 기다린다.
+    if (request.method === "POST" && url.pathname === "/api/auth/start") {
+      const loginId = await authStore(env).start();
+      return json({ loginId, loginUrl: `${origin}/auth/login?login=${loginId}`, expiresInSeconds: 600 });
+    }
+    // GET /api/auth/poll?id= -> 승인되면 게임 세션 토큰을 한 번만 돌려준다.
+    if (request.method === "GET" && url.pathname === "/api/auth/poll") {
+      const result = await authStore(env).claim(url.searchParams.get("id") ?? "");
+      if (result.status === "unknown") return json({ error: "login_expired" }, 404);
+      if (result.status === "pending") return json({ status: "pending" }, 202);
+      return json({ status: "approved", token: result.token, user: result.user });
+    }
+    // GET /api/auth/me -> 지금 로그인한 사용자.
+    if (request.method === "GET" && url.pathname === "/api/auth/me") {
+      const user = await identify(env, request);
+      return user ? json({ user }) : json({ error: "unauthorized" }, 401);
+    }
+    // POST /api/auth/logout -> 게임 세션을 끊는다. (GL 계정 로그아웃은 account.officialgl.com 에서)
+    if (request.method === "POST" && url.pathname === "/api/auth/logout") {
+      const token = bearerToken(request);
+      if (token) await authStore(env).logout(token);
+      return json({ ok: true });
+    }
+
+    // 방을 만들거나 들어가려면 로그인이 필요하다. (개발할 때는 REQUIRE_AUTH=false)
+    const needsLogin =
+      enabled &&
+      ((request.method === "POST" && url.pathname === "/api/rooms") ||
+        (parts.length === 2 && parts[0] === "ws"));
+    const user = needsLogin ? await identify(env, request) : null;
+    if (needsLogin && !user) {
+      return json({ error: "unauthorized", loginUrl: `${origin}/auth/login` }, 401);
     }
 
     // POST /api/rooms -> 새 방을 만들고 4자리 코드를 돌려준다.
@@ -68,10 +139,13 @@ export default {
     if (parts.length === 2 && parts[0] === "ws") {
       const code = (parts[1] ?? "").toUpperCase();
       if (!CODE_PATTERN.test(code)) return json({ error: "room_not_found" }, 404);
-      return roomStub(env, code).fetch(request);
+      const forwarded = new Request(request);
+      forwarded.headers.delete(USER_HEADER);
+      if (user) forwarded.headers.set(USER_HEADER, JSON.stringify({ id: user.id, nickname: user.nickname }));
+      return roomStub(env, code).fetch(forwarded);
     }
 
-    if (url.pathname === "/" || url.pathname === "/health") {
+    if (url.pathname === "/health") {
       return json({ ok: true, service: "edbot-server" });
     }
     return json({ error: "not_found" }, 404);

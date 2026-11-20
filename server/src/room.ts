@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { USER_HEADER } from "./auth";
 import { parseClientMessage } from "./protocol";
 import type { ErrorCode, ServerMessage } from "./protocol";
 import {
@@ -85,9 +86,21 @@ export class Room extends DurableObject<Env> {
 
     const url = new URL(request.url);
     const now = Date.now();
+    // Worker가 GL Account로 확인한 사용자. 로그인한 사람은 닉네임이 이름이 된다.
+    let glUser: { id: string; nickname: string } | null = null;
+    try {
+      const raw = request.headers.get(USER_HEADER);
+      if (raw) glUser = JSON.parse(raw) as { id: string; nickname: string };
+    } catch {
+      glUser = null;
+    }
     const result = joinRoom(
       this.state,
-      { name: url.searchParams.get("name") ?? "", token: url.searchParams.get("token") ?? undefined },
+      {
+        name: glUser?.nickname ?? url.searchParams.get("name") ?? "",
+        token: url.searchParams.get("token") ?? undefined,
+        userId: glUser?.id,
+      },
       now,
       () => crypto.randomUUID(),
     );

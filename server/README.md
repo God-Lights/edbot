@@ -43,7 +43,7 @@ npm run dev         # 로컬 서버 (http://localhost:8787)
 
 ```bash
 # 터미널 1: 시간을 20배 빠르게 (4분 → 12초)
-npx wrangler dev --var PHASE_SCALE:0.05
+npx wrangler dev --var PHASE_SCALE:0.05 --var REQUIRE_AUTH:false
 
 # 터미널 2: 한 판을 끝까지 돌려 보기
 npm run smoke
@@ -203,3 +203,25 @@ offset = 내 시각(수신 순간) - room.serverTime
 - 시간(120초)이 끝나면 점수가 높은 쪽이 승리, 동점이면 `deathmatch` 단계(60초)로 이어진다. 한쪽 본진 타워 3개가 모두 무너지면 바로 `result`.
 - `result` 단계의 스냅샷에는 `room.result`(승자, 이유, 점수)가 있다.
 - 리치몬드의 스킬·궁극기는 대장간(5단계)이 생길 때까지 쓸 수 없다 (`not_implemented`).
+
+## GL Account 로그인과 커스텀 도메인
+
+서버는 `https://edgame-api.officialgl.com` 에서 동작하고(`wrangler.jsonc`의 `routes`, 배포하면 도메인이 자동으로 연결됩니다. `officialgl.com` 존이 같은 Cloudflare 계정에 있어야 합니다), 로그인은 GL Account(`account.officialgl.com`)에 맡깁니다. 로그인·회원가입 화면은 만들지 않습니다. 연동 규칙: `god-lights/gl-account` 의 `docs/INTEGRATION.md`.
+
+**처음 한 번 할 일**
+1. 서비스 키를 만듭니다: `openssl rand -base64 48`
+2. GL Account Worker의 `SERVICE_API_KEYS`(쉼표로 구분)에 그 키를 추가합니다.
+3. 이 서버에 시크릿으로 넣습니다: `cd server && npx wrangler secret put GL_ACCOUNT_KEY`
+   (코드, 저장소, 로그에는 넣지 않습니다. 로컬은 `server/.dev.vars`, 이미 `.gitignore`에 있습니다.)
+
+**로그인 흐름** (자동으로 넘기지 않고 버튼을 눌러야 로그인 화면으로 갑니다)
+- 웹: `/` 에 "로그인하기" 버튼 -> `/auth/login` -> GL Account -> `/auth/done` 으로 돌아옴. `gl_session` 쿠키를 서버가 `verify-session` 으로 검증합니다 (결과는 30초만 캐시).
+- 게임 클라이언트(Unity): 브라우저 쿠키가 없으므로 "기기 로그인"을 씁니다.
+  1. `POST /api/auth/start` -> `{ loginId, loginUrl }`. 클라이언트가 `loginUrl`을 브라우저로 엽니다 (로그인하기 버튼을 눌렀을 때).
+  2. 브라우저에서 GL 로그인 후 "로그인 확인"을 누르면 승인됩니다.
+  3. 클라이언트는 `GET /api/auth/poll?id=<loginId>` 를 반복 호출 (202 대기 중, 200 `{ token, user }`, 404 만료). 토큰은 한 번만 받을 수 있고 7일 유효합니다.
+  4. 이후 `POST /api/rooms` 와 WebSocket(`/ws/:code`) 요청에 `Authorization: Bearer <token>` 헤더를 보냅니다. 없거나 틀리면 401 `{ error: "unauthorized", loginUrl }`.
+- `GET /api/auth/me` 현재 사용자, `POST /api/auth/logout` 게임 세션 끊기 (GL 계정 로그아웃은 account.officialgl.com 에서).
+- 방에서 이름은 GL 닉네임, 식별자는 `user.id`(UUID)입니다. 같은 계정이 다시 들어오면 원래 자리로 돌아옵니다.
+
+로컬 개발에서 로그인을 끄려면 `--var REQUIRE_AUTH:false` 또는 `.dev.vars` 에 `REQUIRE_AUTH=false` (운영에서는 켜져 있어야 합니다).

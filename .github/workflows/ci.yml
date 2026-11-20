@@ -72,7 +72,7 @@ jobs:
       - name: 로컬 서버 시작
         working-directory: server
         run: |
-          nohup npx wrangler dev --var PHASE_SCALE:0.1 --port 8787 > "$RUNNER_TEMP/wrangler.log" 2>&1 &
+          nohup npx wrangler dev --var PHASE_SCALE:0.1 --var REQUIRE_AUTH:false --port 8787 > "$RUNNER_TEMP/wrangler.log" 2>&1 &
           for i in $(seq 1 60); do
             if curl -sf http://127.0.0.1:8787/health > /dev/null; then break; fi
             sleep 1
