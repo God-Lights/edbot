@@ -189,12 +189,18 @@ struct RoomView: View {
             if let game = room.game, let seat { DraftView(room: room, game: game, seat: seat) }
         case .placement:
             if let game = room.game, let seat { PlacementView(room: room, game: game, seat: seat) }
+        case .explore, .forge:
+            if let seat { PreBattleView(room: room, seat: seat) }
         case .battle, .deathmatch:
-            if let battle = room.battle, let seat { BattleView(room: room, battle: battle, seat: seat) }
+            if let battle = room.battle, let seat {
+                // 전투 화면 오른쪽에 탐사·대장간 패널을 열 수 있다. 열어 둔 동안에도 전투는 멈추지 않는다.
+                HStack(alignment: .top, spacing: 12) {
+                    BattleView(room: room, battle: battle, seat: seat)
+                    if model.showWorkshop { WorkshopPanel(room: room, seat: seat) }
+                }
+            }
         case .result:
             if let seat { ResultView(room: room, seat: seat) }
-        default:
-            ComingSoonView(room: room)
         }
     }
 }
@@ -230,20 +236,6 @@ struct LobbyRoomView: View {
                 Text(ready ? "준비 취소" : "준비").frame(width: 220)
             }
             .buttonStyle(PrimaryButtonStyle())
-            Spacer()
-        }
-    }
-}
-
-/// 아직 만들지 않은 단계(탐사, 전투 등)의 임시 화면.
-struct ComingSoonView: View {
-    let room: RoomSnapshot
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Spacer()
-            Text(Labels.phaseName(room.phase)).font(.largeTitle.bold())
-            Text("이 단계의 화면은 다음 업데이트에서 만들어져요.").foregroundStyle(.secondary)
             Spacer()
         }
     }

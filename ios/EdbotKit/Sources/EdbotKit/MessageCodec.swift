@@ -67,6 +67,35 @@ public enum MessageCodec {
         "{\"t\":\"move\",\"characterId\":\(quoted(characterId)),\"lane\":\"\(lane.rawValue)\"}"
     }
 
+    /// 탐사: 칸(0~15, 4x4, 왼쪽 위부터)에 채집·매복·정찰을 한다. 행동 게이지가 1 든다.
+    public static func explore(_ action: ExploreAction, tile: Int) -> String {
+        "{\"t\":\"explore\",\"action\":\"\(action.rawValue)\",\"tile\":\(tile)}"
+    }
+
+    /// 대장간: 광석 구입
+    public static func forgeBuy(quantity: Int = 1) -> String {
+        "{\"t\":\"forge\",\"action\":\"buy\",\"quantity\":\(quantity)}"
+    }
+
+    /// 대장간: 재련 시작
+    public static func forgeSmelt() -> String { "{\"t\":\"forge\",\"action\":\"smelt\"}" }
+
+    /// 대장간: 무기 조합
+    public static func forgeCraft(_ weaponId: String) -> String {
+        "{\"t\":\"forge\",\"action\":\"craft\",\"weaponId\":\(quoted(weaponId))}"
+    }
+
+    /// 대장간: 무기 장착(3초). 본진이나 아군 가드 타워 근처에서만 된다.
+    public static func forgeEquip(_ weaponId: String, characterId: String) -> String {
+        "{\"t\":\"forge\",\"action\":\"equip\",\"weaponId\":\(quoted(weaponId)),\"characterId\":\(quoted(characterId))}"
+    }
+
+    /// GET /api/weapons 의 응답을 해석한다. 형식이 틀리면 nil.
+    public static func parseWeapons(_ json: Data) -> [WeaponInfo]? {
+        struct Body: Decodable { let weapons: [WeaponInfo] }
+        return try? JSONDecoder().decode(Body.self, from: json).weapons
+    }
+
     private static func characterMessage(_ type: String, _ characterId: String) -> String {
         "{\"t\":\"\(type)\",\"characterId\":\(quoted(characterId))}"
     }

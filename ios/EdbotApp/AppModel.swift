@@ -40,6 +40,15 @@ final class AppModel {
     /// 전투 중 유닛 위치를 부드럽게 보이게 하는 보간기. 화면이 매 프레임 읽는다.
     let interpolator = BattleInterpolator()
 
+    // 탐사·대장간
+    private(set) var weapons: [WeaponInfo] = []
+    /// 전투 중 오른쪽에 탐사·대장간 패널을 열어 두었는가.
+    var showWorkshop = false
+    /// 탐사에서 칸을 누르면 할 행동.
+    var exploreAction: ExploreAction = .gather
+    /// 대장간에서 장착하려고 고른 무기.
+    var selectedWeaponId: String?
+
     private let tokens: TokenStore
     private var connection: RoomConnection?
     private var eventTask: Task<Void, Never>?
@@ -107,6 +116,43 @@ final class AppModel {
     /// 테스트 대전: 봇과 한 판. (서버의 방 코드 ADMN)
     func joinTestMatch() {
         join(code: "ADMN")
+    }
+
+    // MARK: 탐사·대장간
+
+    func weapon(_ id: String) -> WeaponInfo? { weapons.first { $0.id == id } }
+
+    func explore(tile: Int) {
+        guard let connection else { return }
+        let action = exploreAction
+        Task { await connection.sendExplore(action, tile: tile) }
+    }
+
+    func buyOre(quantity: Int = 1) {
+        guard let connection else { return }
+        Task { await connection.sendForgeBuy(quantity: quantity) }
+    }
+
+    func smelt() {
+        guard let connection else { return }
+        Task { await connection.sendForgeSmelt() }
+    }
+
+    func craft(_ weaponId: String) {
+        guard let connection else { return }
+        Task { await connection.sendForgeCraft(weaponId) }
+    }
+
+    func equip(characterId: String) {
+        guard let connection, let weaponId = selectedWeaponId else { return }
+        Task { await connection.sendForgeEquip(weaponId, characterId: characterId) }
+    }
+
+    private func loadWeapons(from url: URL) {
+        guard weapons.isEmpty else { return }
+        Task {
+            if let list = try? await ApiClient(baseURL: url).weapons() { weapons = list }
+        }
     }
 
     func lockPlacement() {
@@ -230,6 +276,7 @@ final class AppModel {
         leave()
         message = nil
         loadRoster(from: url)
+        loadWeapons(from: url)
         status = .connecting
         let connection = RoomConnection(factory: URLSessionWebSocketFactory())
         self.connection = connection
@@ -255,6 +302,8 @@ final class AppModel {
         clock = ServerClock()
         clearSelections()
         interpolator.reset()
+        showWorkshop = false
+        selectedWeaponId = nil
         if let connection { Task { await connection.stop() } }
     }
 

@@ -38,6 +38,11 @@ struct BattleView: View {
                     .foregroundStyle((remaining ?? 99_000) <= 10_000 ? Theme.warn : Theme.silver)
                     .frame(minWidth: 70)
             }
+            // 탐사·대장간 패널을 여닫는다. 열어 둔 동안에도 전투는 멈추지 않는다.
+            Button { model.showWorkshop.toggle() } label: {
+                Label(model.showWorkshop ? "닫기" : "탐사·대장간", systemImage: model.showWorkshop ? "xmark" : "hammer")
+            }
+            .buttonStyle(SecondaryButtonStyle())
         }
         .panel(padding: 10)
     }
