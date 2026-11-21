@@ -99,6 +99,13 @@ public actor RoomConnection {
         }
     }
 
+    public func sendBan(_ characterId: String) async -> Bool { await send(MessageCodec.ban(characterId)) }
+    public func sendPick(_ characterId: String) async -> Bool { await send(MessageCodec.pick(characterId)) }
+    public func sendPlace(_ characterId: String, lane: Lane) async -> Bool {
+        await send(MessageCodec.place(characterId, lane: lane))
+    }
+    public func sendLock() async -> Bool { await send(MessageCodec.lock()) }
+
     public func sendReady(_ ready: Bool) async -> Bool {
         await send(MessageCodec.ready(ready))
     }

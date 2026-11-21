@@ -28,6 +28,14 @@ public struct ApiClient: Sendable {
         return room.code
     }
 
+    /// 캐릭터 12명의 데이터(이름, 기물, 능력치)를 가져온다.
+    public func characters() async throws -> [CharacterInfo] {
+        let (data, status) = try await http.send(Http.request(baseURL, "/api/characters"))
+        guard (200..<300).contains(status) else { throw ApiError.status(status) }
+        guard let list = MessageCodec.parseCharacters(data) else { throw ApiError.badResponse }
+        return list
+    }
+
     /// 방 정보를 조회한다. 방이 없으면 nil.
     public func room(code: String) async throws -> RoomInfo? {
         let normalized = code.trimmingCharacters(in: .whitespaces).uppercased()

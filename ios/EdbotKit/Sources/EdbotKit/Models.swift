@@ -17,6 +17,68 @@ public struct PublicPlayer: Codable, Equatable, Sendable, Identifiable {
     public let ready: Bool
 }
 
+/// 세 레인. 킹사이드는 체스에서 킹이 서 있는 쪽이다.
+public enum Lane: String, Codable, CaseIterable, Sendable, Equatable {
+    case queenside, center, kingside
+}
+
+public enum Piece: String, Codable, Sendable, Equatable {
+    case king, queen, rook, bishop, knight, pawn
+}
+
+/// 캐릭터 한 명의 데이터. 서버의 GET /api/characters 가 돌려준다.
+public struct CharacterInfo: Codable, Equatable, Sendable, Identifiable {
+    /// 메시지에서 캐릭터를 가리키는 고정 id. 예: "ancient-lord"
+    public let id: String
+    public let nameKo: String
+    public let nameEn: String
+    public let piece: Piece
+    public let hp: Int
+    public let attack: Int
+    /// slow | normal | fast | veryFast
+    public let speed: String
+    /// melee | mid | long
+    public let range: String
+}
+
+/// 한 사람의 밴 상태.
+public struct BanSnapshot: Codable, Equatable, Sendable {
+    /// 밴을 정했다. (밴 시간이 끝나면 못 한 사람도 true)
+    public let locked: Bool
+    /// 밴 단계 중에는 내 것만 보이고 상대 것은 nil, 단계가 끝나면 둘 다 보인다.
+    public let characterId: String?
+}
+
+/// 밴, 드래프트, 배치의 진행 상황. 모든 배열은 seat 순서([seat 0, seat 1])다.
+public struct GameSnapshot: Codable, Equatable, Sendable {
+    /// 드래프트에서 먼저 뽑는 seat (선공).
+    public let firstPicker: Int
+    public let bans: [BanSnapshot]
+    /// 뽑는 순서 전체(스네이크, 10개). 앞에서부터 뽑은 수만큼은 이미 지나간 차례다.
+    public let pickOrder: [Int]
+    public let picks: [[String]]
+    /// 드래프트 중 지금 뽑을 차례인 seat. 드래프트가 아니면 nil.
+    public let turnSeat: Int?
+    /// 이번 차례가 끝나는 서버 시각(ms). 시간이 지나면 서버가 대신 뽑는다.
+    public let turnEndsAt: Int64?
+    /// seat별 캐릭터 id -> 레인. 상대 것은 전투가 시작되기 전에는 nil.
+    public let lanes: [[String: Lane]?]
+    public let placementLocked: [Bool]
+
+    public var pickCount: Int { picks.reduce(0) { $0 + $1.count } }
+
+    /// 밴되었거나 이미 뽑힌 캐릭터인가. (내가 아직 볼 수 없는 상대의 밴은 알 수 없어 포함되지 않는다.)
+    public func isUnavailable(_ characterId: String) -> Bool {
+        bans.contains { $0.characterId == characterId } || picks.contains { $0.contains(characterId) }
+    }
+
+    /// 그 레인에 배치되어 있는가. 아직 정해지지 않았거나 볼 수 없으면 nil.
+    public func lane(seat: Int, characterId: String) -> Lane? {
+        guard lanes.indices.contains(seat), let lanes = lanes[seat] else { return nil }
+        return lanes[characterId]
+    }
+}
+
 public struct RoomSnapshot: Codable, Equatable, Sendable {
     public let code: String
     public let phase: Phase
@@ -26,6 +88,8 @@ public struct RoomSnapshot: Codable, Equatable, Sendable {
     /// 이 스냅샷을 만든 서버 시각(ms). 시계 차이를 보정하는 데 쓴다.
     public let serverTime: Int64
     public let players: [PublicPlayer]
+    /// 밴, 드래프트, 배치 상태. 로비에서는 nil.
+    public let game: GameSnapshot?
 
     public func player(id: String?) -> PublicPlayer? {
         guard let id else { return nil }
@@ -56,6 +120,12 @@ public enum ErrorCode {
     public static let notInLobby = "not_in_lobby"
     public static let wrongPhase = "wrong_phase"
     public static let unauthorized = "unauthorized"
+    public static let unknownCharacter = "unknown_character"
+    public static let characterUnavailable = "character_unavailable"
+    public static let notYourTurn = "not_your_turn"
+    public static let alreadyDone = "already_done"
+    public static let notYourCharacter = "not_your_character"
+    public static let invalidLane = "invalid_lane"
 
     /// 다시 시도해도 소용없는 오류. 이 오류를 받으면 자동 재접속을 멈춘다.
     public static func isFatal(_ code: String) -> Bool {

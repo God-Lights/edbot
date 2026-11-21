@@ -82,3 +82,62 @@ final class ClockAndUrlTests: XCTestCase {
         XCTAssertEqual(webSocketBase(URL(string: "http://127.0.0.1:8787")!).absoluteString, "ws://127.0.0.1:8787")
     }
 }
+
+/// 밴·드래프트·배치(2단계). 예시는 서버가 실제로 보내는 형식이다.
+final class GameSnapshotTests: XCTestCase {
+    static let draftState = """
+    {"t":"state","room":{"code":"ABCD","phase":"draft","phaseStartedAt":1,"phaseEndsAt":41000,"serverTime":2,"players":[],
+     "game":{"firstPicker":0,"bans":[{"locked":true,"characterId":"ancient-lord"},{"locked":true,"characterId":"xenosaurs"}],
+     "pickOrder":[0,1,1,0,0,1,1,0,0,1],"picks":[["richmond"],["rosmaktia","toka-loga"]],"turnSeat":0,"turnEndsAt":9000,
+     "lanes":[{"richmond":"kingside"},null],"placementLocked":[false,true]},"battle":null,"explore":null,"forge":null,"result":null}}
+    """
+
+    func testParsesGame() throws {
+        guard case let .state(room)? = MessageCodec.parse(Self.draftState), let game = room.game else { return XCTFail("game이 없다") }
+        XCTAssertEqual(game.firstPicker, 0)
+        XCTAssertEqual(game.bans[0].characterId, "ancient-lord")
+        XCTAssertEqual(game.pickOrder.count, 10)
+        XCTAssertEqual(game.pickCount, 3)
+        XCTAssertEqual(game.turnSeat, 0)
+        XCTAssertEqual(game.turnEndsAt, 9000)
+        XCTAssertEqual(game.placementLocked, [false, true])
+    }
+
+    func testAvailabilityAndLanes() throws {
+        guard case let .state(room)? = MessageCodec.parse(Self.draftState), let game = room.game else { return XCTFail() }
+        XCTAssertTrue(game.isUnavailable("ancient-lord")) // 밴
+        XCTAssertTrue(game.isUnavailable("richmond")) // 뽑힘
+        XCTAssertFalse(game.isUnavailable("lappus"))
+        XCTAssertEqual(game.lane(seat: 0, characterId: "richmond"), .kingside)
+        XCTAssertNil(game.lane(seat: 0, characterId: "lappus"))
+        XCTAssertNil(game.lane(seat: 1, characterId: "rosmaktia")) // 상대 배치는 보이지 않는다
+        XCTAssertNil(game.lane(seat: 5, characterId: "x"))
+    }
+
+    func testHiddenBanIsNil() {
+        let json = #"{"t":"state","room":{"code":"ABCD","phase":"ban","phaseStartedAt":1,"phaseEndsAt":2,"serverTime":3,"players":[],"game":{"firstPicker":1,"bans":[{"locked":true,"characterId":"x"},{"locked":true,"characterId":null}],"pickOrder":[],"picks":[[],[]],"turnSeat":null,"turnEndsAt":null,"lanes":[{},null],"placementLocked":[false,false]}}}"#
+        guard case let .state(room)? = MessageCodec.parse(json), let game = room.game else { return XCTFail() }
+        XCTAssertNil(game.bans[1].characterId)
+        XCTAssertNil(game.turnSeat)
+    }
+
+    func testParsesCharacters() {
+        let json = #"{"characters":[{"id":"ancient-lord","nameKo":"에이션트 로드","nameEn":"Ancient Lord","piece":"king","hp":1500,"attack":60,"speed":"slow","range":"mid"}]}"#
+        let list = MessageCodec.parseCharacters(Data(json.utf8))
+        XCTAssertEqual(list?.first?.nameKo, "에이션트 로드")
+        XCTAssertEqual(list?.first?.piece, .king)
+        XCTAssertNil(MessageCodec.parseCharacters(Data("nope".utf8)))
+    }
+
+    func testBuildsGameMessages() {
+        XCTAssertEqual(MessageCodec.ban("ancient-lord"), #"{"t":"ban","characterId":"ancient-lord"}"#)
+        XCTAssertEqual(MessageCodec.pick("lappus"), #"{"t":"pick","characterId":"lappus"}"#)
+        XCTAssertEqual(MessageCodec.place("lappus", lane: .kingside), #"{"t":"place","characterId":"lappus","lane":"kingside"}"#)
+        XCTAssertEqual(MessageCodec.lock(), #"{"t":"lock"}"#)
+        XCTAssertEqual(MessageCodec.quoted(#"a"b\c"#), #""a\"b\\c""#)
+    }
+
+    func testLaneOrderIsQueenCenterKing() {
+        XCTAssertEqual(Lane.allCases, [.queenside, .center, .kingside])
+    }
+}

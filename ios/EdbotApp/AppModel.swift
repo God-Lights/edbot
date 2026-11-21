@@ -30,6 +30,13 @@ final class AppModel {
     private(set) var clock = ServerClock()
     var message: String?
 
+    // 밴·드래프트·배치 화면
+    private(set) var roster: [CharacterInfo] = []
+    /// 밴이나 뽑기로 고르는 중인 캐릭터. 확정 버튼을 눌러야 서버로 간다.
+    var selectedCharacterId: String?
+    /// 배치에서 레인을 정하려고 고른 내 캐릭터.
+    var selectedPlacementId: String?
+
     private let tokens: TokenStore
     private var connection: RoomConnection?
     private var eventTask: Task<Void, Never>?
@@ -43,6 +50,52 @@ final class AppModel {
 
     var serverURL: URL? { normalizeServerURL(serverText) }
     var me: PublicPlayer? { room?.player(id: myPlayerId) }
+    var mySeat: Int? { me?.seat }
+    var game: GameSnapshot? { room?.game }
+
+    func character(_ id: String) -> CharacterInfo? { roster.first { $0.id == id } }
+
+    /// 단계나 차례가 바뀌면 고르던 것을 비운다.
+    private func clearSelections() {
+        selectedCharacterId = nil
+        selectedPlacementId = nil
+    }
+
+    private func loadRoster(from url: URL) {
+        guard roster.isEmpty else { return }
+        Task {
+            do {
+                roster = try await ApiClient(baseURL: url).characters()
+            } catch {
+                message = "캐릭터 데이터를 불러오지 못했어요: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func ban(_ id: String) {
+        guard let connection else { return }
+        Task { await connection.sendBan(id) }
+    }
+
+    func pick(_ id: String) {
+        guard let connection else { return }
+        Task { await connection.sendPick(id) }
+    }
+
+    func place(_ id: String, lane: Lane) {
+        guard let connection else { return }
+        Task { await connection.sendPlace(id, lane: lane) }
+    }
+
+    func lockPlacement() {
+        guard let connection else { return }
+        Task { await connection.sendLock() }
+    }
+
+    /// 서버 시각 target까지 남은 시간(ms).
+    func remainingMs(until target: Int64?, now: Date = Date()) -> Int64? {
+        clock.remainingMs(until: target, localNowMs: Int64(now.timeIntervalSince1970 * 1000))
+    }
     var isInRoom: Bool { room != nil }
 
     /// 단계가 끝날 때까지 남은 시간(ms). 타이머가 없으면 nil.
@@ -154,6 +207,7 @@ final class AppModel {
         }
         leave()
         message = nil
+        loadRoster(from: url)
         status = .connecting
         let connection = RoomConnection(factory: URLSessionWebSocketFactory())
         self.connection = connection
@@ -177,6 +231,7 @@ final class AppModel {
         myPlayerId = nil
         status = .idle
         clock = ServerClock()
+        clearSelections()
         if let connection { Task { await connection.stop() } }
     }
 
@@ -212,6 +267,12 @@ final class AppModel {
 
     private func observe(_ room: RoomSnapshot) {
         clock.observe(serverTime: room.serverTime, localNowMs: currentTimeMs())
+        let previous = self.room
+        if previous?.phase != room.phase || previous?.game?.turnSeat != room.game?.turnSeat
+            || previous?.game?.pickCount != room.game?.pickCount {
+            selectedCharacterId = nil
+        }
+        if previous?.phase != room.phase { selectedPlacementId = nil }
         self.room = room
     }
 }

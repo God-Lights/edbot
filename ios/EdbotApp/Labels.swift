@@ -25,6 +25,12 @@ enum Labels {
         case ErrorCode.notInLobby: return "로비에서만 할 수 있어요."
         case ErrorCode.wrongPhase: return "지금 단계에서는 할 수 없어요."
         case ErrorCode.unauthorized: return "로그인이 필요해요."
+        case ErrorCode.unknownCharacter: return "없는 캐릭터예요."
+        case ErrorCode.characterUnavailable: return "이미 밴되었거나 뽑힌 캐릭터예요."
+        case ErrorCode.notYourTurn: return "당신 차례가 아니에요."
+        case ErrorCode.alreadyDone: return "이미 정했어요. 바꿀 수 없어요."
+        case ErrorCode.notYourCharacter: return "내 팀의 캐릭터가 아니에요."
+        case ErrorCode.invalidLane: return "올바르지 않은 레인이에요."
         default: return nil
         }
     }
@@ -35,6 +41,56 @@ enum Labels {
         case "gave_up": return "서버에 다시 연결하지 못했어요."
         case "invalid_url": return "서버 주소가 올바르지 않아요."
         default: return nil
+        }
+    }
+
+    static func pieceName(_ piece: Piece) -> String {
+        switch piece {
+        case .king: return "킹"
+        case .queen: return "퀸"
+        case .rook: return "룩"
+        case .bishop: return "비숍"
+        case .knight: return "나이트"
+        case .pawn: return "폰"
+        }
+    }
+
+    /// 체스 기물 글자. 캐릭터 카드의 아이콘으로 쓴다.
+    static func pieceGlyph(_ piece: Piece) -> String {
+        switch piece {
+        case .king: return "♚"
+        case .queen: return "♛"
+        case .rook: return "♜"
+        case .bishop: return "♝"
+        case .knight: return "♞"
+        case .pawn: return "♟"
+        }
+    }
+
+    static func laneName(_ lane: Lane) -> String {
+        switch lane {
+        case .queenside: return "퀸사이드"
+        case .center: return "센터"
+        case .kingside: return "킹사이드"
+        }
+    }
+
+    static func speed(_ tier: String) -> String {
+        switch tier {
+        case "slow": return "느림"
+        case "normal": return "보통"
+        case "fast": return "빠름"
+        case "veryFast": return "매우 빠름"
+        default: return tier
+        }
+    }
+
+    static func range(_ tier: String) -> String {
+        switch tier {
+        case "melee": return "근접"
+        case "mid": return "중거리"
+        case "long": return "원거리"
+        default: return tier
         }
     }
 
