@@ -14,7 +14,14 @@ on:
     paths:
       - "ios/**"
       - ".github/workflows/ios.yml"
+  # Actions 탭 > iOS > Run workflow 에서 버전(예: 0.1.0)을 적고 실행하면 릴리스까지 만든다.
+  # 버전을 비워 두면 빌드만 하고 .ipa 를 Artifacts 에 올린다.
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: "릴리스로 올릴 버전 (예: 0.1.0). 비우면 릴리스 없이 빌드만 한다."
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -53,13 +60,31 @@ jobs:
       - name: 버전 정하기
         id: version
         shell: bash
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.release_version }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # 태그(ios-v0.2.0)로 빌드하면 그 버전(0.2.0)을, 아니면 개발용 버전(0.0.0-dev)을 쓴다.
+          # 릴리스하는 경우: 태그(ios-v0.2.0)를 올렸거나, 수동 실행에서 버전을 적었을 때.
+          release=""
           if [[ "${GITHUB_REF}" == refs/tags/ios-v* ]]; then
-            echo "marketing=${GITHUB_REF_NAME#ios-v}" >> "$GITHUB_OUTPUT"
-          else
-            echo "marketing=0.0.0-dev" >> "$GITHUB_OUTPUT"
+            release="${GITHUB_REF_NAME#ios-v}"
+          elif [[ -n "${INPUT_VERSION}" ]]; then
+            release="${INPUT_VERSION#v}"
+            if [[ ! "$release" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::버전은 0.1.0 같은 형식이어야 한다. (입력: ${INPUT_VERSION})"
+              exit 1
+            fi
+            if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+              echo "::error::릴리스는 main 브랜치에서만 만들 수 있다. (현재: ${GITHUB_REF_NAME})"
+              exit 1
+            fi
+            if gh release view "ios-v${release}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+              echo "::error::이미 있는 릴리스다: ios-v${release}. 다른 버전을 적어 주세요."
+              exit 1
+            fi
           fi
+          echo "release=${release}" >> "$GITHUB_OUTPUT"
+          echo "marketing=${release:-0.0.0-dev}" >> "$GITHUB_OUTPUT"
 
       - name: 아카이브 (서명 끔)
         working-directory: ios
@@ -91,13 +116,16 @@ jobs:
           if-no-files-found: error
 
       - name: 릴리스에 올리기
-        if: startsWith(github.ref, 'refs/tags/ios-v')
+        if: steps.version.outputs.release != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.release }}
         run: |
           # icon.png 는 SideStore 소스(/sidestore.json)가 앱 아이콘으로 쓴다.
           cp ios/EdbotApp/Assets.xcassets/AppIcon.appiconset/icon-1024.png ios/build/icon.png
-          gh release create "${{ github.ref_name }}" ios/build/Commander.ipa ios/build/icon.png \
-            --repo "${{ github.repository }}" \
-            --title "COMMANDER iPad ${{ github.ref_name }}" \
+          # 태그가 이미 있으면(태그를 올려서 실행한 경우) 그대로 쓰고, 없으면 이 커밋에 태그를 만든다.
+          gh release create "ios-v${VERSION}" ios/build/Commander.ipa ios/build/icon.png \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --title "COMMANDER iPad ${VERSION}" \
             --notes "서명 없는 .ipa 입니다. SideStore 소스 https://edgame-api.officialgl.com/sidestore.json 를 추가하거나, Sideloadly/AltStore 로 본인 Apple ID 로 서명해서 설치하세요."
