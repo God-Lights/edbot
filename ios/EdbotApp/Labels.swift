@@ -1,4 +1,5 @@
 import EdbotKit
+import Foundation
 
 /// 화면에 보여 줄 한국어 문구.
 enum Labels {
