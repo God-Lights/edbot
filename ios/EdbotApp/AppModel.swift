@@ -70,8 +70,6 @@ final class AppModel {
     private(set) var chessWeapons: [ChessWeaponInfo] = []
     /// 준비 단계에서 고른 내 기물(대기석 또는 판 위). 칸을 누르면 거기에 놓는다.
     var selectedUid: String?
-    /// 보관함에서 고른 무기. 기물을 누르면 그 기물에 낀다.
-    var selectedWeaponId: String?
 
     private let tokens: TokenStore
     private var connection: RoomConnection?
