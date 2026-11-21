@@ -1,0 +1,141 @@
+// 게임 가이드: 규칙 설명(고정 문구) + 캐릭터·시너지·재료·무기(서버 데이터).
+
+import { S, update } from "./state.js";
+import { PIECE_COLOR, PIECE_NAME, RARITY_COLOR, RARITY_NAME, esc } from "./util.js";
+
+export const TABS = [
+  ["flow", "게임 흐름"], ["prep", "상점과 배치"], ["combat", "전투 규칙"], ["characters", "캐릭터"],
+  ["synergy", "시너지"], ["resources", "자원과 무기"], ["controls", "조작"],
+];
+
+const li = (text) => `<li>${text.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")}</li>`;
+const card = (title, lines) => `<div class="panel gcard"><h4>${title}</h4><ul>${lines.map(li).join("")}</ul></div>`;
+
+const MOVES = [
+  ["king", "8방향 1칸", "인접한 8칸"], ["queen", "직선·대각선 최대 3칸", "직선·대각선 최대 4칸"],
+  ["rook", "직선 최대 3칸", "직선 최대 4칸"], ["bishop", "대각선 최대 3칸", "대각선 최대 4칸"],
+  ["knight", "L자 점프 (막혀도 넘어요)", "L자 위치"], ["pawn", "앞으로 1칸 (항상 전진)", "바로 앞과 앞쪽 대각선"],
+];
+
+const flow = () => card("한눈에 보기", [
+  "상점에서 캐릭터를 사서 체스판에 놓으면, 기물들이 **체스 규칙**으로 알아서 싸워요.",
+  "상대의 체력(30)을 먼저 0으로 만들면 이겨요. 직접 조작하는 건 **준비 단계**뿐이에요.",
+  "한 판은 최대 8라운드, 약 7분이에요.",
+]) + card("한 라운드의 순서", [
+  "**준비 25초**(첫 라운드 40초): 상점 5칸에서 캐릭터를 사서 판에 올려요. 둘 다 '준비 끝'을 누르면 바로 전투로 가요.",
+  "**전투 약 30초**: 기물들이 알아서 싸워요. 항복은 언제든 가능해요.",
+  "**결과 5초**: 진 쪽은 '상대의 살아남은 기물 수 × 2 + 라운드 번호'만큼 체력을 잃어요.",
+]) + card("이기는 방법", [
+  "상대의 체력을 0으로 만들면 즉시 승리해요.",
+  "8라운드가 끝날 때까지 안 끝나면 **체력이 더 많은 쪽**이 이겨요. 같으면 라운드 승수로 정해요.",
+  "항복하면 바로 패배하고, 연결이 30초 넘게 끊겨도 패배해요.",
+]) + card("연습 대전", [
+  "로비의 **연습 대전**은 봇과 한 판이에요. 상점에 1~2골드의 쉬운 캐릭터 11명만 나와서 배울 게 적어요. 랭킹에 반영되지 않아요.",
+]) + card("처음이라면", [
+  "1라운드는 가장 마음에 드는 캐릭터 몇 명을 사서 **판에 올리는 것**만 해 보세요.",
+  "같은 캐릭터 3장을 모으면 ★2가 돼서 훨씬 강해져요.",
+  "골드를 10 모을 때마다 다음 라운드에 이자 +1을 받아요. (최대 +3)",
+  "같은 기물(킹, 퀸, 룩...)을 여러 종류 모으면 팀 전체가 보너스를 받는 **시너지**가 켜져요.",
+]);
+
+const prep = () => card("상점", [
+  "상점은 5칸이고, 칸을 누르면 바로 사요. 산 캐릭터는 **대기석**(6칸)에 들어가요.",
+  "새로고침은 2골드예요. (리치몬드가 판에 있으면 1골드)",
+  "1~2라운드에는 1~2골드 캐릭터 위주로 나오고, 6라운드부터 3~4골드도 나와요. 상점 아래에 지금 등장 확률이 적혀 있어요.",
+  "캐릭터는 **둘이 나눠 쓰는 공용 풀**에서 나와요. 상대가 많이 사 가면 그만큼 구하기 어려워요.",
+]) + card("골드", [
+  "처음 5골드. 라운드가 시작될 때마다 **기본 5골드 + 이자**를 받아요.",
+  "이자: 가진 골드 10마다 +1, 최대 +3. 아껴서 이자를 받을지, 지금 써서 강해질지 고르는 게 핵심이에요.",
+  "기물을 팔면 산 값을 돌려받아요. ★2는 3장 값이에요.",
+]) + card("판 위에 놓기", [
+  "기물을 **끌어다 판의 칸에 놓거나**, 기물을 누른 뒤 **판의 칸**을 눌러도 돼요. 이미 기물이 있는 칸이면 서로 자리를 바꿔요.",
+  "**자동 배치** 버튼을 누르면 대기석의 기물이 알아서 놓여요. (단단한 기물은 앞줄, 약한 기물은 뒷줄)",
+  "판에 올릴 수 있는 수는 1라운드 3기, 이후 라운드마다 +1, 최대 7기예요.",
+  "판은 내 쪽 4줄이에요. **위쪽이 앞줄**이라 상대와 가까워요.",
+]) + card("★2 합치기", [
+  "같은 캐릭터 3장을 사면 자동으로 ★2 하나로 합쳐져요. 체력과 공격이 약 1.8배, 능력도 강해져요.",
+  "판 위에 이미 있던 기물이 있으면 ★2는 그 자리에 생겨요.",
+]);
+
+const combat = () => `<div class="panel gcard"><h4>기물의 움직임과 공격</h4>${MOVES.map(([p, m, a]) => `<div class="mv">
+  <span class="gicon" style="--pc:${PIECE_COLOR[p]};--img:url(assets/pieces/${p}.png)"></span>
+  <div><b style="color:${PIECE_COLOR[p]}">${PIECE_NAME[p]}</b><div>이동: ${m}</div><div class="sub">공격: ${a}</div></div></div>`).join("")}</div>`
+  + card("전투는 이렇게 흘러가요", [
+    "1초가 한 박자예요. 박자마다 모든 기물이 **동시에** 한 번씩 행동해요.",
+    "공격할 수 있는 적이 있으면 공격해요. 체력이 가장 낮은 적을 먼저, 같으면 가까운 적을 쳐요.",
+    "칠 수 있는 적이 없으면 가장 가까운 적 쪽으로 움직여요.",
+    "공격은 '잡기'가 아니라 **피해**예요. 기물마다 체력이 있어요.",
+    "룩·비숍·퀸은 사이에 다른 기물이 있으면 그 너머를 칠 수 없어요.",
+  ]) + card("에너지와 능력", [
+    "공격하거나 맞으면 **에너지**가 차요. 가득 차면 캐릭터의 능력이 자동으로 나가요.",
+    "일부 캐릭터는 쓰러질 때나 처치할 때 발동하는 패시브 능력이에요.",
+  ]) + card("특별 규칙", [
+    "**폰 승급**: 폰이 상대 쪽 끝줄에 닿으면 그 전투 동안 퀸이 돼요.",
+    "**돌발 사망**: 20초가 지나도 안 끝나면 모든 기물이 점점 커지는 피해를 받아서 반드시 끝나요.",
+    "전투는 서버가 미리 계산하고 화면은 그걸 재생해요. 같은 배치는 언제나 같은 결과예요.",
+  ]);
+
+function characters() {
+  const head = card("캐릭터 20명", ["가격이 비쌀수록 체력과 공격이 높고 능력이 강해요. 능력치는 ★1 기준이에요.", "캐릭터마다 기물이 정해져 있어서, 기물에 따라 움직임과 시너지가 달라요."]);
+  if (!S.catalog) return head + `<div class="panel">불러오는 중...</div>`;
+  return head + [1, 2, 3, 4].map((cost) => `<div class="panel gcard"><h4>${cost}골드</h4>${S.catalog.units.filter((u) => u.cost === cost).map((u) => `
+    <div class="mv"><span class="gicon" style="--pc:${PIECE_COLOR[u.piece]};--img:url(assets/pieces/${u.piece}.png)"></span>
+    <div><b>${esc(u.nameKo)}</b> <span class="sub">${PIECE_NAME[u.piece]} · ${esc(u.faction)} · ${esc(u.role)}</span>
+    <div class="sub">♥ ${u.hp} &nbsp; ⚔ ${u.atk}</div><div>${u.passive ? "패시브: " : "능력: "}${esc(u.abilityText)}</div></div></div>`).join("")}</div>`).join("");
+}
+
+function synergy() {
+  const head = card("시너지란?", [
+    "**판 위에** 같은 기물의 캐릭터가 2명 모이면 팀 전체가 보너스를 받아요. (폰은 2명, 4명)",
+    "3명(폰은 4명)이 모이면 효과가 약 2배예요.",
+    "같은 캐릭터는 몇 장이든 한 명으로 세요. 서로 다른 캐릭터를 모아야 해요.",
+  ]);
+  if (!S.catalog) return head + `<div class="panel">불러오는 중...</div>`;
+  return head + ["king", "queen", "rook", "bishop", "knight", "pawn"].map((p) => `<div class="panel gcard"><h4 style="color:${PIECE_COLOR[p]}">${PIECE_NAME[p]}</h4>${S.catalog.synergies.filter((s) => s.piece === p).map((s) => `<div class="syn-row"><b>${esc(s.nameKo)}</b><span class="sub">${esc(s.text)}</span></div>`).join("")}</div>`).join("");
+}
+
+function resources() {
+  const head = card("자원 시스템이란?", [
+    "**전체 대전**(그리고 사람끼리의 방)에서만 있어요. 연습 대전에는 없어요.",
+    "재료를 모아 **재련대**에서 **무기**로 만들고, 기물에 끼워서 강하게 만들어요. 무기는 기물 하나에 하나만 낄 수 있어요.",
+  ]) + card("재료를 얻는 법", [
+    "**자원 칸(◆)**: 라운드마다 판에 4칸이 나와요. 내 쪽 2칸, 거울로 상대 쪽 2칸이고 재료도 같아요. 기물이 칸 위에 서 있거나 걸어서 도착하면 재료를 얻고 칸은 사라져요. 같은 순간에 둘이 도착하면 둘 다 얻어요.",
+    "**광물 시장**: 라운드마다 1~2종이 나와요. 한 라운드에 한 개만 살 수 있어요. 흔함 3골드, 보통 5골드, 희귀 8골드예요. 전설은 팔지 않아요.",
+    "전투가 끝난 뒤에 캔 재료를 받아요. 에드코인 슬링과 비트코인 대검은 골드도 줘요.",
+  ]) + card("재련대와 무기 끼기", [
+    "재료를 누르면 재련대에 들어가요. **재련대는 2칸**이고, 다음 라운드가 시작될 때 같은 이름의 무기로 완성돼요.",
+    "무기를 누른 뒤 기물(대기석이나 판 위)을 누르면 껴요. 🛡 표시가 있는 기물이 무기를 낀 기물이에요.",
+    "기물을 팔거나 ★2로 합칠 때 무기는 보관함으로 돌아와요. 선택한 기물 정보에서 **무기 빼기**도 할 수 있어요.",
+  ]);
+  if (!S.catalog) return head + `<div class="panel">불러오는 중...</div>`;
+  return head + ["common", "uncommon", "rare", "legendary"].map((r) => `<div class="panel gcard"><h4>${RARITY_NAME[r]} 재료와 무기</h4>${S.catalog.materials.filter((m) => m.rarity === r).map((m) => {
+    const w = S.catalog.weapons.find((x) => x.id === m.weaponId);
+    return `<div class="syn-row"><b><i style="color:${RARITY_COLOR[r]}">◆</i> ${esc(m.nameKo)} → ${esc(w?.nameKo ?? "")} ${m.price ? `<span class="sub">시장 ${m.price}골드</span>` : ""}</b><span class="sub">${esc(w?.text ?? "")}</span></div>`;
+  }).join("")}</div>`).join("");
+}
+
+const controls = () => card("준비 단계 조작", [
+  "**상점 칸 누르기**: 캐릭터를 사요. (골드가 부족하면 흐리게 보여요)",
+  "**기물 끌어다 놓기** 또는 **기물 누르기 → 판의 칸 누르기**: 그 칸에 놓아요. 기물이 있는 칸이면 자리를 바꿔요.",
+  "**자동 배치**: 대기석의 기물을 알아서 판에 놓아 줘요.",
+  "기물을 상점 아래 **'여기로 끌어서 팔기'** 칸에 끌어 놓으면 팔아요. 판 위의 기물을 대기석으로 끌어 내릴 수도 있어요.",
+  "**준비 끝**: 둘 다 누르면 기다리지 않고 바로 전투가 시작돼요.",
+]) + card("자원 조작", [
+  "**시장 카드 누르기**: 재료를 사요. **재료 누르기**: 재련대에 넣어요. **무기 누른 뒤 기물 누르기**: 무기를 껴요.",
+  "판 위의 ◆는 이번 라운드 자원 칸이에요. 기물을 올려 두거나 그쪽으로 걸어가게 하면 얻어요.",
+]) + card("화면 읽기", [
+  "파란색이 우리 편, 붉은색이 상대예요. 내 쪽은 언제나 판의 아래예요.",
+  "기물 테두리 색은 가격이에요. 회색 1골드, 초록 2골드, 파랑 3골드, 금색 4골드. ★은 별 등급이에요.",
+  "전투 중 기물 아래의 막대는 체력이에요. 흰 선은 보호막이에요.",
+  "전투 중 선은 이번 박자의 공격(흰색)과 능력(보라색)이에요.",
+]) + card("항복", ["화면 위의 **항복** 버튼은 준비 중에도, 전투 중에도 눌러요. 누르면 바로 패배해요."]);
+
+const BODY = { flow, prep, combat, characters, synergy, resources, controls };
+
+export function guideModal() {
+  const tabs = TABS.map(([id, title]) => `<button class="tab${S.guideTab === id ? " on" : ""}" data-act="guide-tab" data-tab="${id}">${title}</button>`).join("");
+  return `<div class="modal"><div class="modal-box"><div class="modal-head"><h2>게임 가이드</h2><button class="btn sec" data-act="close-modal">닫기</button></div>
+    <div class="tabs">${tabs}</div><div class="modal-body">${(BODY[S.guideTab] ?? flow)()}</div></div></div>`;
+}
+
+export const openGuide = (tab = "flow") => update({ modal: "guide", guideTab: tab });
