@@ -311,7 +311,7 @@ function unitAct(state: BattleState, unit: Unit, moves: Array<{ unit: Unit; pos:
   const skill = unit.summon ? undefined : SKILLS[unit.characterId];
   if (skill && t >= unit.skillReadyTick && skill.shouldUse(state, unit)) {
     skill.use(state, unit);
-    unit.skillReadyTick = t + skillCooldown(unit, skill);
+    unit.skillReadyTick = t + skillCooldown(unit, skill, state.synergyFx[unit.seat].cooldown);
     pushEvent(state, { type: "skill", seat: unit.seat, unitId: unit.id });
   }
 
@@ -451,7 +451,10 @@ function killUnit(state: BattleState, unit: Unit): void {
   if (state.mode === "battle") {
     state.score[killerSeat] += SCORE_KILL;
     state.kills[killerSeat] += 1;
-    const respawn = RESPAWN_TICKS - (isPawn(unit) ? PAWN_RESPAWN_BONUS_TICKS : 0);
+    const respawn = Math.max(
+      seconds(2),
+      RESPAWN_TICKS - (isPawn(unit) ? PAWN_RESPAWN_BONUS_TICKS : 0) - state.synergyFx[unit.seat].respawnReduceTicks,
+    );
     unit.respawnAtTick = state.tick + respawn;
   } else if (state.firstDeathmatchKill === null) {
     state.firstDeathmatchKill = killerSeat;

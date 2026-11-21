@@ -99,6 +99,8 @@ export interface GameSnapshot {
   lanes: [Partial<Record<string, Lane>> | null, Partial<Record<string, Lane>> | null];
   /** 배치를 확정했는지 (확정 여부는 상대에게도 보인다). */
   placementLocked: [boolean, boolean];
+  /** seat 순서로, 지금까지 뽑은 캐릭터가 채운 시너지 id. (뽑은 캐릭터가 공개라서 모두에게 보인다) */
+  synergies: [string[], string[]];
 }
 
 export interface UnitSnapshot {

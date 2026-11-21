@@ -120,6 +120,13 @@ export function computeMods(state: BattleState, unit: Unit): Mods {
     }
   }
 
+  // 시너지: 팀 구성이 주는 보너스
+  const fx = state.synergyFx[unit.seat];
+  mods.dmgTaken *= fx.dmgTaken;
+  mods.atk *= fx.atk;
+  mods.speed *= fx.speed;
+  mods.towerDmg *= fx.towerDmg;
+
   return mods;
 }
 
@@ -320,8 +327,9 @@ function lowestAlly(state: BattleState, unit: Unit, radius: number): Unit | unde
     .sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp || (a.id < b.id ? -1 : 1))[0];
 }
 
-export function skillCooldown(unit: Unit, def: SkillDef): number {
-  return unit.promoted ? Math.round(def.cooldownTicks * 0.8) : def.cooldownTicks;
+export function skillCooldown(unit: Unit, def: SkillDef, scale = 1): number {
+  const base = unit.promoted ? def.cooldownTicks * 0.8 : def.cooldownTicks;
+  return Math.max(1, Math.round(base * scale));
 }
 
 // ---------------------------------------------------------------------------
