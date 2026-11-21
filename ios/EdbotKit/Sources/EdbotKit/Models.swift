@@ -515,8 +515,6 @@ public enum ErrorCode {
     public static let marketEmpty = "market_empty"
     public static let marketSold = "market_sold"
     public static let noMaterial = "no_material"
-    public static let noFreeSmelter = "no_free_smelter"
-    public static let noWeapon = "no_weapon"
 
     /// 다시 시도해도 소용없는 오류. 이 오류를 받으면 자동 재접속을 멈춘다.
     public static func isFatal(_ code: String) -> Bool {

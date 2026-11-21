@@ -48,7 +48,7 @@ enum Labels {
         case ErrorCode.alreadyKnown: return "이미 알고 있는 칸이에요."
         case ErrorCode.notEnoughTalent: return "탈런트가 부족해요."
         case ErrorCode.notEnoughMaterials: return "재료가 부족해요."
-        case ErrorCode.noFreeSmelter: return "빈 재련대가 없어요."
+        case ErrorCode.noFreeSmelter: return "빈 재련대가 없어요. 다음 라운드에 무기가 나와요."
         case ErrorCode.unknownWeapon: return "없는 무기예요."
         case ErrorCode.noWeapon: return "그 무기를 가지고 있지 않아요."
         case ErrorCode.notInZone: return "본진이나 아군 가드 타워 근처에서만 장착할 수 있어요."
@@ -66,8 +66,6 @@ enum Labels {
         case ErrorCode.marketEmpty: return "살 수 없는 재료예요."
         case ErrorCode.marketSold: return "이번 라운드에는 이미 시장에서 샀어요."
         case ErrorCode.noMaterial: return "그 재료가 없어요."
-        case ErrorCode.noFreeSmelter: return "빈 재련대가 없어요. 다음 라운드에 무기가 나와요."
-        case ErrorCode.noWeapon: return "그 무기가 없어요."
         default: return nil
         }
     }
