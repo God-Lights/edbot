@@ -2,6 +2,7 @@ import { CHARACTERS } from "./characters";
 import { AuthStore } from "./auth-store";
 import { USER_HEADER, authRequired, authStore, bearerToken, identify, loginRedirectUrl } from "./auth";
 import type { AuthEnv } from "./auth";
+import { buildSource } from "./sidestore";
 import { WEAPONS } from "./forge/weapons";
 import { getLeaderboard, getPlayerStats, getRecentMatches } from "./ranking/store";
 import { approvedPage, donePage, failedPage, homePage } from "./pages";
@@ -35,6 +36,38 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+const RELEASES_REPO = "God-Lights/edbot";
+const SOURCE_CACHE_SECONDS = 300;
+
+/** GitHub 릴리스 목록에서 소스를 만든다. 5분 동안 캐시해서 GitHub 호출 한도(시간당 60번)를 아낀다. */
+async function sideStoreSource(origin: string): Promise<Response> {
+  const cache = (caches as unknown as { default: Cache }).default;
+  const key = new Request(`${origin}/sidestore.json`);
+  const hit = await cache.match(key);
+  if (hit) return hit;
+
+  let releases: unknown;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${RELEASES_REPO}/releases?per_page=20`, {
+      headers: { accept: "application/vnd.github+json", "user-agent": "commander-server" },
+    });
+    if (!res.ok) return json({ error: "releases_unavailable" }, 503);
+    releases = await res.json();
+  } catch {
+    return json({ error: "releases_unavailable" }, 503);
+  }
+  const body = JSON.stringify(buildSource(Array.isArray(releases) ? releases : [], `${origin}/sidestore.json`));
+  const response = new Response(body, {
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": `public, max-age=${SOURCE_CACHE_SECONDS}`,
+      ...CORS_HEADERS,
+    },
+  });
+  await cache.put(key, response.clone());
+  return response;
+}
+
 function roomStub(env: Env, code: string) {
   return env.ROOM.get(env.ROOM.idFromName(code));
 }
@@ -55,7 +88,7 @@ export default {
 
     // GET / -> 현재 로그인 상태. 자동으로 로그인 화면으로 보내지 않고, 버튼을 눌러야 간다.
     if (request.method === "GET" && url.pathname === "/") {
-      return homePage(await identify(env, request), enabled);
+      return homePage(await identify(env, request), enabled, origin);
     }
     // GET /auth/login[?login=id] -> (버튼을 눌렀을 때) GL Account 로그인 화면으로.
     if (request.method === "GET" && url.pathname === "/auth/login") {
@@ -153,6 +186,11 @@ export default {
       } catch {
         return json({ error: "ranking_unavailable" }, 503);
       }
+    }
+
+    // GET /sidestore.json -> SideStore(AltStore 호환) 소스. SideStore에서 "소스 추가"에 이 주소를 넣는다.
+    if (request.method === "GET" && url.pathname === "/sidestore.json") {
+      return sideStoreSource(origin);
     }
 
     // GET /api/weapons -> 무기 목록과 레시피.

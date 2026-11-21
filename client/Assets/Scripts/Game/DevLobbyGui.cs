@@ -14,6 +14,9 @@ namespace Edbot.Game
         // 한국어가 네모로 보이면 한글이 들어 있는 폰트를 여기에 끌어다 놓는다.
         [SerializeField] private Font font;
 
+        private Texture2D _logo;
+        private bool _logoLoaded;
+
         private string _name = "Player";
         private string _code = "";
         private Vector2 _scroll;
@@ -29,7 +32,14 @@ namespace Edbot.Game
 
             GUILayout.BeginArea(new Rect(16, 16, 420, Screen.height / scale - 32));
             _scroll = GUILayout.BeginScrollView(_scroll);
-            GUILayout.Label("edbot 개발용 로비");
+            if (!_logoLoaded)
+            {
+                // Assets/Resources/CommanderLogo.png (design/make_assets.py 가 만든다)
+                _logo = Resources.Load<Texture2D>("CommanderLogo");
+                _logoLoaded = true;
+            }
+            if (_logo != null) GUILayout.Label(_logo, GUILayout.Height(140), GUILayout.Width(145));
+            GUILayout.Label("COMMANDER 개발용 로비");
 
             var connection = client.Connection;
             if (connection == null || connection.State == ConnectionState.Disconnected)

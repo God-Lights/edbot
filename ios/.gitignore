@@ -1,0 +1,8 @@
+*.xcodeproj
+*.xcworkspace
+build/
+DerivedData/
+.build/
+.swiftpm/
+EdbotApp/Info.plist
+*.ipa

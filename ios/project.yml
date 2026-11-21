@@ -1,0 +1,46 @@
+# XcodeGen 설정. Commander.xcodeproj 는 저장소에 두지 않고 `xcodegen generate` 로 만든다.
+name: Commander
+options:
+  bundleIdPrefix: com.officialgl
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+packages:
+  EdbotKit:
+    path: EdbotKit
+targets:
+  Commander:
+    type: application
+    platform: iOS
+    sources:
+      - EdbotApp
+    dependencies:
+      - package: EdbotKit
+    info:
+      path: EdbotApp/Info.plist
+      properties:
+        CFBundleDisplayName: COMMANDER
+        UILaunchScreen:
+          UIImageName: LaunchLogo
+          UIColorName: LaunchBackground
+          UIImageRespectsSafeAreaInsets: true
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # 개발 중 로컬 서버(http://192.168.x.x:8787)에 붙을 수 있게 한다. 운영 서버는 https다.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.officialgl.commander
+        PRODUCT_NAME: Commander
+        TARGETED_DEVICE_FAMILY: "2"
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: NO

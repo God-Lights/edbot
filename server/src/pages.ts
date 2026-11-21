@@ -21,13 +21,22 @@ p{color:#555}</style></head><body>${body}</body></html>`;
   });
 }
 
+/** iPad 설치 안내: SideStore에서 소스를 한 번에 추가하는 링크. */
+function installLinks(origin: string): string {
+  const source = `${origin}/sidestore.json`;
+  return `<p style="margin-top:36px;font-size:14px">iPad에 설치하려면 SideStore에서 소스를 추가하세요.<br>
+<a href="sidestore://source?url=${encodeURIComponent(source)}">SideStore에 소스 추가</a><br>
+<small>${escapeHtml(source)}</small></p>`;
+}
+
 /** 첫 화면. 자동으로 넘기지 않고, 버튼을 눌러야 로그인 화면으로 간다. */
-export function homePage(user: PublicUser | null, enabled: boolean): Response {
+export function homePage(user: PublicUser | null, enabled: boolean, origin = ""): Response {
+  const install = origin ? installLinks(origin) : "";
   if (user) {
-    return page("edbot", `<h1>edbot</h1><p><b>${escapeHtml(user.nickname)}</b> 님으로 로그인되어 있습니다.</p>`);
+    return page("edbot", `<h1>edbot</h1><p><b>${escapeHtml(user.nickname)}</b> 님으로 로그인되어 있습니다.</p>${install}`);
   }
-  if (!enabled) return page("edbot", "<h1>edbot</h1><p>서버가 실행 중입니다.</p>");
-  return page("edbot", `<h1>edbot</h1><p>로그인이 필요합니다.</p><a class="btn" href="/auth/login">로그인하기</a>`);
+  if (!enabled) return page("edbot", `<h1>edbot</h1><p>서버가 실행 중입니다.</p>${install}`);
+  return page("edbot", `<h1>edbot</h1><p>로그인이 필요합니다.</p><a class="btn" href="/auth/login">로그인하기</a>${install}`);
 }
 
 /** 로그인 후 돌아오는 화면. 게임 클라이언트가 시작한 로그인이면 한 번 더 확인을 받는다. */
