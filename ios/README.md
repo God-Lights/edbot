@@ -53,3 +53,6 @@ git tag ios-v0.2.0 && git push origin ios-v0.2.0
 
 ### 소스가 만들어지는 방식
 서버의 `/sidestore.json` 은 GitHub API가 아니라, 릴리스를 올릴 때 워크플로(`SideStore 소스 갱신` 작업)가 만들어 고정 릴리스 **`sidestore-source`** 에 올려 둔 `sidestore.json` 파일을 읽어 와서 5분 캐시합니다. (GitHub API는 Cloudflare Workers의 공유 IP에서 호출 한도에 걸려 `releases_unavailable` 오류가 났습니다.) 그래서 iOS 릴리스를 한 번도 올리지 않은 동안에는 앱이 없는 빈 소스가 나가고, 릴리스를 올리면 자동으로 채워집니다. `sidestore-source` 릴리스는 직접 지우거나 고치지 마세요.
+
+### 버전 번호 규칙
+SideStore는 내려받은 앱의 `CFBundleVersion`이 소스의 `buildVersion`과 같은지 검사합니다. 그래서 워크플로가 앱의 `CFBundleVersion`과 `CFBundleShortVersionString`을 둘 다 **릴리스 버전 번호**(예: `0.1.2`)로 맞춥니다(빌드가 끝난 앱의 `Info.plist`를 직접 고치고 확인). 소스도 `buildVersion`을 같은 값으로 씁니다. 0.1.0, 0.1.1 릴리스는 이 맞춤 전에 만들어져서 설치가 거부됩니다. 0.1.2부터 설치됩니다.
