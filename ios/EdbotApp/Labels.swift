@@ -62,6 +62,12 @@ enum Labels {
         case ErrorCode.unitNotFound: return "그 기물이 없어요."
         case ErrorCode.invalidCell: return "놓을 수 없는 칸이에요."
         case ErrorCode.deployFull: return "판에 올릴 수 있는 기물 수를 넘었어요."
+        case ErrorCode.noResources: return "이 판에는 자원 시스템이 없어요."
+        case ErrorCode.marketEmpty: return "살 수 없는 재료예요."
+        case ErrorCode.marketSold: return "이번 라운드에는 이미 시장에서 샀어요."
+        case ErrorCode.noMaterial: return "그 재료가 없어요."
+        case ErrorCode.noFreeSmelter: return "빈 재련대가 없어요. 다음 라운드에 무기가 나와요."
+        case ErrorCode.noWeapon: return "그 무기가 없어요."
         default: return nil
         }
     }
@@ -107,6 +113,16 @@ enum Labels {
         case .bishop: return "PieceBishop"
         case .knight: return "PieceKnight"
         case .pawn: return "PiecePawn"
+        }
+    }
+
+    static func rarityName(_ rarity: String) -> String {
+        switch rarity {
+        case "common": return "흔함"
+        case "uncommon": return "보통"
+        case "rare": return "희귀"
+        case "legendary": return "전설"
+        default: return rarity
         }
     }
 

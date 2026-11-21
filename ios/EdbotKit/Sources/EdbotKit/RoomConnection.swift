@@ -124,6 +124,10 @@ public actor RoomConnection {
     public func sendReroll() async -> Bool { await send(MessageCodec.reroll()) }
     public func sendDeploy(_ uid: String, col: Int, row: Int) async -> Bool { await send(MessageCodec.deploy(uid, col: col, row: row)) }
     public func sendBench(_ uid: String) async -> Bool { await send(MessageCodec.bench(uid)) }
+    public func sendMarket(slot: Int) async -> Bool { await send(MessageCodec.market(slot: slot)) }
+    public func sendSmelt(_ material: String) async -> Bool { await send(MessageCodec.smelt(material)) }
+    public func sendEquip(_ weaponId: String, uid: String) async -> Bool { await send(MessageCodec.equip(weaponId, uid: uid)) }
+    public func sendUnequip(_ uid: String) async -> Bool { await send(MessageCodec.unequip(uid)) }
     public func sendDone() async -> Bool { await send(MessageCodec.done()) }
     public func sendSurrender() async -> Bool { await send(MessageCodec.surrender()) }
     public func sendLock() async -> Bool { await send(MessageCodec.lock()) }

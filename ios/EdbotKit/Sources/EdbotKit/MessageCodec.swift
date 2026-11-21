@@ -104,6 +104,16 @@ public enum MessageCodec {
     }
     /// 판 위의 기물을 대기석으로 내린다.
     public static func bench(_ uid: String) -> String { "{\"t\":\"bench\",\"uid\":\(quoted(uid))}" }
+    /// 광물 시장 slot(0부터)의 재료를 산다. 한 라운드에 한 개.
+    public static func market(slot: Int) -> String { "{\"t\":\"market\",\"slot\":\(slot)}" }
+    /// 재료를 재련대에 넣는다. 다음 라운드 시작에 무기가 나온다.
+    public static func smelt(_ material: String) -> String { "{\"t\":\"smelt\",\"material\":\(quoted(material))}" }
+    /// 무기를 기물(uid)에 낀다.
+    public static func equip(_ weaponId: String, uid: String) -> String {
+        "{\"t\":\"equip\",\"weaponId\":\(quoted(weaponId)),\"uid\":\(quoted(uid))}"
+    }
+    /// 기물(uid)의 무기를 뺀다.
+    public static func unequip(_ uid: String) -> String { "{\"t\":\"unequip\",\"uid\":\(quoted(uid))}" }
     /// 준비 끝. 둘 다 끝내면 바로 전투가 시작된다.
     public static func done() -> String { "{\"t\":\"done\"}" }
     /// 항복. 언제든 할 수 있고 상대가 바로 이긴다.

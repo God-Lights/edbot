@@ -121,6 +121,11 @@ struct LobbyView: View {
             }
             .buttonStyle(SecondaryButtonStyle())
 
+            Button { model.join(code: "ADMF") } label: {
+                Label("전체 대전 (봇, 모든 캐릭터와 자원 시스템)", systemImage: "cpu.fill").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(SecondaryButtonStyle())
+
             HStack {
                 Rectangle().fill(Color.white.opacity(0.15)).frame(height: 1)
                 Text("또는").font(.caption).foregroundStyle(.secondary)

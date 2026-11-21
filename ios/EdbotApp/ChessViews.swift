@@ -16,6 +16,16 @@ enum ChessStyle {
         }
     }
 
+    /// 재료·무기 희귀도 색
+    static func rarityColor(_ rarity: String) -> Color {
+        switch rarity {
+        case "uncommon": return Theme.good
+        case "rare": return Theme.mine
+        case "legendary": return Color(red: 0.95, green: 0.78, blue: 0.30)
+        default: return Color(white: 0.72)
+        }
+    }
+
     static func starText(_ star: Int) -> String { star >= 2 ? "★★" : "★" }
 
     /// 팔 때 돌려받는 골드: ★1은 산 값, ★2는 3장 값
@@ -40,6 +50,8 @@ struct ChessToken: View {
     let star: Int
     var selected: Bool = false
     var tint: Color? = nil
+    /// 무기를 끼고 있다
+    var armed: Bool = false
 
     var body: some View {
         let info = model.chessUnit(defId)
@@ -68,6 +80,13 @@ struct ChessToken: View {
                     .foregroundStyle(Color(red: 0.95, green: 0.78, blue: 0.30))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                     .padding(3)
+                if armed {
+                    Image(systemName: "bolt.shield.fill")
+                        .font(.system(size: max(9, side * 0.2)))
+                        .foregroundStyle(Theme.warn)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        .padding(3)
+                }
             }
             .frame(width: geo.size.width, height: geo.size.height)
         }
@@ -274,11 +293,31 @@ struct ChessPrepView: View {
     private func boardCell(_ me: ChessSelfSnapshot, col: Int, row: Int) -> some View {
         let unit: ChessUnitView? = me.board.first { $0.col == col && $0.row == row }
         let dark: Bool = (col + row) % 2 == 1
+        let tile: ChessTileView? = tileAt(col: col, row: row)
+        let tileRarity: String = tile.flatMap { model.chessMaterial($0.material)?.rarity } ?? "common"
         return ZStack {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(Color.white.opacity(dark ? 0.12 : 0.06))
+            if let tile {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(ChessStyle.rarityColor(tileRarity).opacity(0.18))
+                VStack(spacing: 0) {
+                    Image(systemName: "diamond.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(ChessStyle.rarityColor(tileRarity))
+                    if unit == nil {
+                        Text(model.chessMaterial(tile.material)?.nameKo ?? "")
+                            .font(.system(size: 8))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: unit == nil ? .center : .bottomTrailing)
+                .padding(2)
+            }
             if let unit {
-                ChessToken(defId: unit.defId, star: unit.star, selected: model.selectedUid == unit.uid)
+                ChessToken(defId: unit.defId, star: unit.star, selected: model.selectedUid == unit.uid, armed: unit.weapon != nil)
                     .padding(2)
                     .draggable(unit.uid)
             }
@@ -293,7 +332,18 @@ struct ChessPrepView: View {
         }
     }
 
+    /// 내 판의 칸(col, row)에 있는 자원 칸. 좌표는 서버의 절대 좌표로 바꿔서 찾는다. (seat 1은 판을 돌려서 본다)
+    private func tileAt(col: Int, row: Int) -> ChessTileView? {
+        let x: Int = seat == 0 ? col : chessBoardSize - 1 - col
+        let y: Int = seat == 0 ? chessBoardSize - chessDeployRows + row : chessDeployRows - 1 - row
+        return chess.tiles.first { $0.x == x && $0.y == y }
+    }
+
     private func tapCell(_ me: ChessSelfSnapshot, col: Int, row: Int, occupant: ChessUnitView?) {
+        if let weaponId = model.selectedWeaponId {
+            if let occupant { model.chessEquip(weaponId, uid: occupant.uid) }
+            return
+        }
         if let selected = model.selectedUid {
             if occupant?.uid == selected {
                 model.selectedUid = nil
@@ -321,7 +371,7 @@ struct ChessPrepView: View {
         return ZStack {
             RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.08))
             if let unit {
-                ChessToken(defId: unit.defId, star: unit.star, selected: model.selectedUid == unit.uid)
+                ChessToken(defId: unit.defId, star: unit.star, selected: model.selectedUid == unit.uid, armed: unit.weapon != nil)
                     .padding(2)
                     .draggable(unit.uid)
             }
@@ -338,6 +388,10 @@ struct ChessPrepView: View {
     }
 
     private func tapBench(_ me: ChessSelfSnapshot, unit: ChessUnitView?) {
+        if let weaponId = model.selectedWeaponId {
+            if let unit { model.chessEquip(weaponId, uid: unit.uid) }
+            return
+        }
         guard let selected = model.selectedUid else {
             if let unit { model.selectedUid = unit.uid }
             return
@@ -375,6 +429,10 @@ struct ChessPrepView: View {
                 .coachHighlight(showCoach && coachStep(me).n == 1)
 
                 sellZone(me)
+
+                if !chess.market.isEmpty || !chess.tiles.isEmpty || !me.materials.isEmpty || !me.weapons.isEmpty {
+                    resourcePanel(me)
+                }
 
                 if let uid = model.selectedUid, let unit = findUnit(me, uid: uid) {
                     selectedPanel(me, unit: unit)
@@ -428,6 +486,117 @@ struct ChessPrepView: View {
                 model.chessSell(uid)
                 return true
             }
+    }
+
+    // MARK: 자원 (광물 시장, 재련대, 무기)
+
+    private func materialName(_ id: String) -> String { model.chessMaterial(id)?.nameKo ?? id }
+    private func weaponName(_ id: String) -> String { model.chessWeapon(id)?.nameKo ?? id }
+
+    private func resourcePanel(_ me: ChessSelfSnapshot) -> some View {
+        let materialIds: [String] = me.materials.filter { $0.value > 0 }.map { $0.key }.sorted()
+        let weaponIds: [String] = me.weapons.filter { $0.value > 0 }.map { $0.key }.sorted()
+        let freeSmelter: Bool = me.smelters.contains { $0 == nil }
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("자원").font(.subheadline.bold())
+            if !chess.tiles.isEmpty {
+                let names: [String] = Array(Set(chess.tiles.map { materialName($0.material) })).sorted()
+                Text("이번 라운드 자원 칸(◆): \(names.joined(separator: ", ")). 칸 위에 기물을 놓거나 걸어가면 얻어요.")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            if !chess.market.isEmpty {
+                Text("광물 시장 · 한 라운드에 한 개").font(.caption).foregroundStyle(.secondary)
+                ForEach(chess.market.indices, id: \.self) { index in
+                    marketRow(me, index: index)
+                }
+            }
+            if !materialIds.isEmpty {
+                Text("재료 · 누르면 재련대에 넣어요").font(.caption).foregroundStyle(.secondary)
+                chipFlow {
+                    ForEach(materialIds, id: \.self) { id in
+                        let rarity: String = model.chessMaterial(id)?.rarity ?? "common"
+                        Button { model.chessSmelt(id) } label: {
+                            Text("\(materialName(id)) ×\(me.materials[id] ?? 0)")
+                                .font(.caption.bold())
+                                .padding(.horizontal, 8).padding(.vertical, 5)
+                                .background(Capsule().fill(ChessStyle.rarityColor(rarity).opacity(0.25)))
+                                .overlay(Capsule().strokeBorder(ChessStyle.rarityColor(rarity).opacity(0.7), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!freeSmelter)
+                        .opacity(freeSmelter ? 1 : 0.45)
+                    }
+                }
+            }
+            HStack(spacing: 6) {
+                ForEach(me.smelters.indices, id: \.self) { slot in
+                    VStack(spacing: 1) {
+                        Text("재련대 \(slot + 1)").font(.system(size: 9)).foregroundStyle(.secondary)
+                        Text(me.smelters[slot].map { "⚒ " + weaponName($0) } ?? "비어 있음")
+                            .font(.caption2.bold()).lineLimit(1).minimumScaleFactor(0.6)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.07)))
+                }
+            }
+            if !me.smelters.allSatisfy({ $0 == nil }) {
+                Text("재련 중인 무기는 다음 라운드 시작에 완성돼요.").font(.system(size: 9)).foregroundStyle(.secondary)
+            }
+            if !weaponIds.isEmpty {
+                Text("무기 · 누른 뒤 기물을 누르면 껴요").font(.caption).foregroundStyle(.secondary)
+                chipFlow {
+                    ForEach(weaponIds, id: \.self) { id in
+                        let rarity: String = model.chessWeapon(id)?.rarity ?? "common"
+                        let selected: Bool = model.selectedWeaponId == id
+                        Button { model.selectedWeaponId = selected ? nil : id } label: {
+                            Text("\(weaponName(id)) ×\(me.weapons[id] ?? 0)")
+                                .font(.caption.bold())
+                                .padding(.horizontal, 8).padding(.vertical, 5)
+                                .background(Capsule().fill(ChessStyle.rarityColor(rarity).opacity(selected ? 0.55 : 0.25)))
+                                .overlay(Capsule().strokeBorder(selected ? Color.white : ChessStyle.rarityColor(rarity).opacity(0.7), lineWidth: selected ? 2 : 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                if let id = model.selectedWeaponId, let info = model.chessWeapon(id) {
+                    Text(info.text).font(.caption2).foregroundStyle(Theme.warn)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .panel(padding: 10)
+    }
+
+    private func marketRow(_ me: ChessSelfSnapshot, index: Int) -> some View {
+        let item: ChessMarketItem = chess.market[index]
+        let info: ChessMaterialInfo? = model.chessMaterial(item.material)
+        let rarity: String = info?.rarity ?? "common"
+        let affordable: Bool = me.gold >= item.price
+        let enabled: Bool = affordable && !me.marketBought
+        return Button { model.chessBuyMaterial(slot: index) } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "diamond.fill").foregroundStyle(ChessStyle.rarityColor(rarity))
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(info?.nameKo ?? item.material).font(.caption.bold())
+                    Text("\(Labels.rarityName(rarity)) → \(info.flatMap { model.chessWeapon($0.weaponId)?.nameKo } ?? "")")
+                        .font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Text(me.marketBought ? "구매함" : "\(item.price)골드").font(.caption.bold().monospacedDigit())
+            }
+            .padding(.horizontal, 8).padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
+            .opacity(enabled ? 1 : 0.45)
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+    }
+
+    /// 칩을 줄바꿈하며 늘어놓는다.
+    private func chipFlow<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 6, alignment: .leading)], alignment: .leading, spacing: 6) {
+            content()
+        }
     }
 
     private var oddsText: String {
@@ -497,6 +666,17 @@ struct ChessPrepView: View {
                 Text("♥ \(Int((Double(info.hp) * factor).rounded()))   ⚔ \(Int((Double(info.atk) * factor).rounded()))")
                     .font(.subheadline.monospacedDigit())
                 Text(info.abilityText).font(.caption).foregroundStyle(.secondary)
+            }
+            if let weaponId = unit.weapon {
+                HStack {
+                    Image(systemName: "bolt.shield.fill").foregroundStyle(Theme.warn)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(model.chessWeapon(weaponId)?.nameKo ?? weaponId).font(.caption.bold())
+                        Text(model.chessWeapon(weaponId)?.text ?? "").font(.system(size: 10)).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("무기 빼기") { model.chessUnequip(unit.uid) }.buttonStyle(SecondaryButtonStyle())
+                }
             }
             HStack(spacing: 8) {
                 if onBoard {
@@ -582,6 +762,7 @@ struct ChessArena: View {
                 let cell: CGFloat = min(geo.size.width, geo.size.height) / CGFloat(chessBoardSize)
                 ZStack(alignment: .topLeading) {
                     background(cell)
+                    tilesLayer(position: position, cell: cell)
                     effects(position: position, cell: cell)
                     ForEach(combat.units.indices, id: \.self) { index in
                         unitView(index, position: position, cell: cell)
@@ -638,7 +819,7 @@ struct ChessArena: View {
             let dying: Bool = combat.frameUnit(beat: k + 1, index: index)?.alive == false
             let fade: Double = dying ? max(0, 1 - (position - Double(k))) : 1
             ZStack(alignment: .bottom) {
-                ChessToken(defId: unit.defId, star: unit.star, tint: unit.seat == seat ? Theme.mine : Theme.theirs)
+                ChessToken(defId: unit.defId, star: unit.star, tint: unit.seat == seat ? Theme.mine : Theme.theirs, armed: unit.weapon != nil)
                 VStack(spacing: 1) {
                     if frame.shield > 0 {
                         Capsule().fill(Color.white.opacity(0.8)).frame(width: side * 0.8, height: 3)
@@ -654,6 +835,23 @@ struct ChessArena: View {
             .frame(width: side, height: side)
             .opacity(fade)
             .position(x: (point.x + 0.5) * cell, y: (point.y + 0.5) * cell)
+        }
+    }
+
+    /// 아직 안 캔 자원 칸을 ◆로 보여 준다. 캐면 사라진다.
+    @ViewBuilder
+    private func tilesLayer(position: Double, cell: CGFloat) -> some View {
+        let mined: Set<Int> = combat.minedTiles(upTo: Int(position.rounded(.down)))
+        ForEach(combat.tiles.indices, id: \.self) { index in
+            if !mined.contains(index) {
+                let tile = combat.tiles[index]
+                let point = display(x: Double(tile.x), y: Double(tile.y))
+                Image(systemName: "diamond.fill")
+                    .font(.system(size: cell * 0.42))
+                    .foregroundStyle(ChessStyle.rarityColor(model.chessMaterial(tile.material)?.rarity ?? "common"))
+                    .opacity(0.85)
+                    .position(x: (point.x + 0.5) * cell, y: (point.y + 0.5) * cell)
+            }
         }
     }
 

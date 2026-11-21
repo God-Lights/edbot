@@ -14,6 +14,8 @@ public struct ChessUnitView: Codable, Equatable, Sendable, Identifiable {
     /// 판 위에 있을 때만. col 0~7(왼쪽부터), row 0~3 (0이 가운데에 가장 가까운 앞줄)
     public let col: Int?
     public let row: Int?
+    /// 낀 무기 id
+    public let weapon: String?
 
     public var id: String { uid }
 }
@@ -29,6 +31,24 @@ public struct ChessSelfSnapshot: Codable, Equatable, Sendable {
     public let rerollCost: Int
     public let nextIncome: Int
     public let synergies: [String]
+    /// 자원: 재료 id -> 개수, 무기 id -> 개수(아직 안 낀 것), 재련 중인 무기 2칸(비면 nil), 이번 라운드 시장에서 샀는가
+    public let materials: [String: Int]
+    public let weapons: [String: Int]
+    public let smelters: [String?]
+    public let marketBought: Bool
+}
+
+/// 광물 시장의 한 칸
+public struct ChessMarketItem: Codable, Equatable, Sendable {
+    public let material: String
+    public let price: Int
+}
+
+/// 이번 라운드의 자원 칸. 좌표는 판의 절대 좌표(seat 0이 아래)다.
+public struct ChessTileView: Codable, Equatable, Sendable {
+    public let x: Int
+    public let y: Int
+    public let material: String
 }
 
 public struct ChessOpponentSnapshot: Codable, Equatable, Sendable {
@@ -50,6 +70,7 @@ public struct ChessCombatUnit: Codable, Equatable, Sendable {
     public let star: Int
     public let maxHp: Double
     public let summon: Bool
+    public let weapon: String?
 }
 
 /// 전투 중 일어난 일 하나: [박자, 종류, 행동한 기물 번호, 대상 번호(-1 없음), 능력 id]
@@ -108,8 +129,17 @@ public struct ChessCombatSnapshot: Codable, Equatable, Sendable {
     public let survivors: [Int]
     public let damage: [Int]
     public let beats: Int
+    /// 자원 칸과 채굴 기록 [박자, 칸 번호, seat], 무기로 번 골드
+    public let tiles: [ChessTileView]
+    public let mines: [[Int]]
+    public let goldBonus: [Int]
 
-    enum CodingKeys: String, CodingKey { case boards, units, frames, events, winner, survivors, damage, beats }
+    enum CodingKeys: String, CodingKey { case boards, units, frames, events, winner, survivors, damage, beats, tiles, mines, goldBonus }
+
+    /// 박자 beat까지(그 박자 포함) 캐진 칸 번호
+    public func minedTiles(upTo beat: Int) -> Set<Int> {
+        Set(mines.filter { $0.count >= 2 && $0[0] <= beat }.map { $0[1] })
+    }
 
     /// 박자 k(0...beats) 때의 기물 i. 아직 없으면 nil.
     public func frameUnit(beat: Int, index: Int) -> ChessFrameUnit? {
@@ -149,6 +179,9 @@ public struct ChessSnapshot: Codable, Equatable, Sendable {
     public let deployCap: Int
     /// 가격별 등장 확률(%) [1골드, 2골드, 3골드, 4골드]
     public let shopOdds: [Int]
+    /// 이번 라운드의 자원 칸과 광물 시장. 자원 시스템이 없는 판(입문 모드)이면 비어 있다.
+    public let tiles: [ChessTileView]
+    public let market: [ChessMarketItem]
     /// 입문 모드(쉬운 캐릭터만 나온다). 오래된 서버면 nil.
     public let lite: Bool?
     public let me: ChessSelfSnapshot?
@@ -182,7 +215,27 @@ public struct ChessSynergyInfo: Codable, Equatable, Sendable, Identifiable {
     public let text: String
 }
 
+public struct ChessMaterialInfo: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let nameKo: String
+    /// common | uncommon | rare | legendary
+    public let rarity: String
+    public let weaponId: String
+    /// 광물 시장 가격. 전설은 팔지 않아서 nil.
+    public let price: Int?
+}
+
+public struct ChessWeaponInfo: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let nameKo: String
+    public let materialId: String
+    public let rarity: String
+    public let text: String
+}
+
 public struct ChessCatalog: Codable, Equatable, Sendable {
     public let units: [ChessUnitInfo]
     public let synergies: [ChessSynergyInfo]
+    public let materials: [ChessMaterialInfo]
+    public let weapons: [ChessWeaponInfo]
 }
