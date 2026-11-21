@@ -215,6 +215,10 @@ struct RoomView: View {
                     if model.showWorkshop { WorkshopPanel(room: room, seat: seat) }
                 }
             }
+        case .prep:
+            if let chess = room.chess, let seat { ChessPrepView(room: room, chess: chess, seat: seat) }
+        case .combat:
+            if let chess = room.chess, let seat { ChessCombatView(room: room, chess: chess, seat: seat) }
         case .result:
             if let seat { ResultView(room: room, seat: seat) }
         }

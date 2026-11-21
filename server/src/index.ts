@@ -1,3 +1,5 @@
+import { ROSTER } from "./chess/roster";
+import { ALL_SYNERGIES } from "./chess/synergy";
 import { CHARACTERS } from "./characters";
 import { AuthStore } from "./auth-store";
 import { USER_HEADER, authRequired, authStore, bearerToken, identify, loginRedirectUrl } from "./auth";
@@ -202,6 +204,16 @@ export default {
     // GET /sidestore.json -> SideStore(AltStore 호환) 소스. SideStore에서 "소스 추가"에 이 주소를 넣는다.
     if (request.method === "GET" && url.pathname === "/sidestore.json") {
       return sideStoreSource(origin);
+    }
+
+    // GET /api/chess -> 체스판 자동 전투의 캐릭터 20명과 기물 시너지.
+    if (request.method === "GET" && parts.length === 2 && parts[0] === "api" && parts[1] === "chess") {
+      return json({
+        units: ROSTER.map(({ id, nameKo, piece, faction, cost, role, hp, atk, abilityText, passive }) => ({
+          id, nameKo, piece, faction, cost, role, hp, atk, abilityText, passive,
+        })),
+        synergies: ALL_SYNERGIES.map(({ id, piece, need, tier, nameKo, text }) => ({ id, piece, need, tier, nameKo, text })),
+      });
     }
 
     // GET /api/synergies -> 캐릭터 시너지 목록 (이름, 조건, 효과 설명).

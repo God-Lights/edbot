@@ -13,6 +13,8 @@ enum Labels {
         case .forge: return "대장간"
         case .battle: return "전투"
         case .deathmatch: return "데스매치"
+        case .prep: return "준비"
+        case .combat: return "전투"
         case .result: return "결과"
         }
     }
@@ -53,6 +55,13 @@ enum Labels {
         case ErrorCode.alreadyEquipping: return "이미 무기를 끼우는 중이에요."
         case ErrorCode.alreadyEquipped: return "이미 끼고 있는 무기예요."
         case ErrorCode.invalidQuantity: return "살 수 있는 개수가 아니에요."
+        case ErrorCode.shopEmpty: return "이미 산 칸이에요."
+        case ErrorCode.notEnoughGold: return "골드가 부족해요."
+        case ErrorCode.invalidSlot: return "없는 상점 칸이에요."
+        case ErrorCode.benchFull: return "대기석이 가득 찼어요. 팔거나 판에 올려 주세요."
+        case ErrorCode.unitNotFound: return "그 기물이 없어요."
+        case ErrorCode.invalidCell: return "놓을 수 없는 칸이에요."
+        case ErrorCode.deployFull: return "판에 올릴 수 있는 기물 수를 넘었어요."
         default: return nil
         }
     }
@@ -122,6 +131,10 @@ enum Labels {
         case "time": return "시간 종료 (점수)"
         case "deathmatch": return "데스매치 전멸"
         case "deathmatchTime": return "데스매치 시간 종료 (남은 체력)"
+        case "hp": return "상대의 체력을 모두 깎았어요"
+        case "rounds": return "8라운드 종료 (남은 체력)"
+        case "surrender": return "항복"
+        case "forfeit": return "접속이 끊겨 기권패"
         default: return reason
         }
     }

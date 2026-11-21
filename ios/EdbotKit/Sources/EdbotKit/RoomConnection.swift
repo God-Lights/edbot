@@ -119,6 +119,13 @@ public actor RoomConnection {
     public func sendForgeEquip(_ weaponId: String, characterId: String) async -> Bool {
         await send(MessageCodec.forgeEquip(weaponId, characterId: characterId))
     }
+    public func sendBuy(slot: Int) async -> Bool { await send(MessageCodec.buy(slot: slot)) }
+    public func sendSell(_ uid: String) async -> Bool { await send(MessageCodec.sell(uid)) }
+    public func sendReroll() async -> Bool { await send(MessageCodec.reroll()) }
+    public func sendDeploy(_ uid: String, col: Int, row: Int) async -> Bool { await send(MessageCodec.deploy(uid, col: col, row: row)) }
+    public func sendBench(_ uid: String) async -> Bool { await send(MessageCodec.bench(uid)) }
+    public func sendDone() async -> Bool { await send(MessageCodec.done()) }
+    public func sendSurrender() async -> Bool { await send(MessageCodec.surrender()) }
     public func sendLock() async -> Bool { await send(MessageCodec.lock()) }
 
     public func sendReady(_ ready: Bool) async -> Bool {

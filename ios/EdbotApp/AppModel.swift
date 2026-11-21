@@ -63,6 +63,12 @@ final class AppModel {
     /// 대장간에서 장착하려고 고른 무기.
     var selectedWeaponId: String?
 
+    // 체스판 자동 전투
+    private(set) var chessUnits: [ChessUnitInfo] = []
+    private(set) var chessSynergies: [ChessSynergyInfo] = []
+    /// 준비 단계에서 고른 내 기물(대기석 또는 판 위). 칸을 누르면 거기에 놓는다.
+    var selectedUid: String?
+
     private let tokens: TokenStore
     private var connection: RoomConnection?
     private var eventTask: Task<Void, Never>?
@@ -85,6 +91,7 @@ final class AppModel {
     private func clearSelections() {
         selectedCharacterId = nil
         selectedPlacementId = nil
+        selectedUid = nil
     }
 
     private func loadRoster(from url: URL) {
@@ -171,6 +178,61 @@ final class AppModel {
         }
     }
 
+    func chessUnit(_ id: String) -> ChessUnitInfo? { chessUnits.first { $0.id == id } }
+    func chessSynergy(_ id: String) -> ChessSynergyInfo? { chessSynergies.first { $0.id == id } }
+
+    private func loadChess(from url: URL) {
+        guard chessUnits.isEmpty else { return }
+        Task {
+            if let catalog = try? await ApiClient(baseURL: url).chessCatalog() {
+                chessUnits = catalog.units
+                chessSynergies = catalog.synergies
+            }
+        }
+    }
+
+    // MARK: 체스판 자동 전투 행동
+
+    func chessBuy(slot: Int) {
+        guard let connection else { return }
+        Task { await connection.sendBuy(slot: slot) }
+    }
+
+    func chessSell(_ uid: String) {
+        guard let connection else { return }
+        selectedUid = nil
+        Task { await connection.sendSell(uid) }
+    }
+
+    func chessReroll() {
+        guard let connection else { return }
+        Task { await connection.sendReroll() }
+    }
+
+    func chessDeploy(_ uid: String, col: Int, row: Int) {
+        guard let connection else { return }
+        selectedUid = nil
+        Task { await connection.sendDeploy(uid, col: col, row: row) }
+    }
+
+    func chessBench(_ uid: String) {
+        guard let connection else { return }
+        selectedUid = nil
+        Task { await connection.sendBench(uid) }
+    }
+
+    func chessDone() {
+        guard let connection else { return }
+        selectedUid = nil
+        Task { await connection.sendDone() }
+    }
+
+    /// 항복한다. 준비·전투 어느 때든 되고 상대가 바로 이긴다.
+    func surrender() {
+        guard let connection else { return }
+        Task { await connection.sendSurrender() }
+    }
+
     func synergy(_ id: String) -> SynergyInfo? { synergies.first { $0.id == id } }
 
     /// 가이드를 열 때 서버 데이터(캐릭터, 시너지, 무기)가 아직 없으면 불러온다. 방에 들어가기 전에도 볼 수 있다.
@@ -181,6 +243,7 @@ final class AppModel {
         loadRoster(from: url)
         loadWeapons(from: url)
         loadSynergies(from: url)
+        loadChess(from: url)
     }
 
     private func loadSynergies(from url: URL) {
@@ -348,6 +411,7 @@ final class AppModel {
         loadRoster(from: url)
         loadWeapons(from: url)
         loadSynergies(from: url)
+        loadChess(from: url)
         status = .connecting
         let connection = RoomConnection(factory: URLSessionWebSocketFactory())
         self.connection = connection
@@ -416,6 +480,7 @@ final class AppModel {
             selectedCharacterId = nil
         }
         if previous?.phase != room.phase { selectedPlacementId = nil }
+        if previous?.phase != room.phase || previous?.chess?.round != room.chess?.round { selectedUid = nil }
         if let battle = room.battle {
             interpolator.update(battle.units, at: Date.timeIntervalSinceReferenceDate)
         } else if previous?.battle != nil {
