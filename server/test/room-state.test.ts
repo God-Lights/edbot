@@ -161,9 +161,12 @@ describe("advancePhase", () => {
     startGame(state, a.id, b.id, 0);
     const seen: string[] = [state.phase];
     let now = 0;
+    // 레인 전투 결과가 무작위라 가끔 단계 순서가 달라질 수 있어서 시드를 고정한다.
+    let seed = 12345;
+    const rng = () => ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296);
     while (state.phase !== "lobby") {
       now = state.phaseEndsAt!;
-      expect(advancePhase(state, now)).toBe(true);
+      expect(advancePhase(state, now, 1, rng)).toBe(true);
       seen.push(state.phase);
     }
     // 동점이면 battle 뒤에 데스매치가 끼어들 수 있다. 그 외에는 PHASE_ORDER 그대로다.
