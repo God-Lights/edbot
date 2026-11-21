@@ -5,7 +5,7 @@ name: iOS
 # (인증서와 비밀번호를 저장소나 워크플로에 두지 않는다.)
 on:
   push:
-    branches: [main]
+    branches: [main, "claude/**"]
     tags: ["ios-v*"]
     paths:
       - "ios/**"
