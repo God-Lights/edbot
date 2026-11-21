@@ -1,56 +1,42 @@
 name: iOS
 
-# EdbotKit 테스트(Linux)와 서명 없는 .ipa 빌드(macOS). 태그 ios-v* 를 올리면 릴리스에 .ipa를 올린다.
-# 서명하지 않은 .ipa 라서 설치할 때 Sideloadly/AltStore 에서 자기 Apple ID로 서명한다.
+# 서명 없는 .ipa 를 macOS 에서 빌드한다. (작업 하나, EdbotKit 테스트 포함)
+# - ios/ 를 바꾸는 PR: 테스트와 빌드만 확인
+# - Actions 탭 > iOS > Run workflow 에서 버전(예: 0.1.2)을 적고 실행: 릴리스와 SideStore 소스까지 만든다
+# - 태그 ios-vX.Y.Z 를 올려도 같다
+# 서명하지 않은 .ipa 라서 설치할 때 SideStore/Sideloadly 에서 자기 Apple ID 로 서명한다.
 # (인증서와 비밀번호를 저장소나 워크플로에 두지 않는다.)
 on:
-  push:
-    branches: [main, "claude/**"]
-    tags: ["ios-v*"]
-    paths:
-      - "ios/**"
-      - ".github/workflows/ios.yml"
   pull_request:
     paths:
       - "ios/**"
       - ".github/workflows/ios.yml"
-  # Actions 탭 > iOS > Run workflow 에서 버전(예: 0.1.0)을 적고 실행하면 릴리스까지 만든다.
-  # 버전을 비워 두면 빌드만 하고 .ipa 를 Artifacts 에 올린다.
+  push:
+    tags: ["ios-v*"]
   workflow_dispatch:
     inputs:
       release_version:
-        description: "릴리스로 올릴 버전 (예: 0.1.0). 비우면 릴리스 없이 빌드만 한다."
+        description: "릴리스로 올릴 버전 (예: 0.1.2). 비우면 릴리스 없이 빌드만 한다."
         required: false
         default: ""
 
 permissions:
-  contents: read
+  contents: write # 릴리스에 올리려고
 
 concurrency:
   group: ios-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  kit-tests:
-    name: EdbotKit 테스트
-    runs-on: ubuntu-latest
-    container: swift:5.10
+  build:
+    name: 테스트와 .ipa 빌드 (서명 없음)
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - name: swift test
+
+      - name: EdbotKit 테스트
         working-directory: ios/EdbotKit
         run: swift test
-
-  build-ipa:
-    name: .ipa 빌드 (서명 없음)
-    needs: kit-tests
-    runs-on: macos-15
-    permissions:
-      contents: write # 릴리스에 올리려고
-    outputs:
-      release: ${{ steps.version.outputs.release }}
-    steps:
-      - uses: actions/checkout@v4
 
       - name: XcodeGen 설치
         run: brew install xcodegen
@@ -141,33 +127,21 @@ jobs:
             --title "COMMANDER iPad ${VERSION}" \
             --notes "서명 없는 .ipa 입니다. SideStore 소스 https://edgame-api.officialgl.com/sidestore.json 를 추가하거나, Sideloadly/AltStore 로 본인 Apple ID 로 서명해서 설치하세요."
 
-  # 릴리스를 올린 뒤, 서버(/sidestore.json)가 가져다 쓸 SideStore 소스 파일을 만들어 고정 릴리스 sidestore-source 에 올린다.
-  # 서버가 GitHub API 대신 이 파일을 읽는다. (Workers 의 공유 IP 에서는 API 호출 한도에 걸려 403 이 난다)
-  publish-source:
-    name: SideStore 소스 갱신
-    needs: build-ipa
-    if: needs.build-ipa.outputs.release != ''
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - uses: actions/checkout@v4
+      # 릴리스를 올린 뒤, 서버(/sidestore.json)가 가져다 쓸 SideStore 소스 파일을 만들어 고정 릴리스 sidestore-source 에 올린다.
+      # 서버가 GitHub API 대신 이 파일을 읽는다. (Workers 의 공유 IP 에서는 API 호출 한도에 걸려 403 이 난다)
       - uses: actions/setup-node@v4
+        if: steps.version.outputs.release != ''
         with:
           node-version: 22
 
-      - name: 소스 파일 만들기
-        working-directory: server
+      - name: SideStore 소스 갱신
+        if: steps.version.outputs.release != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=50" > "$RUNNER_TEMP/releases.json"
-          node --experimental-strip-types --no-warnings scripts/make-sidestore-source.mjs \
-            "$RUNNER_TEMP/releases.json" "https://edgame-api.officialgl.com/sidestore.json" > "$RUNNER_TEMP/sidestore.json"
-          cat "$RUNNER_TEMP/sidestore.json"
-
-      - name: 고정 릴리스에 올리기
-        run: |
+          (cd server && node --experimental-strip-types --no-warnings scripts/make-sidestore-source.mjs \
+            "$RUNNER_TEMP/releases.json" "https://edgame-api.officialgl.com/sidestore.json") > "$RUNNER_TEMP/sidestore.json"
           if ! gh release view sidestore-source --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             gh release create sidestore-source --repo "${GITHUB_REPOSITORY}" --target "${GITHUB_SHA}" --prerelease \
               --title "SideStore 소스 (자동 생성)" \

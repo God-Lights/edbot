@@ -37,6 +37,9 @@ final class AppModel {
     /// 배치에서 레인을 정하려고 고른 내 캐릭터.
     var selectedPlacementId: String?
 
+    /// 전투 중 유닛 위치를 부드럽게 보이게 하는 보간기. 화면이 매 프레임 읽는다.
+    let interpolator = BattleInterpolator()
+
     private let tokens: TokenStore
     private var connection: RoomConnection?
     private var eventTask: Task<Void, Never>?
@@ -85,6 +88,25 @@ final class AppModel {
     func place(_ id: String, lane: Lane) {
         guard let connection else { return }
         Task { await connection.sendPlace(id, lane: lane) }
+    }
+
+    /// 궁극기를 쓴다 (스팀포스 5, 40초 재사용). 안키오는 갈 레인을 같이 보낸다.
+    func useUltimate(_ unit: UnitSnapshot, lane: Lane? = nil) {
+        guard let connection else { return }
+        let id = unit.characterId
+        Task { await connection.sendUltimate(id, lane: lane) }
+    }
+
+    /// 나이트가 다른 레인으로 옮겨 간다.
+    func moveLane(_ unit: UnitSnapshot, to lane: Lane) {
+        guard let connection else { return }
+        let id = unit.characterId
+        Task { await connection.sendMoveLane(id, lane: lane) }
+    }
+
+    /// 테스트 대전: 봇과 한 판. (서버의 방 코드 ADMN)
+    func joinTestMatch() {
+        join(code: "ADMN")
     }
 
     func lockPlacement() {
@@ -232,6 +254,7 @@ final class AppModel {
         status = .idle
         clock = ServerClock()
         clearSelections()
+        interpolator.reset()
         if let connection { Task { await connection.stop() } }
     }
 
@@ -273,6 +296,11 @@ final class AppModel {
             selectedCharacterId = nil
         }
         if previous?.phase != room.phase { selectedPlacementId = nil }
+        if let battle = room.battle {
+            interpolator.update(battle.units, at: Date.timeIntervalSinceReferenceDate)
+        } else if previous?.battle != nil {
+            interpolator.reset()
+        }
         self.room = room
     }
 }

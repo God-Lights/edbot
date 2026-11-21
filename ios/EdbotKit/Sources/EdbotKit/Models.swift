@@ -79,6 +79,121 @@ public struct GameSnapshot: Codable, Equatable, Sendable {
     }
 }
 
+// MARK: 전투 (3단계)
+
+/// 전투 중인 캐릭터 한 명(소환수 포함).
+public struct UnitSnapshot: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let characterId: String
+    public let seat: Int
+    public let lane: Lane
+    /// 레인 위의 위치 0~100. seat 0의 본진이 0, seat 1의 본진이 100.
+    public let pos: Double
+    public let hp: Int
+    public let maxHp: Int
+    public let alive: Bool
+    /// 죽어 있다면 되살아날 때까지 남은 틱.
+    public let respawnInTicks: Int?
+    public let shield: Int
+    public let promoted: Bool
+    public let summon: Bool
+    public let effects: [String]
+    /// 끼고 있는 무기. 내 캐릭터는 항상 보이고, 상대는 맞붙어 있을 때만 보인다.
+    public let weapon: String?
+    /// 궁극기를 다시 쓸 수 있게 되는 틱. 내 캐릭터에게만 들어 있다.
+    public let ultReadyTick: Int?
+    /// 나이트의 레인 이동을 다시 쓸 수 있게 되는 틱. 내 캐릭터에게만 들어 있다.
+    public let laneMoveReadyTick: Int?
+}
+
+public struct TowerSnapshot: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let seat: Int
+    public let lane: Lane
+    /// "guard" 또는 "main"
+    public let kind: String
+    public let pos: Double
+    public let hp: Int
+    public let maxHp: Int
+    public let alive: Bool
+
+    public var isMain: Bool { kind == "main" }
+}
+
+/// 성채의 벽, 생명의 샘 같은 구역.
+public struct BattleZone: Codable, Equatable, Sendable {
+    public let lane: Lane
+    public let pos: Double
+    public let seat: Int
+}
+
+public struct BattleEvent: Codable, Equatable, Sendable, Identifiable {
+    /// 전투 동안 1씩 늘어나는 번호. 이미 본 이벤트를 거르는 데 쓴다.
+    public let seq: Int
+    public let tick: Int
+    /// kill, towerDestroyed, ultimate, skill, respawn, promote, end
+    public let type: String
+    public let seat: Int?
+    public let unitId: String?
+    public let targetId: String?
+    public let text: String?
+
+    public var id: Int { seq }
+}
+
+/// 전투와 데스매치 중의 상태.
+public struct BattleSnapshot: Codable, Equatable, Sendable {
+    /// "battle" 또는 "deathmatch"
+    public let mode: String
+    public let tick: Int
+    public let ticksPerSecond: Int
+    public let score: [Int]
+    public let kills: [Int]
+    /// 내 스팀포스. 구경꾼이면 nil. 상대 것은 보이지 않는다.
+    public let steam: Double?
+    public let towers: [TowerSnapshot]
+    public let units: [UnitSnapshot]
+    public let walls: [BattleZone]
+    public let wells: [BattleZone]
+    public let events: [BattleEvent]
+
+    public static let ultimateCost = 5.0
+
+    public var isDeathmatch: Bool { mode == "deathmatch" }
+
+    /// 그 틱까지 남은 시간(초). 이미 지났으면 0.
+    public func seconds(until tick: Int) -> Double {
+        max(0, Double(tick - self.tick) / Double(max(1, ticksPerSecond)))
+    }
+
+    /// 이 캐릭터의 궁극기를 지금 쓸 수 있는가. 살아 있고, 재사용 대기가 끝났고, 스팀포스가 충분해야 한다.
+    public func canUseUltimate(_ unit: UnitSnapshot) -> Bool {
+        guard unit.alive, let ready = unit.ultReadyTick, let steam else { return false }
+        return ready <= tick && steam >= Self.ultimateCost
+    }
+
+    public func unit(id: String) -> UnitSnapshot? { units.first { $0.id == id } }
+}
+
+/// 한 판으로 바뀐 레이팅.
+public struct RatingChange: Codable, Equatable, Sendable {
+    public let before: Int
+    public let after: Int
+    public var delta: Int { after - before }
+}
+
+/// 판이 끝난 뒤의 결과.
+public struct ResultSnapshot: Codable, Equatable, Sendable {
+    /// seat 순서의 레이팅 변화. 로그인하지 않은 판이거나 아직 저장 전이면 nil.
+    public let ratings: [RatingChange?]
+    /// 이긴 seat. 없으면 nil.
+    public let winner: Int?
+    /// towers | time | deathmatch | deathmatchTime
+    public let reason: String
+    public let score: [Int]
+    public let kills: [Int]
+}
+
 public struct RoomSnapshot: Codable, Equatable, Sendable {
     public let code: String
     public let phase: Phase
@@ -90,6 +205,10 @@ public struct RoomSnapshot: Codable, Equatable, Sendable {
     public let players: [PublicPlayer]
     /// 밴, 드래프트, 배치 상태. 로비에서는 nil.
     public let game: GameSnapshot?
+    /// 전투와 데스매치 중에만 있다.
+    public let battle: BattleSnapshot?
+    /// 결과 단계에서만 있다.
+    public let result: ResultSnapshot?
 
     public func player(id: String?) -> PublicPlayer? {
         guard let id else { return nil }
@@ -126,6 +245,13 @@ public enum ErrorCode {
     public static let alreadyDone = "already_done"
     public static let notYourCharacter = "not_your_character"
     public static let invalidLane = "invalid_lane"
+    public static let unitDead = "unit_dead"
+    public static let unitDisabled = "unit_disabled"
+    public static let notImplemented = "not_implemented"
+    public static let onCooldown = "on_cooldown"
+    public static let notEnoughSteam = "not_enough_steam"
+    public static let noTarget = "no_target"
+    public static let notAKnight = "not_a_knight"
 
     /// 다시 시도해도 소용없는 오류. 이 오류를 받으면 자동 재접속을 멈춘다.
     public static func isFatal(_ code: String) -> Bool {

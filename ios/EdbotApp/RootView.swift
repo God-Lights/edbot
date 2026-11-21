@@ -101,6 +101,11 @@ struct LobbyView: View {
             .buttonStyle(PrimaryButtonStyle())
             .disabled(model.isCreatingRoom)
 
+            Button { model.joinTestMatch() } label: {
+                Label("테스트 대전 (봇과 한 판)", systemImage: "cpu").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(SecondaryButtonStyle())
+
             HStack {
                 Rectangle().fill(Color.white.opacity(0.15)).frame(height: 1)
                 Text("또는").font(.caption).foregroundStyle(.secondary)
@@ -184,6 +189,10 @@ struct RoomView: View {
             if let game = room.game, let seat { DraftView(room: room, game: game, seat: seat) }
         case .placement:
             if let game = room.game, let seat { PlacementView(room: room, game: game, seat: seat) }
+        case .battle, .deathmatch:
+            if let battle = room.battle, let seat { BattleView(room: room, battle: battle, seat: seat) }
+        case .result:
+            if let seat { ResultView(room: room, seat: seat) }
         default:
             ComingSoonView(room: room)
         }

@@ -60,6 +60,8 @@ export interface PlayerState {
   name: string;
   /** GL Account 사용자 id (UUID). 로그인 없이 개발할 때는 없다. */
   userId?: string;
+  /** 테스트 대전(ADMN)의 상대 봇. 접속 상태와 로비 유예 시간의 영향을 받지 않는다. */
+  bot?: boolean;
   seat: Seat;
   connected: boolean;
   ready: boolean;
@@ -91,13 +93,15 @@ export interface RoomState {
   matchStartedAt: number;
   /** 전적을 저장했는가(또는 저장할 필요가 없다고 판단했는가). */
   recorded: boolean;
+  /** 테스트 대전 방(코드 ADMN)이다. 혼자 들어오면 봇이 상대를 맡는다. */
+  testMatch: boolean;
   createdAt: number;
   lastActiveAt: number;
 }
 
 type Failure = { ok: false; code: ErrorCode; message: string };
 
-export function createRoom(code: string, now: number): RoomState {
+export function createRoom(code: string, now: number, testMatch = false): RoomState {
   return {
     code,
     phase: "lobby",
@@ -114,9 +118,31 @@ export function createRoom(code: string, now: number): RoomState {
     result: null,
     matchStartedAt: now,
     recorded: false,
+    testMatch,
     createdAt: now,
     lastActiveAt: now,
   };
+}
+
+export const BOT_ID = "bot";
+export const BOT_NAME = "테스트 봇";
+
+/** 테스트 대전 방에 사람이 혼자면 비어 있는 자리에 봇을 앉힌다. 이미 있으면 아무것도 하지 않는다. */
+export function addBotIfNeeded(state: RoomState): boolean {
+  if (!state.testMatch || state.players.some((p) => p.bot) || state.players.length !== 1) return false;
+  const taken = new Set(state.players.map((p) => p.seat));
+  state.players.push({
+    id: BOT_ID,
+    token: "bot-token",
+    name: BOT_NAME,
+    seat: taken.has(0) ? 1 : 0,
+    connected: true,
+    ready: false,
+    disconnectedAt: null,
+    bot: true,
+  });
+  state.players.sort((a, b) => a.seat - b.seat);
+  return true;
 }
 
 export function sanitizeName(raw: string): string {
@@ -795,7 +821,7 @@ export function pruneLobby(state: RoomState, now: number): boolean {
 
 /** 아무도 접속하지 않은 채 오래 방치된 방인가. */
 export function isExpired(state: RoomState, now: number): boolean {
-  const anyoneConnected = state.players.some((p) => p.connected);
+  const anyoneConnected = state.players.some((p) => p.connected && !p.bot);
   return !anyoneConnected && now - state.lastActiveAt >= ROOM_IDLE_MS;
 }
 
@@ -817,7 +843,7 @@ export function nextDeadline(state: RoomState): number | null {
       }
     }
   }
-  if (!state.players.some((p) => p.connected)) {
+  if (!state.players.some((p) => p.connected && !p.bot)) {
     candidates.push(state.lastActiveAt + ROOM_IDLE_MS);
   }
   return candidates.length > 0 ? Math.min(...candidates) : null;

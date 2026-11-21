@@ -1,9 +1,11 @@
 import { DurableObject } from "cloudflare:workers";
 import { USER_HEADER } from "./auth";
+import { runBotUntilIdle } from "./bot";
 import { recordMatch } from "./ranking/store";
 import { parseClientMessage } from "./protocol";
 import type { ErrorCode, ServerMessage } from "./protocol";
 import {
+  addBotIfNeeded,
   advancePhase,
   createRoom,
   isExpired,
@@ -63,9 +65,9 @@ export class Room extends DurableObject<Env> {
   // ---- Worker가 부르는 RPC ----
 
   /** 방을 처음 만든다. 이미 있으면 false. (코드가 겹쳤을 때 Worker가 다른 코드로 다시 시도한다.) */
-  async init(code: string): Promise<boolean> {
+  async init(code: string, testMatch = false): Promise<boolean> {
     if (this.state) return false;
-    this.state = createRoom(code, Date.now());
+    this.state = createRoom(code, Date.now(), testMatch);
     await this.persist();
     return true;
   }
@@ -126,6 +128,8 @@ export class Room extends DurableObject<Env> {
     this.ctx.acceptWebSocket(server, [player.id]);
     server.serializeAttachment({ playerId: player.id } satisfies SocketAttachment);
 
+    // 테스트 대전(ADMN)이면 상대 자리에 봇을 앉힌다.
+    if (addBotIfNeeded(this.state)) runBotUntilIdle(this.state, now, this.scale, Math.random);
     await this.persist();
     sendTo(server, {
       t: "welcome",
@@ -208,6 +212,7 @@ export class Room extends DurableObject<Env> {
       sendTo(ws, { t: "error", code: result.code, message: result.message });
       return;
     }
+    runBotUntilIdle(this.state!, Date.now(), this.scale, Math.random);
     await this.persist();
     this.broadcast();
     await this.recordIfFinished();
@@ -267,7 +272,8 @@ export class Room extends DurableObject<Env> {
 
     const pruned = pruneLobby(this.state, now);
     const advanced = advancePhase(this.state, now, this.scale);
-    if (pruned || advanced) {
+    const botActed = runBotUntilIdle(this.state, now, this.scale, Math.random);
+    if (pruned || advanced || botActed) {
       await this.persist();
       this.broadcast();
       await this.recordIfFinished();

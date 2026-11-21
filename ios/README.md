@@ -20,9 +20,7 @@ project.yml  XcodeGen 설정 (Commander.xcodeproj 는 저장소에 두지 않는
 ## 빌드와 설치 (전부 GitHub Actions)
 `.github/workflows/ios.yml`
 
-1. `EdbotKit` 테스트(Linux, `swift test`)
-2. macOS 러너에서 `xcodegen generate` → `xcodebuild archive`(서명 끔) → **서명 없는 `Commander.ipa`**
-3. 실행 결과의 Artifacts에서 내려받거나, 태그 `ios-vX.Y.Z` 를 올리면 릴리스에 올라갑니다.
+작업 하나(macOS)가 `swift test` → `xcodegen generate` → `xcodebuild archive`(서명 끔) → **서명 없는 `Commander.ipa`** 를 만듭니다. `ios/` 를 바꾸는 PR에서만 자동으로 돌고, 릴리스는 Actions 탭 **iOS > Run workflow** 에서 버전을 적어 실행하거나 태그 `ios-vX.Y.Z` 를 올리면 만들어집니다.
 
 ```bash
 git tag ios-v0.1.0 && git push origin ios-v0.1.0
