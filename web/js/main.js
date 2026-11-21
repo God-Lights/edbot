@@ -28,6 +28,9 @@ function lobbyView() {
         <button class="btn primary wide" data-act="quick"${S.quick ? " disabled" : ""}>⚔ 빠른 대전 (비슷한 실력의 상대 찾기)</button>
         <button class="btn sec wide" data-act="create"${S.creating ? " disabled" : ""}>${S.creating ? "방을 만드는 중..." : "방 만들기"}</button>
         <div class="two"><button class="btn sec" data-act="ranking">🏆 랭킹</button><button class="btn sec" data-act="guide" data-tab="flow">📖 게임 가이드</button></div>
+        <label class="levelrow"><span class="sub">봇 난이도</span>
+          <select id="botlevel" class="input sel">${[["", "기본 (연습 쉬움, 전체 보통)"], ["easy", "쉬움"], ["normal", "보통"], ["hard", "어려움"]]
+            .map(([v, t]) => `<option value="${v}"${S.botLevel === v ? " selected" : ""}>${t}</option>`).join("")}</select></label>
         <button class="btn sec wide" data-act="join-code" data-code="ADMN">🤖 연습 대전 (봇과 한 판, 쉬운 캐릭터만)</button>
         <button class="btn sec wide" data-act="join-code" data-code="ADMF">🤖 전체 대전 (봇, 모든 캐릭터와 자원 시스템)</button>
         <div class="or"><i></i><span>또는</span><i></i></div>
@@ -226,7 +229,7 @@ document.addEventListener("click", (event) => {
     case "mute": sfx.toggle(); render(); break;
     case "quick": quickMatch(); break;
     case "quick-cancel": cancelQuick(); break;
-    case "join-code": join(d.code); break;
+    case "join-code": join(d.code, S.botLevel); break;
     case "ranking": openRanking(); break;
     case "guide": openGuide(d.tab); break;
     case "guide-tab": update({ guideTab: d.tab }); break;
@@ -265,6 +268,13 @@ document.addEventListener("click", (event) => {
 // 모달 바깥(어두운 곳)을 누르면 닫는다.
 document.addEventListener("click", (event) => {
   if (event.target.classList?.contains("modal")) update({ modal: null });
+});
+
+document.addEventListener("change", (event) => {
+  if (event.target.id === "botlevel") {
+    S.botLevel = event.target.value;
+    store("edbot.botLevel", S.botLevel);
+  }
 });
 
 document.addEventListener("input", (event) => {

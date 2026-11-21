@@ -174,3 +174,5 @@ small { font-size: 11px; color: var(--muted); }
 @keyframes healflash { 0% { filter: brightness(1.8) hue-rotate(60deg); } 100% { filter: none; } }
 .sd { position: absolute; left: 50%; top: 4%; transform: translateX(-50%); background: rgba(160,0,0,.75); color: #fff; padding: 3px 16px; border-radius: 99px; font-weight: 800; animation: pulse .8s infinite alternate; }
 @keyframes pulse { to { opacity: .55; } }
+
+.levelrow { display: flex; align-items: center; gap: 10px; } .levelrow .sel { margin: 0; flex: 1; }

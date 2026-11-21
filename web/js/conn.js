@@ -27,12 +27,14 @@ export class Connection {
     /** 서버 시각 - 내 시각 (ms) */
     this.offset = 0;
     this.playerId = null;
+    this.level = "";
   }
 
-  start(code, name) {
+  start(code, name, level = "") {
     this.stop();
     this.code = code;
     this.name = name;
+    this.level = level;
     this.stopped = false;
     this.attempt = 0;
     this.open();
@@ -53,6 +55,7 @@ export class Connection {
     const scheme = location.protocol === "https:" ? "wss" : "ws";
     const params = new URLSearchParams();
     if (this.name) params.set("name", this.name);
+    if (this.level) params.set("level", this.level);
     const token = loadToken(this.code);
     if (token) params.set("token", token);
     const ws = new WebSocket(`${scheme}://${location.host}/ws/${this.code}?${params}`);

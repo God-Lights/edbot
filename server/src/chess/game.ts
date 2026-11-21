@@ -271,7 +271,9 @@ function rollResources(game: ChessGame): void {
 export function startRound(game: ChessGame): void {
   game.round += 1;
   game.combat = null;
-  for (const player of game.players) {
+  // 공용 풀에서 먼저 뽑는 쪽이 유리하지 않게, 라운드마다 상점을 채우는 순서를 번갈아 바꾼다.
+  const order: ChessPlayer[] = game.round % 2 === 1 ? [game.players[0], game.players[1]] : [game.players[1], game.players[0]];
+  for (const player of order) {
     if (game.resources) {
       // 재련대의 무기가 완성된다. 디지털 채굴기 포대는 매 라운드 시작에 비트 1개를 만든다.
       player.smelters = player.smelters.map((weaponId) => {

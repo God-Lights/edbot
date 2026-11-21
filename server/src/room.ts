@@ -5,7 +5,7 @@ import { recordMatch } from "./ranking/store";
 import { parseClientMessage } from "./protocol";
 import type { ErrorCode, ServerMessage } from "./protocol";
 import {
-  addBotIfNeeded,
+  addBotIfNeeded, setBotLevel,
   advancePhase,
   createRoom,
   isExpired,
@@ -132,7 +132,9 @@ export class Room extends DurableObject<Env> {
     this.ctx.acceptWebSocket(server, [player.id]);
     server.serializeAttachment({ playerId: player.id } satisfies SocketAttachment);
 
-    // 테스트 대전(ADMN)이면 상대 자리에 봇을 앉힌다.
+    // 테스트 대전(ADMN)이면 상대 자리에 봇을 앉힌다. ?level=easy|normal|hard 로 봇 난이도를 고를 수 있다.
+    const level = url.searchParams.get("level");
+    if (level) setBotLevel(this.state, level);
     if (addBotIfNeeded(this.state)) runBotUntilIdle(this.state, now, this.scale, Math.random);
     await this.persist();
     sendTo(server, {

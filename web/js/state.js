@@ -25,6 +25,8 @@ export const S = {
   modal: null, // null | "guide" | "ranking"
   guideTab: "flow",
   ranking: null,
+  /** 봇 난이도: "" (기본: 연습 쉬움, 전체 보통) | easy | normal | hard */
+  botLevel: load("edbot.botLevel"),
   coachDismissed: load("edbot.coachDismissed") === "1",
   tipSeen: load("edbot.tipSeen") === "1",
   creating: false,
@@ -94,14 +96,14 @@ function observe(room) {
   S.room = room;
 }
 
-export function join(code) {
+export function join(code, level = "") {
   code = code.trim().toUpperCase();
   if (code.length !== 4) return toast("방 코드는 4자리예요.");
   leave();
   S.status = "connecting";
   S.message = "";
   store("edbot.name", S.name);
-  conn.start(code, S.user?.nickname ?? S.name);
+  conn.start(code, S.user?.nickname ?? S.name, level);
   renderFn();
 }
 
