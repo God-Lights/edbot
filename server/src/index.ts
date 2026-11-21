@@ -2,7 +2,7 @@ import { CHARACTERS } from "./characters";
 import { AuthStore } from "./auth-store";
 import { USER_HEADER, authRequired, authStore, bearerToken, identify, loginRedirectUrl } from "./auth";
 import type { AuthEnv } from "./auth";
-import { buildSource } from "./sidestore";
+import { loadSourceJson } from "./sidestore";
 import { WEAPONS } from "./forge/weapons";
 import { getLeaderboard, getPlayerStats, getRecentMatches } from "./ranking/store";
 import { approvedPage, donePage, failedPage, homePage } from "./pages";
@@ -36,28 +36,18 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-const RELEASES_REPO = "God-Lights/edbot";
 const SOURCE_CACHE_SECONDS = 300;
 
-/** GitHub 릴리스 목록에서 소스를 만든다. 5분 동안 캐시해서 GitHub 호출 한도(시간당 60번)를 아낀다. */
+/** SideStore 소스. 릴리스 때 워크플로가 만든 파일을 가져와서 5분 동안 캐시한다. */
 async function sideStoreSource(origin: string): Promise<Response> {
   const cache = (caches as unknown as { default: Cache }).default;
   const key = new Request(`${origin}/sidestore.json`);
   const hit = await cache.match(key);
   if (hit) return hit;
 
-  let releases: unknown;
-  try {
-    const res = await fetch(`https://api.github.com/repos/${RELEASES_REPO}/releases?per_page=20`, {
-      headers: { accept: "application/vnd.github+json", "user-agent": "commander-server" },
-    });
-    if (!res.ok) return json({ error: "releases_unavailable" }, 503);
-    releases = await res.json();
-  } catch {
-    return json({ error: "releases_unavailable" }, 503);
-  }
-  const body = JSON.stringify(buildSource(Array.isArray(releases) ? releases : [], `${origin}/sidestore.json`));
-  const response = new Response(body, {
+  const result = await loadSourceJson(`${origin}/sidestore.json`);
+  if (!result.ok) return json({ error: "releases_unavailable" }, 503);
+  const response = new Response(result.body, {
     headers: {
       "content-type": "application/json; charset=utf-8",
       "cache-control": `public, max-age=${SOURCE_CACHE_SECONDS}`,

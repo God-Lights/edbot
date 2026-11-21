@@ -81,3 +81,56 @@ describe("SideStore 소스", () => {
     check(buildSource([release("ios-v1.0.0", "2026-11-01T00:00:00Z")], "https://s.test/sidestore.json"), "full");
   });
 });
+
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { SOURCE_ASSET_URL, loadSourceJson } from "../src/sidestore";
+
+describe("소스 가져오기 (GitHub API를 쓰지 않는다)", () => {
+  const reply = (status: number, body = "") => async () => new Response(body, { status });
+
+  it("워크플로가 올린 파일이 있으면 그대로 쓴다", async () => {
+    let asked = "";
+    const result = await loadSourceJson("https://s.test/sidestore.json", async (url) => {
+      asked = url;
+      return new Response('{"name":"COMMANDER","apps":[1]}');
+    });
+    expect(asked).toBe(SOURCE_ASSET_URL);
+    expect(asked).not.toContain("api.github.com");
+    expect(result).toEqual({ ok: true, body: '{"name":"COMMANDER","apps":[1]}' });
+  });
+
+  it("파일이 아직 없으면(404) 앱 없는 빈 소스를 만든다", async () => {
+    const result = await loadSourceJson("https://s.test/sidestore.json", reply(404));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(JSON.parse(result.body).apps).toEqual([]);
+  });
+
+  it("서버 오류, 깨진 JSON, 네트워크 오류는 실패", async () => {
+    expect(await loadSourceJson("x", reply(500))).toEqual({ ok: false });
+    expect(await loadSourceJson("x", reply(200, "not json"))).toEqual({ ok: false });
+    expect(
+      await loadSourceJson("x", async () => {
+        throw new Error("network");
+      }),
+    ).toEqual({ ok: false });
+  });
+});
+
+describe("소스 생성 스크립트", () => {
+  it("릴리스 목록 JSON에서 소스를 만든다 (Node의 타입 제거 실행으로 서버 코드를 그대로 씀)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ss-"));
+    const file = join(dir, "releases.json");
+    writeFileSync(file, JSON.stringify([release("ios-v0.1.0", "2026-11-21T00:00:00Z")]));
+    const out = execFileSync(
+      process.execPath,
+      ["--experimental-strip-types", "--no-warnings", "scripts/make-sidestore-source.mjs", file, "https://s.test/sidestore.json"],
+      { encoding: "utf8" },
+    );
+    const source = JSON.parse(out);
+    expect(source.apps[0].version).toBe("0.1.0");
+    expect(source.sourceURL).toBe("https://s.test/sidestore.json");
+  });
+});
