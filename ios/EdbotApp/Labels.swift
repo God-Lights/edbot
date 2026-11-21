@@ -98,6 +98,18 @@ enum Labels {
         }
     }
 
+    /// 기물 아이콘(Assets의 PieceXxx). 단색이라 foregroundStyle로 색을 입힌다.
+    static func pieceImageName(_ piece: Piece) -> String {
+        switch piece {
+        case .king: return "PieceKing"
+        case .queen: return "PieceQueen"
+        case .rook: return "PieceRook"
+        case .bishop: return "PieceBishop"
+        case .knight: return "PieceKnight"
+        case .pawn: return "PiecePawn"
+        }
+    }
+
     static func laneName(_ lane: Lane) -> String {
         switch lane {
         case .queenside: return "퀸사이드"

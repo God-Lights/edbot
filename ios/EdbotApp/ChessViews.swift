@@ -42,8 +42,10 @@ struct ChessToken: View {
                 RoundedRectangle(cornerRadius: side * 0.2, style: .continuous)
                     .strokeBorder(border, lineWidth: selected ? 3 : 2)
                 VStack(spacing: 0) {
-                    Text(Labels.pieceGlyph(piece))
-                        .font(.system(size: side * 0.5))
+                    Image(Labels.pieceImageName(piece))
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: side * 0.5, height: side * 0.5)
                         .foregroundStyle(Theme.color(for: piece))
                     Text(info?.nameKo ?? defId)
                         .font(.system(size: max(8, side * 0.16), weight: .bold))

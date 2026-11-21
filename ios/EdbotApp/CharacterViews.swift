@@ -20,8 +20,10 @@ struct PieceBadge: View {
         ZStack {
             Circle().fill(Theme.color(for: piece).opacity(0.22))
             Circle().strokeBorder(Theme.color(for: piece).opacity(0.7), lineWidth: 1.5)
-            Text(Labels.pieceGlyph(piece))
-                .font(.system(size: size * 0.62))
+            Image(Labels.pieceImageName(piece))
+                .resizable()
+                .scaledToFit()
+                .frame(width: size * 0.62, height: size * 0.62)
                 .foregroundStyle(Theme.color(for: piece))
         }
         .frame(width: size, height: size)

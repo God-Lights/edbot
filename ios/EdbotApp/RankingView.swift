@@ -108,11 +108,11 @@ struct RankingView: View {
                     .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 HStack(spacing: 2) {
                     ForEach(match.picks, id: \.self) { id in
-                        if let piece = model.character(id)?.piece { Text(Labels.pieceGlyph(piece)).font(.caption).foregroundStyle(Theme.mine) }
+                        if let piece = (model.character(id)?.piece ?? model.chessUnit(id)?.piece) { Text(Labels.pieceGlyph(piece)).font(.caption).foregroundStyle(Theme.mine) }
                     }
                     Text("vs").font(.system(size: 9)).foregroundStyle(.secondary)
                     ForEach(match.opponentPicks, id: \.self) { id in
-                        if let piece = model.character(id)?.piece { Text(Labels.pieceGlyph(piece)).font(.caption).foregroundStyle(Theme.theirs) }
+                        if let piece = (model.character(id)?.piece ?? model.chessUnit(id)?.piece) { Text(Labels.pieceGlyph(piece)).font(.caption).foregroundStyle(Theme.theirs) }
                     }
                 }
             }
