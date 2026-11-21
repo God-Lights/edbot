@@ -117,7 +117,7 @@ struct LobbyView: View {
             }
 
             Button { model.joinTestMatch() } label: {
-                Label("테스트 대전 (봇과 한 판)", systemImage: "cpu").frame(maxWidth: .infinity)
+                Label("연습 대전 (봇과 한 판, 쉬운 캐릭터만)", systemImage: "cpu").frame(maxWidth: .infinity)
             }
             .buttonStyle(SecondaryButtonStyle())
 

@@ -296,6 +296,8 @@ export interface ChessSnapshot {
   deployCap: number;
   /** 상점의 가격별 등장 확률(%) [1골드, 2골드, 3골드, 4골드] */
   shopOdds: [number, number, number, number];
+  /** 입문 모드(쉬운 캐릭터만 나온다) */
+  lite: boolean;
   me: ChessSelfSnapshot | null;
   opponent: ChessOpponentSnapshot | null;
   /** 전투 단계에만 있다. */

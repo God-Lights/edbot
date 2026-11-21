@@ -149,6 +149,8 @@ public struct ChessSnapshot: Codable, Equatable, Sendable {
     public let deployCap: Int
     /// 가격별 등장 확률(%) [1골드, 2골드, 3골드, 4골드]
     public let shopOdds: [Int]
+    /// 입문 모드(쉬운 캐릭터만 나온다). 오래된 서버면 nil.
+    public let lite: Bool?
     public let me: ChessSelfSnapshot?
     public let opponent: ChessOpponentSnapshot?
     public let combat: ChessCombatSnapshot?

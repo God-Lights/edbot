@@ -26,7 +26,8 @@ export function toChessSnapshot(game: ChessGame, viewerSeat: Seat | null, showCo
     round: game.round,
     maxRounds: MAX_ROUNDS,
     deployCap: deployCap(game.round),
-    shopOdds: shopOdds(game.round),
+    shopOdds: shopOdds(game.round, game.lite),
+    lite: game.lite,
     me: viewerSeat === null ? null : self(game.players[viewerSeat]),
     opponent: other ? { hp: other.hp, done: other.done, boardCount: other.board.length } : null,
     combat:

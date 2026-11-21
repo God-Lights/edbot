@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  BENCH_SIZE, MAX_ROUNDS, SHOP_SIZE, START_GOLD, START_HP, buy, concedeGame, createChessGame, deploy, deployCap, finishRound, interest,
+  BENCH_SIZE, LITE_IDS, MAX_ROUNDS, SHOP_SIZE, START_GOLD, START_HP, buy, concedeGame, createChessGame, deploy, deployCap, finishRound, interest,
   reroll, rerollCost, runRoundCombat, sell, setDone, shopOdds, startRound, toBench, bothDone, finalRoster,
 } from "../src/chess/game";
 import type { ChessGame, ChessPlayer } from "../src/chess/game";
+import { addBotIfNeeded, createRoom, joinRoom, setReady } from "../src/room-state";
 import { POOL_COPIES, ROSTER, unitDef } from "../src/chess/roster";
 
 const newGame = (seed = 1): ChessGame => {
@@ -356,3 +357,47 @@ describe("전투와 라운드 결과", () => {
     expect(finalRoster(g.players[0]).sort()).toEqual(["ancient-lord", "relic"]);
   });
 });
+
+describe("입문 모드", () => {
+  it("풀과 상점에 쉬운 캐릭터(1~2골드 11명)만 나온다", () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      const g = createChessGame(seed, true);
+      expect(Object.keys(g.pool).sort()).toEqual([...LITE_IDS].sort());
+      for (let r = 1; r <= MAX_ROUNDS; r++) {
+        startRound(g);
+        for (const p of g.players) for (const id of p.shop) expect(LITE_IDS).toContain(id);
+      }
+    }
+  });
+
+  it("확률은 3·4골드가 0이고 합이 100", () => {
+    for (let r = 1; r <= MAX_ROUNDS; r++) {
+      const odds = shopOdds(r, true);
+      expect(odds[2] + odds[3]).toBe(0);
+      expect(odds.reduce((a, b) => a + b, 0)).toBe(100);
+    }
+  });
+
+  it("테스트 대전 방은 입문 모드, 일반 방은 전체 캐릭터", () => {
+    const lite = chessRoomLite(true);
+    const full = chessRoomLite(false);
+    expect(lite.chess!.lite).toBe(true);
+    expect(full.chess!.lite).toBe(false);
+  });
+});
+
+function chessRoomLite(testMatch: boolean) {
+  let n = 0;
+  const state = createRoom("ADMN", 0, testMatch, "chess");
+  const ids: string[] = [];
+  for (const name of testMatch ? ["에드"] : ["에드", "상대"]) {
+    const r = joinRoom(state, { name }, 0, () => `id${++n}`);
+    if (!r.ok) throw new Error("join");
+    ids.push(r.player.id);
+  }
+  if (testMatch) addBotIfNeeded(state);
+  let s = 7;
+  const rng = () => ((s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296);
+  for (const p of state.players) setReady(state, p.id, true, 0, 1, rng);
+  return state;
+}
