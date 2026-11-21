@@ -27,6 +27,18 @@ export const api = {
     const r = await request(`/api/rooms/${encodeURIComponent(code)}`);
     return r.ok ? r.body : null;
   },
+  /** 빠른 대전 줄서기. { ticket, status, code } 또는 { error } */
+  async matchJoin(name) {
+    const r = await request(`/api/match/join?name=${encodeURIComponent(name)}`, { method: "POST" });
+    return r.ok ? r.body : { error: r.body?.error ?? "match_failed", status: r.status };
+  },
+  async matchPoll(ticket) {
+    const r = await request(`/api/match/poll?ticket=${encodeURIComponent(ticket)}`);
+    return r.ok ? r.body : { error: r.body?.error ?? "ticket_expired" };
+  },
+  async matchCancel(ticket) {
+    await request(`/api/match/cancel?ticket=${encodeURIComponent(ticket)}`, { method: "POST" });
+  },
   async chessCatalog() {
     const r = await request("/api/chess");
     return r.ok ? r.body : null;

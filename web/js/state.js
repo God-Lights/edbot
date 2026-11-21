@@ -28,6 +28,10 @@ export const S = {
   coachDismissed: load("edbot.coachDismissed") === "1",
   tipSeen: load("edbot.tipSeen") === "1",
   creating: false,
+  /** 빠른 대전 줄서기: null | { ticket, startedAt, waiting } */
+  quick: null,
+  /** 빠른 대전으로 들어온 방이면 로비에서 자동으로 준비한다 */
+  autoReady: false,
 };
 
 let renderFn = () => {};
@@ -108,6 +112,7 @@ export function leave(message = "") {
   S.status = "idle";
   S.selUid = null;
   S.selWeapon = null;
+  S.autoReady = false;
   S.message = message;
   renderFn();
 }

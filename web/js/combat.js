@@ -1,6 +1,7 @@
 // 전투 단계: 서버가 기록한 전투를 8x8 판에서 재생한다. 내 쪽이 항상 아래에 보인다.
 
 import { header, token } from "./prep.js";
+import { sfx } from "./sfx.js";
 import { S, conn, materialInfo, mySeat, synergyInfo } from "./state.js";
 import { BOARD, DEPLOY_ROWS, MINE, RARITY_COLOR, THEIRS, esc } from "./util.js";
 
@@ -56,6 +57,8 @@ export function combatView(room) {
     <div class="combat">
       <div class="arena-wrap"><div class="arena" id="arena">${cells}${units}
         <svg class="fx" viewBox="0 0 ${BOARD} ${BOARD}" preserveAspectRatio="none">${tiles}<g id="lines"></g></svg>
+        <div class="fxlayer" id="fxlayer"></div>
+        <div class="sd" id="sd" style="display:none">돌발 사망!</div>
         <div class="banner" id="banner" style="display:none"></div></div></div>
       <div class="side">
         ${teamList("내 기물", MINE, combat.boards[seat] ?? [])}
@@ -81,6 +84,76 @@ export function startPlayback(room) {
   const flip = (x, y) => (seat === 0 ? [x, y] : [BOARD - 1 - x, BOARD - 1 - y]);
   const duration = (room.phaseEndsAt ?? 0) - room.phaseStartedAt;
   const beatMs = duration / (combat.beats + 3);
+  const fxlayer = arena.querySelector("#fxlayer");
+  const sd = arena.querySelector("#sd");
+  let spawned = null; // 마지막으로 연출을 낸 박자
+  let bannerSounded = false;
+  let sdSounded = false;
+
+  /** 판 위(칸 좌표)에 떠오르는 글자 */
+  const floatText = (cx, cy, text, cls) => {
+    const el = document.createElement("div");
+    el.className = `float ${cls}`;
+    el.textContent = text;
+    el.style.left = `${(cx + 0.5) * 12.5}%`;
+    el.style.top = `${(cy + 0.15) * 12.5}%`;
+    fxlayer.appendChild(el);
+    setTimeout(() => el.remove(), 1100);
+  };
+  const ring = (cx, cy, color) => {
+    const el = document.createElement("div");
+    el.className = "ring";
+    el.style.left = `${(cx + 0.5) * 12.5}%`;
+    el.style.top = `${(cy + 0.5) * 12.5}%`;
+    el.style.borderColor = color;
+    fxlayer.appendChild(el);
+    setTimeout(() => el.remove(), 700);
+  };
+  const flash = (i, cls) => {
+    const el = els[i];
+    if (!el) return;
+    el.classList.remove("hit", "heal");
+    void el.offsetWidth;
+    el.classList.add(cls);
+  };
+
+  /** k박자에서 k+1박자로 넘어가는 순간의 연출과 소리: 피해 숫자, 회복, 능력, 쓰러짐, 승급, 채굴 */
+  const spawnBeat = (j) => {
+    if (j < 0 || j >= combat.beats) return;
+    let hits = 0;
+    combat.units.forEach((u, i) => {
+      const a = combat.frames[j]?.[i];
+      const b = combat.frames[j + 1]?.[i];
+      if (!a || !b || (a[5] & 1) === 0) return;
+      const delta = b[2] - a[2];
+      const [x, y] = flip(a[0], a[1]);
+      if (delta <= -1) {
+        floatText(x, y, `-${Math.round(-delta)}`, u.seat === seat ? "dmg mine" : "dmg theirs");
+        flash(i, "hit");
+        hits += 1;
+      } else if (delta >= 1) {
+        floatText(x, y, `+${Math.round(delta)}`, "heal");
+        flash(i, "heal");
+      }
+    });
+    if (hits > 0) sfx.play("hit");
+    for (const e of combat.events) {
+      if (e[0] !== j + 1) continue;
+      const a = combat.frames[j]?.[e[2]] ?? combat.frames[j + 1]?.[e[2]];
+      const [x, y] = a ? flip(a[0], a[1]) : [0, 0];
+      if (e[1] === "ability" && a) { ring(x, y, "#b040be"); sfx.play("ability"); }
+      else if (e[1] === "death") sfx.play("death");
+      else if (e[1] === "promote" && a) { floatText(x, y, "♛ 승급!", "promo"); sfx.play("promote"); }
+      else if (e[1] === "mine") {
+        const tile = combat.tiles[e[3]];
+        if (tile) {
+          const [tx, ty] = flip(tile.x, tile.y);
+          floatText(tx, ty, `+${materialInfo(e[4])?.nameKo ?? "재료"}`, "mine-get");
+          sfx.play("mine");
+        }
+      }
+    }
+  };
 
   const tick = () => {
     if (myRun !== runId || !arena.isConnected) return;
@@ -89,6 +162,12 @@ export function startPlayback(room) {
     const pos = beatMs > 0 ? Math.min(Math.max(elapsed / beatMs - 1, 0), combat.beats) : 0;
     const k = Math.floor(pos);
     const mined = minedTiles(combat, k);
+    // 새로 넘어간 박자마다 연출을 낸다. (탭이 가려졌다 돌아와서 많이 밀렸으면 건너뛴다)
+    if (spawned === null) spawned = k - 1;
+    if (k - spawned > 3) spawned = k - 1;
+    while (spawned < k && pos < combat.beats) { spawned += 1; spawnBeat(spawned); }
+    sd.style.display = k + 1 >= 20 && pos < combat.beats ? "" : "none";
+    if (k + 1 >= 20 && !sdSounded) { sdSounded = true; sfx.play("suddenDeath"); }
 
     combat.units.forEach((u, i) => {
       const el = els[i];
@@ -131,6 +210,7 @@ export function startPlayback(room) {
       banner.style.display = "";
       banner.textContent = win == null ? "무승부" : win === seat ? "라운드 승리" : "라운드 패배";
       banner.style.color = win == null ? "#d1d1d6" : win === seat ? "#6bd98c" : "#ff7566";
+      if (!bannerSounded) { bannerSounded = true; sfx.play(win == null ? "click" : win === seat ? "roundWin" : "roundLose"); }
     } else {
       banner.style.display = "none";
     }

@@ -6,6 +6,7 @@ import { guideModal, openGuide } from "./guide.js";
 import { autoPlace, S, act, conn, join, leave, me, mySeat, setRender, store, toast, update } from "./state.js";
 import { prepView } from "./prep.js";
 import { openRanking, rankingModal } from "./ranking.js";
+import { sfx } from "./sfx.js";
 import { PHASE_NAME, REASON_TEXT, countdown, esc } from "./util.js";
 
 const app = document.getElementById("app");
@@ -24,7 +25,8 @@ function lobbyView() {
     <div class="menu">
       ${account}
       <div class="panel stack">
-        <button class="btn primary wide" data-act="create"${S.creating ? " disabled" : ""}>${S.creating ? "방을 만드는 중..." : "방 만들기"}</button>
+        <button class="btn primary wide" data-act="quick"${S.quick ? " disabled" : ""}>⚔ 빠른 대전 (비슷한 실력의 상대 찾기)</button>
+        <button class="btn sec wide" data-act="create"${S.creating ? " disabled" : ""}>${S.creating ? "방을 만드는 중..." : "방 만들기"}</button>
         <div class="two"><button class="btn sec" data-act="ranking">🏆 랭킹</button><button class="btn sec" data-act="guide" data-tab="flow">📖 게임 가이드</button></div>
         <button class="btn sec wide" data-act="join-code" data-code="ADMN">🤖 연습 대전 (봇과 한 판, 쉬운 캐릭터만)</button>
         <button class="btn sec wide" data-act="join-code" data-code="ADMF">🤖 전체 대전 (봇, 모든 캐릭터와 자원 시스템)</button>
@@ -33,6 +35,15 @@ function lobbyView() {
           <button class="btn sec" type="submit">입장</button></form>
       </div>
     </div></div>`;
+}
+
+function quickView() {
+  const waited = Math.floor((Date.now() - S.quick.startedAt) / 1000);
+  return `<div class="center-msg"><div class="spinner"></div><h2>상대를 찾는 중...</h2>
+    <div class="sub" data-quick="${S.quick.startedAt}">${waited}초 · 대기 중 ${S.quick.waiting ?? 1}명</div>
+    <div class="sub">오래 기다릴수록 더 넓은 실력의 상대와 붙어요.</div>
+    ${waited >= 20 ? `<div class="sub warn">상대가 없나요? 연습 대전으로 먼저 연습해 보세요.</div>` : ""}
+    <button class="btn sec" data-act="quick-cancel">취소</button></div>`;
 }
 
 function roomLobbyView(room) {
@@ -70,7 +81,7 @@ function roomShell(room) {
     default: body = `<div class="center-msg">이 웹 버전은 체스판 자동 전투만 지원해요. (${esc(PHASE_NAME[room.phase] ?? room.phase)})</div>`;
   }
   return `<div class="topbar"><img class="mini-logo" src="assets/logo.png" alt=""><b class="mono">${esc(room.code)}</b><span class="grow"></span>${players}
-    <button class="btn sec" data-act="guide" data-tab="flow">📖 가이드</button><button class="btn sec" data-act="leave">나가기</button></div>
+    <button class="btn sec" data-act="mute" title="효과음">${sfx.muted ? "🔇" : "🔊"}</button><button class="btn sec" data-act="guide" data-tab="flow">📖 가이드</button><button class="btn sec" data-act="leave">나가기</button></div>
     ${S.status === "reconnecting" ? `<div class="warn center">다시 연결하는 중...</div>` : ""}<div class="room">${body}</div>`;
 }
 
@@ -83,7 +94,7 @@ function render() {
   // 전투 재생은 화면을 다시 그릴 때만 다시 시작한다.
   stopPlayback();
   const modalScroll = document.querySelector(".modal-body")?.scrollTop ?? 0;
-  app.innerHTML = (inRoom ? roomShell(room) : S.status === "connecting" ? `<div class="center-msg">접속하는 중...</div>` : lobbyView())
+  app.innerHTML = (inRoom ? roomShell(room) : S.quick ? quickView() : S.status === "connecting" ? `<div class="center-msg">접속하는 중...</div>` : lobbyView())
     + (S.modal === "guide" ? guideModal() : S.modal === "ranking" ? rankingModal() : "");
   const modalBody = document.querySelector(".modal-body");
   if (modalBody) modalBody.scrollTop = modalScroll;
@@ -95,7 +106,16 @@ function render() {
       try { el.setSelectionRange(keepFocus.start, keepFocus.end); } catch { /* 입력칸이 아니면 무시 */ }
     }
   }
-  lastPhaseKey = room ? `${room.phase}:${room.chess?.round ?? 0}` : "";
+  const phaseKey = room ? `${room.phase}:${room.chess?.round ?? 0}` : "";
+  if (room?.phase === "result" && lastPhaseKey !== phaseKey) {
+    const seat = mySeat();
+    const winner = room.result?.winner;
+    sfx.play(winner == null ? "click" : winner === seat ? "win" : "lose");
+  }
+  lastPhaseKey = phaseKey;
+  // 빠른 대전으로 들어온 방은 로비에서 자동으로 준비한다.
+  if (inRoom && S.autoReady && room.phase === "lobby" && me() && !me().ready) act.ready(true);
+  if (inRoom && room.phase !== "lobby") S.autoReady = false;
   if (S.message) {
     toastEl.textContent = S.message;
     toastEl.hidden = false;
@@ -142,6 +162,50 @@ function benchClick(slot) {
   else if (mine.board.some((u) => u.uid === S.selUid)) act.bench(S.selUid); // 판 위의 기물을 빈 대기석으로
 }
 
+// ---- 빠른 대전 ----
+
+let quickTimer = null;
+
+async function quickMatch() {
+  if (S.quick) return;
+  update({ message: "" });
+  const joined = await api.matchJoin(S.user?.nickname ?? S.name);
+  if (joined.error) {
+    toast(joined.status === 401 ? "로그인이 필요해요. 로그인하기를 눌러 주세요." : "매칭을 시작할 수 없어요.");
+    return;
+  }
+  if (joined.code) return startQuickRoom(joined.code);
+  update({ quick: { ticket: joined.ticket, startedAt: Date.now(), waiting: joined.waiting } });
+  clearInterval(quickTimer);
+  quickTimer = setInterval(async () => {
+    if (!S.quick) return clearInterval(quickTimer);
+    const status = await api.matchPoll(S.quick.ticket);
+    if (status.error) {
+      clearInterval(quickTimer);
+      update({ quick: null });
+      toast("매칭이 끊겼어요. 다시 시도해 주세요.");
+    } else if (status.code) {
+      clearInterval(quickTimer);
+      startQuickRoom(status.code);
+    } else {
+      S.quick.waiting = status.waiting;
+    }
+  }, 1500);
+}
+
+function startQuickRoom(code) {
+  update({ quick: null });
+  join(code);
+  S.autoReady = true; // join()이 먼저 비우므로 그 뒤에 켠다
+}
+
+async function cancelQuick() {
+  clearInterval(quickTimer);
+  const ticket = S.quick?.ticket;
+  update({ quick: null });
+  if (ticket) await api.matchCancel(ticket);
+}
+
 async function createRoom() {
   update({ creating: true, message: "" });
   const result = await api.createRoom();
@@ -155,8 +219,13 @@ document.addEventListener("click", (event) => {
   const el = event.target.closest("[data-act]");
   if (!el || el.disabled) return;
   const d = el.dataset;
+  const SFX = { buy: "buy", market: "buy", smelt: "buy", sell: "sell", "sell-sel": "sell", cell: "place", auto: "place", done: "ready", ready: "ready", reroll: "click", "pick-weapon": "click", "bench-slot": "click" };
+  if (SFX[d.act]) sfx.play(SFX[d.act]);
   switch (d.act) {
     case "create": createRoom(); break;
+    case "mute": sfx.toggle(); render(); break;
+    case "quick": quickMatch(); break;
+    case "quick-cancel": cancelQuick(); break;
     case "join-code": join(d.code); break;
     case "ranking": openRanking(); break;
     case "guide": openGuide(d.tab); break;
@@ -242,6 +311,9 @@ document.addEventListener("drop", (event) => {
 // ---- 시간 표시: 화면을 다시 그리지 않고 글자만 갱신한다 ----
 
 setInterval(() => {
+  for (const el of document.querySelectorAll("[data-quick]")) {
+    el.textContent = `${Math.floor((Date.now() - Number(el.dataset.quick)) / 1000)}초 · 대기 중 ${S.quick?.waiting ?? 1}명`;
+  }
   for (const el of document.querySelectorAll("[data-timer]")) {
     const end = el.dataset.timer ? Number(el.dataset.timer) : null;
     const text = countdown(conn.remainingMs(end));
