@@ -40,6 +40,14 @@ final class AppModel {
     /// 전투 중 유닛 위치를 부드럽게 보이게 하는 보간기. 화면이 매 프레임 읽는다.
     let interpolator = BattleInterpolator()
 
+    // 랭킹
+    private(set) var leaderboard: [LeaderboardEntry] = []
+    private(set) var myStats: PlayerStats?
+    private(set) var myMatches: [MatchSummary] = []
+    private(set) var isLoadingRanking = false
+    private(set) var rankingError: String?
+    var showRanking = false
+
     // 가이드와 시너지
     private(set) var synergies: [SynergyInfo] = []
     /// 가이드 화면을 열어 두었는가. (방 안에서도 열 수 있고, 열어 둔 동안에도 게임은 계속된다)
@@ -125,6 +133,43 @@ final class AppModel {
     }
 
     // MARK: 탐사·대장간
+
+    /// 랭킹 화면을 열고 최신 순위와 내 전적을 불러온다. 로그인하지 않았으면 순위만 가져온다.
+    func openRanking() {
+        showRanking = true
+        refreshRanking()
+    }
+
+    func refreshRanking() {
+        guard !isLoadingRanking, let url = serverURL else { return }
+        isLoadingRanking = true
+        rankingError = nil
+        let token = authToken
+        Task {
+            defer { isLoadingRanking = false }
+            do {
+                let api = ApiClient(baseURL: url, authToken: token)
+                leaderboard = try await api.leaderboard(limit: 20)
+                if token != nil {
+                    do {
+                        myStats = try await api.myStats()
+                        myMatches = try await api.myMatches(limit: 10)
+                    } catch ApiError.unauthorized {
+                        clearLogin() // 로그인이 만료되었다
+                        myStats = nil
+                        myMatches = []
+                    }
+                } else {
+                    myStats = nil
+                    myMatches = []
+                }
+            } catch ApiError.status(503) {
+                rankingError = "랭킹 서버가 아직 준비되지 않았어요. 잠시 뒤에 다시 시도해 주세요."
+            } catch {
+                rankingError = "랭킹을 불러오지 못했어요: \(error.localizedDescription)"
+            }
+        }
+    }
 
     func synergy(_ id: String) -> SynergyInfo? { synergies.first { $0.id == id } }
 

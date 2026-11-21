@@ -16,6 +16,7 @@ struct RootView: View {
         }
         // 가이드는 로비에서도, 방 안에서도 열 수 있다. (방 안에서 열어 둔 동안에도 게임은 계속된다)
         .sheet(isPresented: $model.showGuide) { GuideView() }
+        .sheet(isPresented: $model.showRanking) { RankingView() }
     }
 }
 
@@ -104,10 +105,16 @@ struct LobbyView: View {
             .buttonStyle(PrimaryButtonStyle())
             .disabled(model.isCreatingRoom)
 
-            Button { model.openGuide() } label: {
-                Label("게임 가이드", systemImage: "book").frame(maxWidth: .infinity)
+            HStack(spacing: 10) {
+                Button { model.openRanking() } label: {
+                    Label("랭킹", systemImage: "trophy").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                Button { model.openGuide() } label: {
+                    Label("게임 가이드", systemImage: "book").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(SecondaryButtonStyle())
             }
-            .buttonStyle(SecondaryButtonStyle())
 
             Button { model.joinTestMatch() } label: {
                 Label("테스트 대전 (봇과 한 판)", systemImage: "cpu").frame(maxWidth: .infinity)

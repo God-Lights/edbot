@@ -207,6 +207,26 @@ enum Labels {
         }
     }
 
+    static func matchResult(_ result: String) -> String {
+        switch result {
+        case "win": return "승"
+        case "loss": return "패"
+        case "draw": return "무"
+        default: return result
+        }
+    }
+
+    /// 레이팅 변화를 "+20" 형태로.
+    static func delta(_ value: Int) -> String { value > 0 ? "+\(value)" : "\(value)" }
+
+    /// 서버 시각(ms)을 "11월 21일 14:35" 형태로.
+    static func matchDate(_ ms: Int64) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ko_KR")
+        formatter.dateFormat = "M월 d일 HH:mm"
+        return formatter.string(from: Date(timeIntervalSince1970: Double(ms) / 1000))
+    }
+
     static func countdown(_ ms: Int64?) -> String {
         guard let ms else { return "-" }
         return "\((ms + 999) / 1000)초" // 올림해서 0초가 되기 전까지 1초로 보인다

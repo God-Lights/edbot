@@ -420,6 +420,8 @@ struct ResultView: View {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 Text("\(Labels.countdown(model.remainingMs(now: context.date))) 뒤 로비로 돌아가요").foregroundStyle(.secondary)
             }
+            Button { model.openRanking() } label: { Label("랭킹 보기", systemImage: "trophy") }
+                .buttonStyle(SecondaryButtonStyle())
             Spacer()
         }
     }

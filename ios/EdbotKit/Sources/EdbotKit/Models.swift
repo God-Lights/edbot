@@ -95,6 +95,55 @@ public struct GameSnapshot: Codable, Equatable, Sendable {
     }
 }
 
+// MARK: 랭킹 (5단계)
+
+/// 랭킹 한 줄. 서버는 사용자 id를 내보내지 않고, 내 줄에만 isMe가 붙는다.
+public struct LeaderboardEntry: Codable, Equatable, Sendable, Identifiable {
+    public let rank: Int
+    public let nickname: String
+    public let rating: Int
+    public let games: Int
+    public let wins: Int
+    public let losses: Int
+    public let draws: Int
+    public let isMe: Bool
+
+    public var id: Int { rank }
+}
+
+/// 내 전적과 순위.
+public struct PlayerStats: Codable, Equatable, Sendable {
+    public let nickname: String
+    public let rating: Int
+    public let rank: Int
+    public let games: Int
+    public let wins: Int
+    public let losses: Int
+    public let draws: Int
+
+    /// 승률(0~1). 한 판도 안 했으면 0.
+    public var winRate: Double { games > 0 ? Double(wins) / Double(games) : 0 }
+}
+
+/// 내 최근 판 하나. 점수와 처치는 [내 쪽, 상대 쪽] 순서다.
+public struct MatchSummary: Codable, Equatable, Sendable, Identifiable {
+    public let endedAt: Int64
+    public let opponent: String
+    /// win | loss | draw
+    public let result: String
+    /// towers | time | deathmatch | deathmatchTime
+    public let reason: String
+    public let score: [Int]
+    public let kills: [Int]
+    public let picks: [String]
+    public let opponentPicks: [String]
+    public let ratingBefore: Int
+    public let ratingAfter: Int
+
+    public var id: Int64 { endedAt }
+    public var ratingDelta: Int { ratingAfter - ratingBefore }
+}
+
 // MARK: 탐사와 대장간 (4단계)
 
 /// 탐사 지도의 칸 하나.
