@@ -46,7 +46,9 @@ jobs:
     needs: kit-tests
     runs-on: macos-15
     permissions:
-      contents: write # 태그일 때 릴리스에 올리려고
+      contents: write # 릴리스에 올리려고
+    outputs:
+      release: ${{ steps.version.outputs.release }}
     steps:
       - uses: actions/checkout@v4
 
@@ -129,3 +131,37 @@ jobs:
             --target "${GITHUB_SHA}" \
             --title "COMMANDER iPad ${VERSION}" \
             --notes "서명 없는 .ipa 입니다. SideStore 소스 https://edgame-api.officialgl.com/sidestore.json 를 추가하거나, Sideloadly/AltStore 로 본인 Apple ID 로 서명해서 설치하세요."
+
+  # 릴리스를 올린 뒤, 서버(/sidestore.json)가 가져다 쓸 SideStore 소스 파일을 만들어 고정 릴리스 sidestore-source 에 올린다.
+  # 서버가 GitHub API 대신 이 파일을 읽는다. (Workers 의 공유 IP 에서는 API 호출 한도에 걸려 403 이 난다)
+  publish-source:
+    name: SideStore 소스 갱신
+    needs: build-ipa
+    if: needs.build-ipa.outputs.release != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 소스 파일 만들기
+        working-directory: server
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=50" > "$RUNNER_TEMP/releases.json"
+          node --experimental-strip-types --no-warnings scripts/make-sidestore-source.mjs \
+            "$RUNNER_TEMP/releases.json" "https://edgame-api.officialgl.com/sidestore.json" > "$RUNNER_TEMP/sidestore.json"
+          cat "$RUNNER_TEMP/sidestore.json"
+
+      - name: 고정 릴리스에 올리기
+        run: |
+          if ! gh release view sidestore-source --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release create sidestore-source --repo "${GITHUB_REPOSITORY}" --target "${GITHUB_SHA}" --prerelease \
+              --title "SideStore 소스 (자동 생성)" \
+              --notes "서버의 /sidestore.json 이 읽어 가는 파일입니다. iOS 릴리스를 올릴 때마다 자동으로 갱신되며 직접 고치지 마세요."
+          fi
+          gh release upload sidestore-source "$RUNNER_TEMP/sidestore.json" --repo "${GITHUB_REPOSITORY}" --clobber

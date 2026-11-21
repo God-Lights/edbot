@@ -97,3 +97,33 @@ export function buildSource(releases: GithubRelease[], sourceURL: string): unkno
     news: [],
   };
 }
+
+/** 릴리스 때 워크플로가 올려 두는 소스 파일의 주소(고정). GitHub API가 아니라 일반 다운로드라서 호출 한도가 없다. */
+export const SOURCE_ASSET_URL = "https://github.com/God-Lights/edbot/releases/download/sidestore-source/sidestore.json";
+
+export type SourceResult = { ok: true; body: string } | { ok: false };
+
+/**
+ * 서버가 내보낼 소스 JSON을 가져온다.
+ * - 워크플로가 올린 sidestore.json이 있으면 그대로 쓴다. (정확한 용량과 날짜가 들어 있다)
+ * - 아직 올린 적이 없으면(404) 앱이 없는 빈 소스를 만든다.
+ * - 그 밖의 오류나 깨진 JSON은 실패로 본다.
+ *
+ * GitHub API(api.github.com)를 쓰지 않는 이유: Cloudflare Workers의 공유 IP에서는
+ * 비로그인 호출 한도(시간당 60회)를 금방 넘겨서 403이 난다.
+ */
+export async function loadSourceJson(
+  sourceURL: string,
+  fetcher: (url: string, init?: RequestInit) => Promise<Response> = fetch,
+): Promise<SourceResult> {
+  try {
+    const res = await fetcher(SOURCE_ASSET_URL, { headers: { "user-agent": "commander-server" }, redirect: "follow" });
+    if (res.status === 404) return { ok: true, body: JSON.stringify(buildSource([], sourceURL)) };
+    if (!res.ok) return { ok: false };
+    const body = await res.text();
+    JSON.parse(body); // 깨진 파일을 SideStore에 넘기지 않는다
+    return { ok: true, body };
+  } catch {
+    return { ok: false };
+  }
+}

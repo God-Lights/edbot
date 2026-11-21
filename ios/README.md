@@ -50,3 +50,6 @@ git tag ios-v0.2.0 && git push origin ios-v0.2.0
 ```
 
 워크플로가 그 버전 번호로 `.ipa`를 만들어 릴리스에 `Commander.ipa`와 `icon.png`(소스의 앱 아이콘)를 올립니다. 릴리스를 올리기 전에는 소스에 앱이 보이지 않습니다. AltStore에도 같은 주소로 소스를 추가할 수 있습니다.
+
+### 소스가 만들어지는 방식
+서버의 `/sidestore.json` 은 GitHub API가 아니라, 릴리스를 올릴 때 워크플로(`SideStore 소스 갱신` 작업)가 만들어 고정 릴리스 **`sidestore-source`** 에 올려 둔 `sidestore.json` 파일을 읽어 와서 5분 캐시합니다. (GitHub API는 Cloudflare Workers의 공유 IP에서 호출 한도에 걸려 `releases_unavailable` 오류가 났습니다.) 그래서 iOS 릴리스를 한 번도 올리지 않은 동안에는 앱이 없는 빈 소스가 나가고, 릴리스를 올리면 자동으로 채워집니다. `sidestore-source` 릴리스는 직접 지우거나 고치지 마세요.
