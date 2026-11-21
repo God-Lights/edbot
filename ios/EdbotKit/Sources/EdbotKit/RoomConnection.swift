@@ -104,6 +104,12 @@ public actor RoomConnection {
     public func sendPlace(_ characterId: String, lane: Lane) async -> Bool {
         await send(MessageCodec.place(characterId, lane: lane))
     }
+    public func sendUltimate(_ characterId: String, lane: Lane? = nil) async -> Bool {
+        await send(MessageCodec.ultimate(characterId, lane: lane))
+    }
+    public func sendMoveLane(_ characterId: String, lane: Lane) async -> Bool {
+        await send(MessageCodec.move(characterId, lane: lane))
+    }
     public func sendLock() async -> Bool { await send(MessageCodec.lock()) }
 
     public func sendReady(_ ready: Bool) async -> Bool {

@@ -31,6 +31,13 @@ enum Labels {
         case ErrorCode.alreadyDone: return "이미 정했어요. 바꿀 수 없어요."
         case ErrorCode.notYourCharacter: return "내 팀의 캐릭터가 아니에요."
         case ErrorCode.invalidLane: return "올바르지 않은 레인이에요."
+        case ErrorCode.unitDead: return "쓰러진 캐릭터예요."
+        case ErrorCode.unitDisabled: return "움직일 수 없는 상태예요."
+        case ErrorCode.notImplemented: return "아직 쓸 수 없는 궁극기예요."
+        case ErrorCode.onCooldown: return "아직 쓸 수 없어요. (재사용 대기)"
+        case ErrorCode.notEnoughSteam: return "스팀포스가 부족해요."
+        case ErrorCode.noTarget: return "대상이 없어요."
+        case ErrorCode.notAKnight: return "나이트만 레인을 옮길 수 있어요."
         default: return nil
         }
     }
@@ -91,6 +98,16 @@ enum Labels {
         case "mid": return "중거리"
         case "long": return "원거리"
         default: return tier
+        }
+    }
+
+    static func resultReason(_ reason: String) -> String {
+        switch reason {
+        case "towers": return "본진 타워 파괴"
+        case "time": return "시간 종료 (점수)"
+        case "deathmatch": return "데스매치 전멸"
+        case "deathmatchTime": return "데스매치 시간 종료 (남은 체력)"
+        default: return reason
         }
     }
 

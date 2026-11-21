@@ -55,6 +55,18 @@ public enum MessageCodec {
     /// 배치를 확정한다. 정하지 않은 캐릭터는 기본 레인으로 간다.
     public static func lock() -> String { "{\"t\":\"lock\"}" }
 
+    /// 전투 중 궁극기를 쓴다 (스팀포스 5, 40초 재사용). 안키오처럼 레인을 골라야 하는 캐릭터만 lane을 넘긴다.
+    public static func ultimate(_ characterId: String, lane: Lane? = nil) -> String {
+        var json = "{\"t\":\"ultimate\",\"characterId\":\(quoted(characterId))"
+        if let lane { json += ",\"lane\":\"\(lane.rawValue)\"" }
+        return json + "}"
+    }
+
+    /// 전투 중 나이트가 다른 레인으로 옮겨 간다.
+    public static func move(_ characterId: String, lane: Lane) -> String {
+        "{\"t\":\"move\",\"characterId\":\(quoted(characterId)),\"lane\":\"\(lane.rawValue)\"}"
+    }
+
     private static func characterMessage(_ type: String, _ characterId: String) -> String {
         "{\"t\":\"\(type)\",\"characterId\":\(quoted(characterId))}"
     }
