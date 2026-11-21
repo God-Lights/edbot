@@ -232,3 +232,55 @@ export function runCombat(boards: [Placement[], Placement[]]): CombatResult {
 }
 
 export { neutralBonus };
+
+
+/** 클라이언트가 전투를 그대로 재생할 수 있게 박자마다 상태를 기록한 결과. 좌표는 판의 절대 좌표(seat 0이 아래)다. */
+export interface RecordedUnit {
+  defId: string;
+  seat: Seat;
+  star: 1 | 2;
+  maxHp: number;
+  summon: boolean;
+}
+
+/** [x, y, hp, energy, shield, flags(1=살아 있음, 2=승급)] 박자 k의 상태. 아직 생기지 않은 소환수는 없다(배열이 짧다). */
+export type FrameUnit = [number, number, number, number, number, number];
+
+/** [박자, 종류, 행동한 기물 번호, 대상 기물 번호(없으면 -1), 능력 id] 종류: attack | ability | death | promote | move */
+export type RecordedEvent = [number, string, number, number, string];
+
+export interface CombatRecording {
+  result: CombatResult;
+  units: RecordedUnit[];
+  /** frames[0]은 시작 모습, frames[k]는 k번째 박자가 끝난 모습 */
+  frames: FrameUnit[][];
+  events: RecordedEvent[];
+}
+
+const r1 = (n: number): number => Math.round(n * 10) / 10;
+
+function snapshotFrame(state: CombatState): FrameUnit[] {
+  return state.units.map((u) => [u.x, u.y, Math.max(0, r1(u.hp)), r1(u.energy), r1(u.shield), (u.alive ? 1 : 0) | (u.promoted ? 2 : 0)]);
+}
+
+/** 끝까지 돌리면서 박자마다 기록한다. 결과는 runCombat과 같다. */
+export function recordCombat(boards: [Placement[], Placement[]]): CombatRecording {
+  const state = createCombat(boards);
+  const frames: FrameUnit[][] = [snapshotFrame(state)];
+  while (!state.finished) {
+    stepCombat(state);
+    frames.push(snapshotFrame(state));
+  }
+  const index = new Map(state.units.map((u, i) => [u.id, i]));
+  const events: RecordedEvent[] = [];
+  for (const e of state.events) {
+    if (e.type === "suddenDeath" || e.type === "end") continue;
+    events.push([e.beat, e.type, index.get(e.unitId ?? "") ?? -1, index.get(e.targetId ?? "") ?? -1, e.text ?? ""]);
+  }
+  return {
+    result: { winner: state.winner, survivors: state.survivors, beats: state.beat, suddenDeath: state.beat >= SUDDEN_DEATH_BEAT },
+    units: state.units.map((u) => ({ defId: u.defId, seat: u.seat, star: u.star, maxHp: Math.round(u.maxHp), summon: u.summon })),
+    frames,
+    events,
+  };
+}

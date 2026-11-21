@@ -159,7 +159,9 @@ export default {
     if (request.method === "POST" && parts.length === 2 && parts[0] === "api" && parts[1] === "rooms") {
       for (let attempt = 0; attempt < MAX_CREATE_ATTEMPTS; attempt++) {
         const code = generateRoomCode();
-        if (await roomStub(env, code).init(code)) {
+        // 기본은 체스판 자동 전투. 옛 레인 타워 게임은 ?mode=lanes
+        const mode = url.searchParams.get("mode") === "lanes" ? "lanes" : "chess";
+        if (await roomStub(env, code).init(code, false, mode)) {
           return json({ code }, 201);
         }
       }
@@ -222,7 +224,7 @@ export default {
         // 아직 만들어지지 않았어도 들어갈 수 있다. (들어가는 순간 만들어진다)
         const me = await identify(env, request);
         const info = me || !enabled ? await testRoomStub(env, testOwner(me, request)).info() : null;
-        return json(info ?? { code: TEST_ROOM_CODE, phase: "lobby", players: 0, joinable: true });
+        return json(info ?? { code: TEST_ROOM_CODE, phase: "lobby", players: 0, joinable: true, mode: "chess" });
       }
       const info = await roomStub(env, code).info();
       return info ? json(info) : json({ error: "room_not_found" }, 404);

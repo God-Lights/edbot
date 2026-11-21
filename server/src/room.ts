@@ -12,6 +12,7 @@ import {
   joinRoom,
   nextDeadline,
   playerBan,
+  playerChess,
   playerLock,
   playerExplore,
   playerForge,
@@ -40,6 +41,7 @@ export interface RoomInfo {
   phase: string;
   players: number;
   joinable: boolean;
+  mode: string;
 }
 
 /**
@@ -66,9 +68,9 @@ export class Room extends DurableObject<Env> {
   // ---- Worker가 부르는 RPC ----
 
   /** 방을 처음 만든다. 이미 있으면 false. (코드가 겹쳤을 때 Worker가 다른 코드로 다시 시도한다.) */
-  async init(code: string, testMatch = false): Promise<boolean> {
+  async init(code: string, testMatch = false, mode: "lanes" | "chess" = "chess"): Promise<boolean> {
     if (this.state) return false;
-    this.state = createRoom(code, Date.now(), testMatch);
+    this.state = createRoom(code, Date.now(), testMatch, mode);
     await this.persist();
     return true;
   }
@@ -80,6 +82,7 @@ export class Room extends DurableObject<Env> {
       phase: this.state.phase,
       players: this.state.players.length,
       joinable: this.state.phase === "lobby" && this.state.players.length < 2,
+      mode: this.state.mode,
     };
   }
 
@@ -185,6 +188,14 @@ export class Room extends DurableObject<Env> {
           ws,
           playerUltimate(this.state, playerId, msg.characterId, msg.lane, now, scale),
         );
+        return;
+      case "buy":
+      case "sell":
+      case "reroll":
+      case "deploy":
+      case "bench":
+      case "done":
+        await this.finishAction(ws, playerChess(this.state, playerId, msg, now, scale));
         return;
       case "surrender":
         await this.finishAction(ws, playerSurrender(this.state, playerId, now, scale));

@@ -23,6 +23,12 @@ import type { MatchInput } from "./ranking/store";
 import { createBattle, TICKS_PER_SECOND } from "./battle/core";
 import type { BattleState } from "./battle/core";
 import { activeSynergyIds } from "./synergy";
+import {
+  boardPlacements, bothDone, buy, concedeGame, createChessGame, deploy, finalRoster, finishRound, prepSeconds, reroll,
+  runRoundCombat, sell, setDone, startRound, toBench, COMBAT_LINGER_SECONDS,
+} from "./chess/game";
+import type { ChessGame, ChessResult } from "./chess/game";
+import { toChessSnapshot } from "./chess/snapshot";
 import { toBattleSnapshot } from "./battle/snapshot";
 import { awardKill, createExplore, startAmbush, startGather, startScout, stepExplore } from "./explore/explore";
 import type { ExploreState } from "./explore/explore";
@@ -55,6 +61,8 @@ export const LOBBY_GRACE_MS = 30_000;
 /** 아무도 접속해 있지 않은 방을 이 시간 뒤에 지운다. */
 export const ROOM_IDLE_MS = 10 * 60_000;
 
+export type RoomMode = "lanes" | "chess";
+
 export interface PlayerState {
   id: string;
   token: string;
@@ -79,6 +87,8 @@ export interface RoomState {
   game: GameState | null;
   /** 전투와 데스매치의 시뮬레이션. 그 외에는 null. */
   battle: BattleState | null;
+  /** 체스판 자동 전투 상태(chess 모드). 준비 단계부터 판이 끝날 때까지. */
+  chess: ChessGame | null;
   /** 탐사 지도와 자원. 탐사 단계부터 판이 끝날 때까지. 그 외에는 null. */
   explore: ExploreState | null;
   /** 탐사가 여기까지 진행됐다는 서버 시각(ms). 틱 하나는 tickMs. */
@@ -96,13 +106,15 @@ export interface RoomState {
   recorded: boolean;
   /** 테스트 대전 방(코드 ADMN)이다. 혼자 들어오면 봇이 상대를 맡는다. */
   testMatch: boolean;
+  /** lanes: 옛 레인 타워 게임, chess: 체스판 자동 전투 */
+  mode: RoomMode;
   createdAt: number;
   lastActiveAt: number;
 }
 
 type Failure = { ok: false; code: ErrorCode; message: string };
 
-export function createRoom(code: string, now: number, testMatch = false): RoomState {
+export function createRoom(code: string, now: number, testMatch = false, mode: RoomMode = "lanes"): RoomState {
   return {
     code,
     phase: "lobby",
@@ -111,6 +123,7 @@ export function createRoom(code: string, now: number, testMatch = false): RoomSt
     players: [],
     game: null,
     battle: null,
+    chess: null,
     explore: null,
     exploreClock: now,
     killsAwardedSeq: 0,
@@ -120,6 +133,7 @@ export function createRoom(code: string, now: number, testMatch = false): RoomSt
     matchStartedAt: now,
     recorded: false,
     testMatch,
+    mode,
     createdAt: now,
     lastActiveAt: now,
   };
@@ -246,7 +260,7 @@ export function setReady(
   const everyoneReady =
     state.players.length === MAX_PLAYERS && state.players.every((p) => p.connected && p.ready);
   if (everyoneReady) {
-    enterPhase(state, nextPhase("lobby"), now, scale, rng);
+    enterPhase(state, state.mode === "chess" ? "prep" : nextPhase("lobby"), now, scale, rng);
     return { ok: true, started: true };
   }
   return { ok: true, started: false };
@@ -274,9 +288,21 @@ function enterPhase(
     // 한 판이 끝나고 돌아온 로비. 다시 하려면 새로 준비해야 한다.
     state.game = null;
     state.battle = null;
+    state.chess = null;
     state.explore = null;
     state.result = null;
     for (const p of state.players) p.ready = false;
+  } else if (phase === "prep") {
+    if (!state.chess) {
+      state.chess = createChessGame(Math.floor(rng() * 0x7fffffff));
+      state.matchStartedAt = startedAt;
+      state.recorded = false;
+    }
+    startRound(state.chess);
+    state.phaseEndsAt = startedAt + Math.round(prepSeconds(state.chess.round) * 1000 * scale);
+  } else if (phase === "combat" && state.chess) {
+    const combat = runRoundCombat(state.chess);
+    state.phaseEndsAt = startedAt + Math.round((combat.result.beats + COMBAT_LINGER_SECONDS) * 1000 * scale);
   } else if (phase === "ban") {
     state.game = createGame(rng() < 0.5 ? 0 : 1); // 선공은 무작위
     state.matchStartedAt = startedAt;
@@ -411,6 +437,48 @@ function awardKills(state: RoomState): void {
   }
 }
 
+/** 체스판 게임이 끝났다: 결과를 정리하고 결과 단계로 간다. */
+function finishChess(state: RoomState, at: number, scale: number, rng: () => number): void {
+  const chess = state.chess;
+  if (!chess || !chess.over) return;
+  state.result = {
+    ratings: [null, null],
+    winner: chess.over.winner,
+    reason: chess.over.reason,
+    score: [Math.max(0, chess.players[0].hp), Math.max(0, chess.players[1].hp)],
+    kills: [chess.roundWins[0], chess.roundWins[1]],
+  };
+  enterPhase(state, "result", at, scale, rng);
+}
+
+/**
+ * 체스판 자동 전투의 준비·전투 단계를 시간에 맞춰 진행한다.
+ * - 준비: 둘 다 끝냈거나 시간이 되면 전투를 계산해서 전투 단계로
+ * - 전투: 시간이 되면 체력을 깎고, 끝났으면 결과 단계, 아니면 다음 라운드 준비
+ * - 연결이 30초 넘게 끊긴 사람이 있으면 기권패
+ */
+function advanceChess(state: RoomState, now: number, scale: number, rng: () => number): "changed" | "idle" {
+  const chess = state.chess!;
+  const forfeiter = chess.over ? null : forfeitSeat(state, now, scale);
+  if (forfeiter !== null) {
+    concedeGame(chess, forfeiter, "forfeit");
+    finishChess(state, now, scale, rng);
+    return "changed";
+  }
+  const due = state.phaseEndsAt ?? Infinity;
+  if (state.phase === "prep") {
+    const early = bothDone(chess);
+    if (!early && due > now) return "idle";
+    enterPhase(state, "combat", early ? now : due, scale, rng);
+    return "changed";
+  }
+  if (due > now) return "idle";
+  finishRound(chess);
+  if (chess.over) finishChess(state, due, scale, rng);
+  else enterPhase(state, "prep", due, scale, rng);
+  return "changed";
+}
+
 /** 전투 중 연결이 이만큼(ms) 끊겨 있으면 기권패로 본다. (PHASE_SCALE을 곱한다) */
 export const FORFEIT_MS = 30_000;
 
@@ -494,6 +562,14 @@ export function advancePhase(
   let changed = false;
   for (;;) {
     const game = state.game;
+    if (state.chess && (state.phase === "prep" || state.phase === "combat")) {
+      const outcome = advanceChess(state, now, scale, rng);
+      if (outcome === "changed") {
+        changed = true;
+        continue;
+      }
+      break;
+    }
     const inBattle = state.phase === "battle" || state.phase === "deathmatch";
     if (inBattle && state.battle) {
       const end = state.phaseEndsAt ?? Infinity;
@@ -771,6 +847,60 @@ export function playerExplore(
   return { ok: true, advanced: false };
 }
 
+const CHESS_MESSAGES: Record<string, string> = {
+  invalid_slot: "없는 상점 칸이다.",
+  shop_empty: "이미 산 칸이다.",
+  not_enough_gold: "골드가 부족하다.",
+  bench_full: "대기석이 가득 찼다.",
+  unit_not_found: "그 기물이 없다.",
+  invalid_cell: "놓을 수 없는 칸이다.",
+  deploy_full: "판에 올릴 수 있는 기물 수를 넘었다.",
+};
+
+export type ChessCommand =
+  | { t: "buy"; slot: number }
+  | { t: "sell"; uid: string }
+  | { t: "reroll" }
+  | { t: "deploy"; uid: string; col: number; row: number }
+  | { t: "bench"; uid: string }
+  | { t: "done" };
+
+/** 체스판 자동 전투의 준비 단계 행동: 사기, 팔기, 새로고침, 놓기, 내리기, 준비 끝. */
+export function playerChess(
+  state: RoomState,
+  playerId: string,
+  command: ChessCommand,
+  now: number,
+  scale = 1,
+  rng: () => number = Math.random,
+): ActionOutcome {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return { ok: false, code: "bad_message", message: "방에 없는 플레이어다." };
+  advancePhase(state, now, scale, rng); // 시간이 지나 단계가 바뀌었을 수 있다
+  const chess = state.chess;
+  if (!chess || state.phase !== "prep") return WRONG_PHASE;
+  const seat = player.seat;
+
+  let result: ChessResult;
+  switch (command.t) {
+    case "buy": result = buy(chess, seat, command.slot); break;
+    case "sell": result = sell(chess, seat, command.uid); break;
+    case "reroll": result = reroll(chess, seat); break;
+    case "deploy": result = deploy(chess, seat, command.uid, command.col, command.row); break;
+    case "bench": result = toBench(chess, seat, command.uid); break;
+    case "done":
+      setDone(chess, seat, true);
+      result = { ok: true };
+      break;
+  }
+  if (!result.ok) {
+    return { ok: false, code: result.code as ErrorCode, message: CHESS_MESSAGES[result.code] ?? "할 수 없다." };
+  }
+  state.lastActiveAt = now;
+  const advanced = advancePhase(state, now, scale, rng); // 둘 다 끝냈으면 바로 전투로
+  return { ok: true, advanced };
+}
+
 /** 항복한다. 전투와 데스매치 중 언제든 할 수 있고, 상대가 바로 이긴다. */
 export function playerSurrender(
   state: RoomState,
@@ -782,6 +912,12 @@ export function playerSurrender(
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return { ok: false, code: "bad_message", message: "방에 없는 플레이어다." };
   advancePhase(state, now, scale, rng); // 그 순간까지 먼저 진행한다 (이미 끝났을 수도 있다)
+  if (state.chess && (state.phase === "prep" || state.phase === "combat") && !state.chess.over) {
+    concedeGame(state.chess, player.seat, "surrender");
+    finishChess(state, now, scale, rng);
+    state.lastActiveAt = now;
+    return { ok: true, advanced: true };
+  }
   if ((state.phase !== "battle" && state.phase !== "deathmatch") || !state.battle || state.battle.finished) return WRONG_PHASE;
   concede(state.battle, player.seat, "surrender");
   settleBattle(state, now, scale, rng);
@@ -826,7 +962,7 @@ export function playerMoveLane(
  * 두 사람 모두 GL 계정으로 로그인한 판만 기록하고(개발 서버의 익명 판은 기록하지 않는다), 한 번만 만든다.
  */
 export function takeMatchRecord(state: RoomState, now: number): MatchInput | null {
-  if (state.recorded || state.phase !== "result" || !state.result || !state.game) return null;
+  if (state.recorded || state.phase !== "result" || !state.result || !(state.game || state.chess)) return null;
   state.recorded = true; // 저장이 실패해도 같은 판을 반복해서 시도하지 않는다
   const [a, b] = [0, 1].map((seat) => state.players.find((p) => p.seat === seat));
   if (!a?.userId || !b?.userId || a.userId === b.userId) return null;
@@ -842,7 +978,9 @@ export function takeMatchRecord(state: RoomState, now: number): MatchInput | nul
     reason: state.result.reason,
     score: [state.result.score[0] ?? 0, state.result.score[1] ?? 0],
     kills: [state.result.kills[0] ?? 0, state.result.kills[1] ?? 0],
-    picks: [[...state.game.picks[0]], [...state.game.picks[1]]],
+    picks: state.chess
+      ? [finalRoster(state.chess.players[0]), finalRoster(state.chess.players[1])]
+      : [[...state.game!.picks[0]], [...state.game!.picks[1]]],
   };
 }
 
@@ -953,6 +1091,7 @@ export function toSnapshot(state: RoomState, now: number, viewerId?: string): Ro
     players: state.players.map(toPublicPlayer),
     game: toGameSnapshot(state, viewer ? viewer.seat : null),
     battle: state.battle ? toBattleSnapshot(state.battle, viewer ? viewer.seat : null) : null,
+    chess: state.chess ? toChessSnapshot(state.chess, viewer ? viewer.seat : null, state.phase === "combat" || state.phase === "result") : null,
     explore: state.explore ? toExploreSnapshot(state.explore, viewer ? viewer.seat : null) : null,
     forge: state.explore ? toForgeSnapshot(state.explore.forge, state.explore.tick, viewer ? viewer.seat : null, viewerSteam(state, viewer ? viewer.seat : null)) : null,
     result: state.result,
