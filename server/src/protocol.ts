@@ -271,6 +271,8 @@ export type ClientMessage =
   | { t: "ultimate"; characterId: string; lane?: Lane }
   /** 전투 중 나이트가 다른 레인으로 옮겨 간다. */
   | { t: "move"; characterId: string; lane: Lane }
+  /** 전투 중 항복한다. 상대가 바로 이긴다. 데스매치에서도 할 수 있다. */
+  | { t: "surrender" }
   /** 탐사: 칸(0~15, 4x4)에 채집·매복·정찰을 한다. 행동 게이지가 1 든다. */
   | { t: "explore"; action: ExploreAction; tile: number }
   /** 대장간: buy 광석 구입, smelt 재련 시작, craft 무기 조합, equip 무기 장착. */
@@ -369,6 +371,8 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       if (!action || typeof tile !== "number" || !Number.isInteger(tile) || tile < 0 || tile > 15) return null;
       return { t: "explore", action, tile };
     }
+    case "surrender":
+      return { t: "surrender" };
     case "move": {
       const id = characterId(msg.characterId);
       return id && isLane(msg.lane) ? { t: "move", characterId: id, lane: msg.lane } : null;

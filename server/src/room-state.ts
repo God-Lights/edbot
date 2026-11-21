@@ -32,7 +32,7 @@ import type { ForgeResult, SteamPool } from "./forge/forge";
 import { toForgeSnapshot } from "./forge/snapshot";
 import { computeMods } from "./battle/abilities";
 import { basePosition, inAlliedZone, unitById } from "./battle/core";
-import { finishByTime, moveLane, startDeathmatch, stepBattle, useUltimate } from "./battle/sim";
+import { concede, finishByTime, moveLane, startDeathmatch, stepBattle, useUltimate } from "./battle/sim";
 import { isTimedPhase, nextPhase, phaseDurationMs } from "./phases";
 import type {
   BanSnapshot,
@@ -411,6 +411,18 @@ function awardKills(state: RoomState): void {
   }
 }
 
+/** 전투 중 연결이 이만큼(ms) 끊겨 있으면 기권패로 본다. (PHASE_SCALE을 곱한다) */
+export const FORFEIT_MS = 30_000;
+
+/** 연결이 FORFEIT_MS 넘게 끊긴 사람이 있으면 그 seat. 둘 다면 먼저 끊긴 쪽. 봇은 끊기지 않는다. */
+function forfeitSeat(state: RoomState, now: number, scale: number): Seat | null {
+  const limit = Math.round(FORFEIT_MS * scale);
+  const gone = state.players
+    .filter((p) => !p.bot && !p.connected && p.disconnectedAt !== null && now - p.disconnectedAt >= limit)
+    .sort((a, b) => (a.disconnectedAt ?? 0) - (b.disconnectedAt ?? 0));
+  return gone[0]?.seat ?? null;
+}
+
 /** 시뮬레이션을 until(서버 시각)까지 진행한다. 중간에 끝나면 결과를 정리하고 true. */
 function runBattleTo(state: RoomState, until: number, scale: number, rng: () => number): boolean {
   const battle = state.battle;
@@ -489,6 +501,14 @@ export function advancePhase(
       runExploreTo(state, Math.min(now, end), scale);
       const finishedEarly = runBattleTo(state, Math.min(now, end), scale, rng);
       if (finishedEarly || state.phase !== before) {
+        changed = true;
+        continue;
+      }
+      const forfeiter = state.battle.finished ? null : forfeitSeat(state, now, scale);
+      if (forfeiter !== null) {
+        // 연결이 30초 넘게 끊긴 사람은 기권패 (점수는 그대로)
+        concede(state.battle, forfeiter, "forfeit");
+        settleBattle(state, now, scale, rng);
         changed = true;
         continue;
       }
@@ -749,6 +769,24 @@ export function playerExplore(
   }
   state.lastActiveAt = now;
   return { ok: true, advanced: false };
+}
+
+/** 항복한다. 전투와 데스매치 중 언제든 할 수 있고, 상대가 바로 이긴다. */
+export function playerSurrender(
+  state: RoomState,
+  playerId: string,
+  now: number,
+  scale = 1,
+  rng: () => number = Math.random,
+): ActionOutcome {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return { ok: false, code: "bad_message", message: "방에 없는 플레이어다." };
+  advancePhase(state, now, scale, rng); // 그 순간까지 먼저 진행한다 (이미 끝났을 수도 있다)
+  if ((state.phase !== "battle" && state.phase !== "deathmatch") || !state.battle || state.battle.finished) return WRONG_PHASE;
+  concede(state.battle, player.seat, "surrender");
+  settleBattle(state, now, scale, rng);
+  state.lastActiveAt = now;
+  return { ok: true, advanced: true };
 }
 
 /** 궁극기를 쓴다. 안키오는 갈 레인도 보낸다. */

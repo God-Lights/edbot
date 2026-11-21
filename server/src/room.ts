@@ -18,6 +18,7 @@ import {
   playerMoveLane,
   playerPick,
   playerPlace,
+  playerSurrender,
   playerUltimate,
   pruneLobby,
   setDisconnected,
@@ -184,6 +185,9 @@ export class Room extends DurableObject<Env> {
           ws,
           playerUltimate(this.state, playerId, msg.characterId, msg.lane, now, scale),
         );
+        return;
+      case "surrender":
+        await this.finishAction(ws, playerSurrender(this.state, playerId, now, scale));
         return;
       case "forge":
         await this.finishAction(ws, playerForge(this.state, playerId, msg, now, scale));
