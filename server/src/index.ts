@@ -113,6 +113,8 @@ export default {
     }
     // GET /auth/done -> 로그인하고 돌아오는 곳.
     if (request.method === "GET" && url.pathname === "/auth/done") {
+      // 웹 클라이언트에서 로그인하고 돌아왔다면(게임 클라이언트의 승인 요청이 아니면) 웹 게임으로 보낸다.
+      if (!url.searchParams.get("login") && (await identify(env, request))) return Response.redirect(`${origin}/`, 302);
       return donePage(await identify(env, request), url.searchParams.get("login"));
     }
     // POST /auth/approve -> 게임 클라이언트의 로그인 요청을 승인한다.

@@ -3,6 +3,8 @@
   "name": "edbot-server",
   "main": "src/index.ts",
   "compatibility_date": "2025-11-01",
+  // 웹 클라이언트(../web)를 같은 주소에서 내보낸다. 파일이 없는 경로(/api, /ws, /auth ...)만 Worker가 처리한다.
+  "assets": { "directory": "../web" },
   "durable_objects": {
     "bindings": [
       { "name": "ROOM", "class_name": "Room" },
