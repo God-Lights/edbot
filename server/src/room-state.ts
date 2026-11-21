@@ -24,7 +24,7 @@ import { createBattle, TICKS_PER_SECOND } from "./battle/core";
 import type { BattleState } from "./battle/core";
 import { activeSynergyIds } from "./synergy";
 import {
-  boardPlacements, bothDone, buy, concedeGame, createChessGame, deploy, finalRoster, finishRound, prepSeconds, reroll,
+  boardPlacements, bothDone, buy, buyMaterial, concedeGame, equip, smelt, unequip, createChessGame, deploy, finalRoster, finishRound, prepSeconds, reroll,
   runRoundCombat, sell, setDone, startRound, toBench, COMBAT_LINGER_SECONDS,
 } from "./chess/game";
 import type { ChessGame, ChessResult } from "./chess/game";
@@ -106,6 +106,8 @@ export interface RoomState {
   recorded: boolean;
   /** 테스트 대전 방(코드 ADMN)이다. 혼자 들어오면 봇이 상대를 맡는다. */
   testMatch: boolean;
+  /** 입문 모드: 쉬운 캐릭터만 나오고 자원 시스템이 없다. */
+  lite: boolean;
   /** lanes: 옛 레인 타워 게임, chess: 체스판 자동 전투 */
   mode: RoomMode;
   createdAt: number;
@@ -114,7 +116,7 @@ export interface RoomState {
 
 type Failure = { ok: false; code: ErrorCode; message: string };
 
-export function createRoom(code: string, now: number, testMatch = false, mode: RoomMode = "lanes"): RoomState {
+export function createRoom(code: string, now: number, testMatch = false, mode: RoomMode = "lanes", lite = testMatch): RoomState {
   return {
     code,
     phase: "lobby",
@@ -133,6 +135,7 @@ export function createRoom(code: string, now: number, testMatch = false, mode: R
     matchStartedAt: now,
     recorded: false,
     testMatch,
+    lite,
     mode,
     createdAt: now,
     lastActiveAt: now,
@@ -294,7 +297,7 @@ function enterPhase(
     for (const p of state.players) p.ready = false;
   } else if (phase === "prep") {
     if (!state.chess) {
-      state.chess = createChessGame(Math.floor(rng() * 0x7fffffff), state.testMatch);
+      state.chess = createChessGame(Math.floor(rng() * 0x7fffffff), state.lite);
       state.matchStartedAt = startedAt;
       state.recorded = false;
     }
@@ -855,12 +858,22 @@ const CHESS_MESSAGES: Record<string, string> = {
   unit_not_found: "그 기물이 없다.",
   invalid_cell: "놓을 수 없는 칸이다.",
   deploy_full: "판에 올릴 수 있는 기물 수를 넘었다.",
+  no_resources: "이 판에는 자원 시스템이 없다.",
+  market_empty: "살 수 없는 재료다.",
+  market_sold: "이번 라운드에는 이미 시장에서 샀다.",
+  no_material: "그 재료가 없다.",
+  no_free_smelter: "빈 재련대가 없다.",
+  no_weapon: "그 무기가 없다.",
 };
 
 export type ChessCommand =
   | { t: "buy"; slot: number }
   | { t: "sell"; uid: string }
   | { t: "reroll" }
+  | { t: "market"; slot: number }
+  | { t: "smelt"; material: string }
+  | { t: "equip"; weaponId: string; uid: string }
+  | { t: "unequip"; uid: string }
   | { t: "deploy"; uid: string; col: number; row: number }
   | { t: "bench"; uid: string }
   | { t: "done" };
@@ -886,6 +899,10 @@ export function playerChess(
     case "buy": result = buy(chess, seat, command.slot); break;
     case "sell": result = sell(chess, seat, command.uid); break;
     case "reroll": result = reroll(chess, seat); break;
+    case "market": result = buyMaterial(chess, seat, command.slot); break;
+    case "smelt": result = smelt(chess, seat, command.material); break;
+    case "equip": result = equip(chess, seat, command.weaponId, command.uid); break;
+    case "unequip": result = unequip(chess, seat, command.uid); break;
     case "deploy": result = deploy(chess, seat, command.uid, command.col, command.row); break;
     case "bench": result = toBench(chess, seat, command.uid); break;
     case "done":

@@ -71,7 +71,13 @@ export type ErrorCode =
   | "bench_full"
   | "unit_not_found"
   | "invalid_cell"
-  | "deploy_full";
+  | "deploy_full"
+  | "no_resources"
+  | "market_empty"
+  | "market_sold"
+  | "no_material"
+  | "no_free_smelter"
+  | "no_weapon";
 
 export interface PublicPlayer {
   id: string;
@@ -242,6 +248,8 @@ export interface ChessUnitView {
   /** 판 위에 있을 때만. col 0~7, row 0~3 (row 0이 가운데에 가장 가까운 앞줄) */
   col?: number;
   row?: number;
+  /** 낀 무기 id */
+  weapon?: string;
 }
 
 export interface ChessSelfSnapshot {
@@ -257,6 +265,24 @@ export interface ChessSelfSnapshot {
   nextIncome: number;
   /** 판 위의 기물로 켜진 시너지 id */
   synergies: string[];
+  /** 자원: 재료 id -> 개수, 무기 id -> 개수(아직 안 낀 것), 재련 중인 무기 2칸(비면 null), 이번 라운드 시장에서 샀는가 */
+  materials: Record<string, number>;
+  weapons: Record<string, number>;
+  smelters: Array<string | null>;
+  marketBought: boolean;
+}
+
+/** 광물 시장의 한 칸 */
+export interface ChessMarketItem {
+  material: string;
+  price: number;
+}
+
+/** 이번 라운드의 자원 칸. 좌표는 판의 절대 좌표(seat 0이 아래)다. */
+export interface ChessTileView {
+  x: number;
+  y: number;
+  material: string;
 }
 
 export interface ChessOpponentSnapshot {
@@ -270,16 +296,20 @@ export interface ChessOpponentSnapshot {
 export interface ChessCombatSnapshot {
   /** 두 팀이 실제로 낸 배치(각자 시점) */
   boards: [Array<{ defId: string; star: 1 | 2; col: number; row: number }>, Array<{ defId: string; star: 1 | 2; col: number; row: number }>];
-  units: Array<{ defId: string; seat: Seat; star: 1 | 2; maxHp: number; summon: boolean }>;
+  units: Array<{ defId: string; seat: Seat; star: 1 | 2; maxHp: number; summon: boolean; weapon: string | null }>;
   /** frames[k][i] = [x, y, hp, energy, shield, flags(1=생존, 2=승급)]. 아직 없는 소환수는 배열이 짧다. */
   frames: number[][][];
-  /** [박자, 종류(attack|ability|death|promote|move), 행동한 기물 번호, 대상 번호(-1 없음), 능력 id] */
+  /** [박자, 종류(attack|ability|death|promote|move|mine), 행동한 기물 번호, 대상 번호(-1 없음, mine이면 칸 번호), 능력 id(mine이면 재료 id)] */
   events: Array<[number, string, number, number, string]>;
   winner: Seat | null;
   survivors: [number, number];
   /** 이 전투로 각자 잃는 체력 */
   damage: [number, number];
   beats: number;
+  /** 자원 칸과 채굴 기록 [박자, 칸 번호, seat], 무기로 번 골드 */
+  tiles: ChessTileView[];
+  mines: Array<[number, number, Seat]>;
+  goldBonus: [number, number];
 }
 
 export interface ChessRoundSummary {
@@ -300,6 +330,9 @@ export interface ChessSnapshot {
   lite: boolean;
   me: ChessSelfSnapshot | null;
   opponent: ChessOpponentSnapshot | null;
+  /** 자원 시스템을 쓰는 판이면 이번 라운드의 자원 칸과 광물 시장 */
+  tiles: ChessTileView[];
+  market: ChessMarketItem[];
   /** 전투 단계에만 있다. */
   combat: ChessCombatSnapshot | null;
   lastRound: ChessRoundSummary | null;
@@ -366,6 +399,14 @@ export type ClientMessage =
   | { t: "deploy"; uid: string; col: number; row: number }
   /** 판 위의 기물(uid)을 대기석으로 내린다. */
   | { t: "bench"; uid: string }
+  /** 광물 시장 칸(0부터)의 재료를 산다. 한 라운드에 한 개. */
+  | { t: "market"; slot: number }
+  /** 재료를 재련대에 넣는다. 다음 라운드 시작에 무기가 나온다. */
+  | { t: "smelt"; material: string }
+  /** 무기를 기물(uid)에 낀다. */
+  | { t: "equip"; weaponId: string; uid: string }
+  /** 기물(uid)의 무기를 뺀다. */
+  | { t: "unequip"; uid: string }
   /** 준비를 끝냈다. 둘 다 끝내면 바로 전투가 시작된다. */
   | { t: "done" }
   /** 전투 중 항복한다. 상대가 바로 이긴다. 데스매치에서도 할 수 있다. */
@@ -481,6 +522,23 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
     }
     case "reroll":
       return { t: "reroll" };
+    case "market": {
+      const slot = msg.slot;
+      return typeof slot === "number" && Number.isInteger(slot) && slot >= 0 && slot <= 3 ? { t: "market", slot } : null;
+    }
+    case "smelt": {
+      const material = characterId(msg.material);
+      return material ? { t: "smelt", material } : null;
+    }
+    case "equip": {
+      const weaponId = characterId(msg.weaponId);
+      const uid = characterId(msg.uid);
+      return weaponId && uid ? { t: "equip", weaponId, uid } : null;
+    }
+    case "unequip": {
+      const uid = characterId(msg.uid);
+      return uid ? { t: "unequip", uid } : null;
+    }
     case "done":
       return { t: "done" };
     case "deploy": {

@@ -6,12 +6,13 @@ import {
   absolutePosition, attackableEnemies, chebyshev, comparePerspective, enemiesOf, forward, moveDestinations, perspective,
 } from "./board";
 import {
-  BEAT_ENERGY_ATTACK, BEAT_ENERGY_HURT, createUnit, damageTakenMultiplier, effectiveAtk, hasEffect, pushEvent, queueHit,
+  BEAT_ENERGY_ATTACK, BEAT_ENERGY_HURT, addEffect, createUnit, damageTakenMultiplier, effectiveAtk, hasEffect, proc, pushEvent, queueHit,
 } from "./core";
 import { ENERGY_MAX, STAR2_STATS, unitDef } from "./roster";
 import { activeSynergies, combineBonuses, neutralBonus } from "./synergy";
 import { BOARD_SIZE } from "./types";
-import type { CombatResult, CombatState, CombatUnit, Placement, Seat } from "./types";
+import { WEAPON_ATK } from "./weapons";
+import type { CombatResult, CombatState, CombatUnit, Placement, ResourceTile, Seat } from "./types";
 
 /** 이 박자부터 모든 기물이 점점 커지는 피해를 받는다(돌발 사망). */
 export const SUDDEN_DEATH_BEAT = 20;
@@ -19,7 +20,7 @@ export const SUDDEN_DEATH_BEAT = 20;
 export const MAX_BEATS = 45;
 export { ABILITIES };
 
-export function createCombat(boards: [Placement[], Placement[]]): CombatState {
+export function createCombat(boards: [Placement[], Placement[]], tiles: ResourceTile[] = []): CombatState {
   const defIds: [string[], string[]] = [boards[0].map((p) => p.defId), boards[1].map((p) => p.defId)];
   const synergies: [string[], string[]] = [activeSynergies(defIds[0]), activeSynergies(defIds[1])];
   const state: CombatState = {
@@ -34,6 +35,9 @@ export function createCombat(boards: [Placement[], Placement[]]): CombatState {
     finished: false,
     winner: null,
     survivors: [0, 0],
+    tiles: tiles.map((t) => ({ ...t, mined: false })),
+    mines: [],
+    goldBonus: [0, 0],
   };
   for (const seat of [0, 1] as const) {
     for (const placement of boards[seat]) {
@@ -42,13 +46,22 @@ export function createCombat(boards: [Placement[], Placement[]]): CombatState {
       const { x, y } = absolutePosition(seat, placement.col, placement.row);
       const k = placement.star === 2 ? STAR2_STATS : 1;
       const pawnHp = def.piece === "pawn" ? state.bonuses[seat].pawnHp : 1;
-      const maxHp = def.hp * k * pawnHp;
-      createUnit(state, {
-        defId: def.id, seat, star: placement.star, x, y, hp: maxHp, maxHp, atk: def.atk * k,
-        energyMax: def.passive ? null : ENERGY_MAX[def.cost], piece: def.piece, summon: false,
+      const weapon = placement.weapon ?? null;
+      const maxHp = def.hp * k * pawnHp * (weapon === "titanium-shield" ? 1.15 : 1);
+      const unit = createUnit(state, {
+        defId: def.id, seat, star: placement.star, x, y, hp: maxHp, maxHp, atk: def.atk * k * (WEAPON_ATK[weapon ?? ""] ?? 1),
+        energyMax: def.passive ? null : ENERGY_MAX[def.cost], piece: def.piece, summon: false, weapon,
       });
+      if (weapon === "titanium-shield") unit.dmgMult = 0.9;
+      if (weapon === "bit-dagger") unit.energyMult = 1.35;
+      if (weapon === "ancient-staff") {
+        unit.shield = maxHp * 0.25;
+        unit.shieldUntilBeat = 5;
+      }
     }
   }
+  // 처음부터 자원 칸 위에 서 있는 기물은 0박자에 바로 캔다.
+  mineTiles(state);
   return state;
 }
 
@@ -107,6 +120,8 @@ function applyHits(state: CombatState): void {
   for (const hit of state.hits) {
     const target = state.units.find((u) => u.id === hit.targetId);
     if (!target || !target.alive) continue;
+    // 안키오의 날개 쌍검: 공격과 능력을 4번에 1번 피한다
+    if ((hit.kind === "attack" || hit.kind === "ability") && target.weapon === "ankio-twinblades" && proc(target, "dodge", 0.25)) continue;
     let amount = hit.kind === "true" ? hit.amount : hit.amount * damageTakenMultiplier(state, target);
     if (target.shield > 0 && target.shieldUntilBeat >= state.beat && hit.kind !== "true") {
       const absorbed = Math.min(target.shield, amount);
@@ -115,9 +130,14 @@ function applyHits(state: CombatState): void {
     }
     target.hp -= amount;
     if (hit.kind === "attack" || hit.kind === "ability") {
-      if (target.energyMax !== null) target.energy += BEAT_ENERGY_HURT;
+      if (target.energyMax !== null) target.energy += BEAT_ENERGY_HURT * target.energyMult;
     }
     target.lastHitBy = hit.sourceId;
+    // 어둠의 낫: 준 피해의 25% 흡혈
+    if (hit.sourceId && amount > 0) {
+      const source = state.units.find((u) => u.id === hit.sourceId);
+      if (source && source.alive && source.weapon === "dark-scythe") source.hp = Math.min(source.maxHp, source.hp + amount * 0.35);
+    }
   }
   state.hits = [];
 }
@@ -132,9 +152,67 @@ function resolveDeaths(state: CombatState): void {
   for (const unit of dead) {
     const by = unit.lastHitBy;
     const killer = by ? state.units.find((u) => u.id === by && u.alive) : undefined;
-    if (killer) onKill(state, killer);
+    if (killer) {
+      onKill(state, killer);
+      // 에드코인 슬링: 처치할 때마다 골드 +1 (라운드당 최대 3)
+      if (killer.weapon === "edcoin-sling" && (killer.procs.gold ?? 0) < 3) {
+        killer.procs.gold = (killer.procs.gold ?? 0) + 1;
+        state.goldBonus[killer.seat] += 1;
+      }
+    }
     onDeath(state, unit);
   }
+}
+
+/** 공격할 때 터지는 무기 효과들. */
+function weaponOnAttack(state: CombatState, unit: CombatUnit, target: CombatUnit, atk: number): void {
+  switch (unit.weapon) {
+    case "clawstone-axe":
+      // 5번 공격에 한 번 3초 출혈
+      if (proc(unit, "bleed", 0.2)) addEffect(target, { type: "dot", value: atk * 0.25, untilBeat: state.beat + 3 });
+      break;
+    case "edmium-blade":
+      if (proc(unit, "aspd", 0.25)) queueHit(state, { targetId: target.id, amount: atk, sourceId: unit.id, kind: "attack" });
+      break;
+    case "ankio-twinblades":
+      if (proc(unit, "aspd", 0.15)) queueHit(state, { targetId: target.id, amount: atk, sourceId: unit.id, kind: "attack" });
+      break;
+    case "redocean-trident": {
+      // 맞힌 적과 인접한 적 1명(체력이 낮은 쪽)에게 40%
+      const next = enemiesOf(state, unit)
+        .filter((e) => e.id !== target.id && chebyshev(e, target) === 1)
+        .sort((a, b) => a.hp - b.hp || a.id.localeCompare(b.id, "en", { numeric: true }))[0];
+      if (next) queueHit(state, { targetId: next.id, amount: atk * 0.4, sourceId: unit.id, kind: "attack" });
+      break;
+    }
+    case "chaos-staff":
+      if (proc(unit, "chaos", 0.34)) {
+        const turn = unit.procs.chaosTurn ?? 0;
+        unit.procs.chaosTurn = turn + 1;
+        if (turn % 3 === 0) addEffect(target, { type: "stun", value: 0, untilBeat: state.beat + 1 });
+        else if (turn % 3 === 1) addEffect(target, { type: "root", value: 0, untilBeat: state.beat + 3 });
+        else addEffect(target, { type: "dmgTaken", value: 1.2, untilBeat: state.beat + 3 });
+      }
+      break;
+    default:
+      break;
+  }
+}
+
+/** 자원 칸 위에 서 있는 기물이 재료를 캔다. 같은 박자에 둘이 서 있으면 둘 다 얻는다. 칸은 사라진다. */
+function mineTiles(state: CombatState): void {
+  state.tiles.forEach((tile, index) => {
+    if (tile.mined) return;
+    const miners = state.units.filter((u) => u.alive && !u.summon && u.x === tile.x && u.y === tile.y);
+    if (miners.length === 0) return;
+    tile.mined = true;
+    const seats = [...new Set(miners.map((u) => u.seat))].sort();
+    for (const seat of seats) {
+      state.mines.push({ beat: state.beat, tile: index, seat });
+      const miner = miners.find((u) => u.seat === seat)!;
+      pushEvent(state, { type: "mine", unitId: miner.id, targetId: String(index), text: tile.material });
+    }
+  });
 }
 
 /** 한 박자를 진행한다. */
@@ -182,9 +260,11 @@ export function stepCombat(state: CombatState): void {
     if (!unit.alive || casters.has(unit.id) || hasEffect(unit, "stun", state.beat)) continue;
     const target = pickTarget(state, unit, attackableEnemies(state, unit));
     if (target) {
-      queueHit(state, { targetId: target.id, amount: effectiveAtk(state, unit), sourceId: unit.id, kind: "attack" });
-      if (unit.energyMax !== null) unit.energy += BEAT_ENERGY_ATTACK * state.bonuses[unit.seat].energyGain;
+      const atk = effectiveAtk(state, unit);
+      queueHit(state, { targetId: target.id, amount: atk, sourceId: unit.id, kind: "attack" });
+      if (unit.energyMax !== null) unit.energy += BEAT_ENERGY_ATTACK * state.bonuses[unit.seat].energyGain * unit.energyMult;
       pushEvent(state, { type: "attack", unitId: unit.id, targetId: target.id });
+      if (unit.weapon) weaponOnAttack(state, unit, target, atk);
     } else if (!hasEffect(unit, "root", state.beat)) {
       const dest = pickMove(state, unit);
       if (dest) moves.push({ unit, dest });
@@ -205,6 +285,7 @@ export function stepCombat(state: CombatState): void {
     checkPromotion(state, unit);
   }
 
+  mineTiles(state);
   applyHits(state);
   resolveDeaths(state);
 
@@ -213,6 +294,8 @@ export function stepCombat(state: CombatState): void {
   if (a === 0 || b === 0 || state.beat >= MAX_BEATS) {
     state.finished = true;
     state.survivors = [realAlive(state, 0), realAlive(state, 1)];
+    // 비트코인 대검: 살아남으면 골드 +2
+    for (const u of state.units) if (u.alive && !u.summon && u.weapon === "bitcoin-greatsword") state.goldBonus[u.seat] += 2;
     if (a === 0 && b === 0) state.winner = null;
     else if (a === 0) state.winner = 1;
     else if (b === 0) state.winner = 0;
@@ -225,8 +308,8 @@ export function stepCombat(state: CombatState): void {
 }
 
 /** 끝날 때까지 돌리고 결과를 돌려준다. */
-export function runCombat(boards: [Placement[], Placement[]]): CombatResult {
-  const state = createCombat(boards);
+export function runCombat(boards: [Placement[], Placement[]], tiles: ResourceTile[] = []): CombatResult {
+  const state = createCombat(boards, tiles);
   while (!state.finished) stepCombat(state);
   return { winner: state.winner, survivors: state.survivors, beats: state.beat, suddenDeath: state.beat >= SUDDEN_DEATH_BEAT };
 }
@@ -241,6 +324,7 @@ export interface RecordedUnit {
   star: 1 | 2;
   maxHp: number;
   summon: boolean;
+  weapon: string | null;
 }
 
 /** [x, y, hp, energy, shield, flags(1=살아 있음, 2=승급)] 박자 k의 상태. 아직 생기지 않은 소환수는 없다(배열이 짧다). */
@@ -255,6 +339,11 @@ export interface CombatRecording {
   /** frames[0]은 시작 모습, frames[k]는 k번째 박자가 끝난 모습 */
   frames: FrameUnit[][];
   events: RecordedEvent[];
+  /** 자원 칸(판의 절대 좌표)과 채굴 기록: [박자, 칸 번호, seat] */
+  tiles: ResourceTile[];
+  mines: Array<[number, number, Seat]>;
+  /** 무기로 번 골드 */
+  goldBonus: [number, number];
 }
 
 const r1 = (n: number): number => Math.round(n * 10) / 10;
@@ -264,8 +353,8 @@ function snapshotFrame(state: CombatState): FrameUnit[] {
 }
 
 /** 끝까지 돌리면서 박자마다 기록한다. 결과는 runCombat과 같다. */
-export function recordCombat(boards: [Placement[], Placement[]]): CombatRecording {
-  const state = createCombat(boards);
+export function recordCombat(boards: [Placement[], Placement[]], tiles: ResourceTile[] = []): CombatRecording {
+  const state = createCombat(boards, tiles);
   const frames: FrameUnit[][] = [snapshotFrame(state)];
   while (!state.finished) {
     stepCombat(state);
@@ -275,12 +364,17 @@ export function recordCombat(boards: [Placement[], Placement[]]): CombatRecordin
   const events: RecordedEvent[] = [];
   for (const e of state.events) {
     if (e.type === "suddenDeath" || e.type === "end") continue;
-    events.push([e.beat, e.type, index.get(e.unitId ?? "") ?? -1, index.get(e.targetId ?? "") ?? -1, e.text ?? ""]);
+    // 채굴 이벤트의 대상 칸은 기물이 아니라 칸 번호다.
+    const target = e.type === "mine" ? Number(e.targetId) : (index.get(e.targetId ?? "") ?? -1);
+    events.push([e.beat, e.type, index.get(e.unitId ?? "") ?? -1, target, e.text ?? ""]);
   }
   return {
     result: { winner: state.winner, survivors: state.survivors, beats: state.beat, suddenDeath: state.beat >= SUDDEN_DEATH_BEAT },
-    units: state.units.map((u) => ({ defId: u.defId, seat: u.seat, star: u.star, maxHp: Math.round(u.maxHp), summon: u.summon })),
+    units: state.units.map((u) => ({ defId: u.defId, seat: u.seat, star: u.star, maxHp: Math.round(u.maxHp), summon: u.summon, weapon: u.weapon })),
     frames,
     events,
+    tiles: tiles.map((t) => ({ ...t })),
+    mines: state.mines.map((m) => [m.beat, m.tile, m.seat] as [number, number, Seat]),
+    goldBonus: [...state.goldBonus] as [number, number],
   };
 }

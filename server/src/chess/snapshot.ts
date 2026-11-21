@@ -4,9 +4,12 @@ import type { ChessSelfSnapshot, ChessSnapshot, ChessUnitView, Seat } from "../p
 import { MAX_ROUNDS, bothDone, deployCap, interest, rerollCost, shopOdds, BASE_INCOME } from "./game";
 import type { ChessGame, ChessPlayer } from "./game";
 import { activeSynergies } from "./synergy";
+import { MARKET_PRICE, materialDef } from "./weapons";
 
 function self(player: ChessPlayer): ChessSelfSnapshot {
-  const view = (u: { uid: string; defId: string; star: 1 | 2 }): ChessUnitView => ({ uid: u.uid, defId: u.defId, star: u.star });
+  const view = (u: { uid: string; defId: string; star: 1 | 2; weapon?: string }): ChessUnitView => ({
+    uid: u.uid, defId: u.defId, star: u.star, ...(u.weapon ? { weapon: u.weapon } : {}),
+  });
   return {
     hp: player.hp,
     gold: player.gold,
@@ -17,6 +20,10 @@ function self(player: ChessPlayer): ChessSelfSnapshot {
     rerollCost: rerollCost(player),
     nextIncome: BASE_INCOME + interest(player.gold),
     synergies: activeSynergies(player.board.map((u) => u.defId)),
+    materials: Object.fromEntries(Object.entries(player.materials).filter(([, n]) => n > 0)),
+    weapons: Object.fromEntries(Object.entries(player.weapons).filter(([, n]) => n > 0)),
+    smelters: [...player.smelters],
+    marketBought: player.marketBought,
   };
 }
 
@@ -29,6 +36,10 @@ export function toChessSnapshot(game: ChessGame, viewerSeat: Seat | null, showCo
     shopOdds: shopOdds(game.round, game.lite),
     lite: game.lite,
     me: viewerSeat === null ? null : self(game.players[viewerSeat]),
+    tiles: game.resources ? game.tiles.map((t) => ({ ...t })) : [],
+    market: game.resources
+      ? game.market.map((id) => ({ material: id, price: MARKET_PRICE[materialDef(id)?.rarity ?? "common"] ?? 0 }))
+      : [],
     opponent: other ? { hp: other.hp, done: other.done, boardCount: other.board.length } : null,
     combat:
       showCombat && game.combat
@@ -41,6 +52,9 @@ export function toChessSnapshot(game: ChessGame, viewerSeat: Seat | null, showCo
             survivors: game.combat.result.survivors,
             damage: game.combat.damage,
             beats: game.combat.result.beats,
+            tiles: game.combat.tiles,
+            mines: game.combat.mines,
+            goldBonus: game.combat.goldBonus,
           }
         : null,
     lastRound: game.lastRound,

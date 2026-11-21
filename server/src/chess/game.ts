@@ -4,7 +4,9 @@
 import { POOL_COPIES, ROSTER, unitDef } from "./roster";
 import { recordCombat } from "./sim";
 import type { CombatRecording } from "./sim";
-import type { Placement, Seat } from "./types";
+import type { Placement, ResourceTile, Seat } from "./types";
+import { MARKET_PRICE, MATERIALS, materialDef, weaponDef } from "./weapons";
+import type { Rarity } from "./weapons";
 
 export const START_HP = 30;
 export const START_GOLD = 5;
@@ -24,7 +26,13 @@ export interface OwnedUnit {
   uid: string;
   defId: string;
   star: 1 | 2;
+  /** 낀 무기 id */
+  weapon?: string;
 }
+
+export const SMELTER_COUNT = 2;
+/** 광물 시장에 한 라운드에 나오는 재료 수 최대 */
+export const MARKET_MAX = 2;
 
 export interface BoardUnit extends OwnedUnit {
   col: number;
@@ -41,6 +49,13 @@ export interface ChessPlayer {
   board: BoardUnit[];
   /** 준비를 끝냈다. 둘 다 끝내면 시간이 남아도 바로 전투로 간다. */
   done: boolean;
+  /** 자원 시스템: 재료 id -> 개수, 무기 id -> 개수(아직 안 낀 것) */
+  materials: Record<string, number>;
+  weapons: Record<string, number>;
+  /** 재련대. 재련 중인 무기 id (다음 라운드 시작에 완성), 비었으면 null */
+  smelters: Array<string | null>;
+  /** 이번 라운드에 광물 시장에서 이미 샀다 */
+  marketBought: boolean;
 }
 
 export interface RoundSummary {
@@ -59,6 +74,12 @@ export interface CombatRecord extends CombatRecording {
 }
 
 export interface ChessGame {
+  /** 자원 시스템(자원 칸, 광물 시장, 재련, 무기)을 쓰는가. 입문 모드는 쓰지 않는다. */
+  resources: boolean;
+  /** 이번 라운드의 자원 칸(판의 절대 좌표). 내 쪽과 상대 쪽이 거울로 같다. */
+  tiles: ResourceTile[];
+  /** 이번 라운드 광물 시장에 나온 재료 id */
+  market: string[];
   /** 입문 모드: 상점에 쉬운 캐릭터(1~2골드)만 나온다. */
   lite: boolean;
   round: number;
@@ -82,7 +103,13 @@ export type ChessFailureCode =
   | "bench_full"
   | "unit_not_found"
   | "invalid_cell"
-  | "deploy_full";
+  | "deploy_full"
+  | "no_resources"
+  | "market_empty"
+  | "market_sold"
+  | "no_material"
+  | "no_free_smelter"
+  | "no_weapon";
 
 export type ChessResult = { ok: true } | { ok: false; code: ChessFailureCode };
 const fail = (code: ChessFailureCode): ChessResult => ({ ok: false, code });
@@ -100,7 +127,8 @@ function nextRandom(game: ChessGame): number {
 // ---- 만들기 ----
 
 function emptyPlayer(seat: Seat): ChessPlayer {
-  return { seat, hp: START_HP, gold: START_GOLD, shop: Array(SHOP_SIZE).fill(null), bench: Array(BENCH_SIZE).fill(null), board: [], done: false };
+  return { seat, hp: START_HP, gold: START_GOLD, shop: Array(SHOP_SIZE).fill(null), bench: Array(BENCH_SIZE).fill(null), board: [], done: false,
+    materials: {}, weapons: {}, smelters: Array(SMELTER_COUNT).fill(null), marketBought: false };
 }
 
 /** 입문용 풀: 1~2골드 캐릭터 11명만. 처음 하는 사람이 배울 것을 줄인다. (폰 4, 비숍 3, 룩 2, 킹 1... 시너지는 폰·비숍·룩만 켜진다) */
@@ -113,6 +141,9 @@ export function createChessGame(seed: number, lite = false): ChessGame {
   const pool: Record<string, number> = {};
   for (const def of ROSTER) if (!lite || LITE_IDS.includes(def.id)) pool[def.id] = POOL_COPIES[def.cost];
   return {
+    resources: !lite,
+    tiles: [],
+    market: [],
     lite,
     round: 0,
     rngState: seed | 0,
@@ -198,15 +229,64 @@ function rollShop(game: ChessGame, player: ChessPlayer): void {
 
 // ---- 라운드 시작 ----
 
-/** 새 라운드를 시작한다: 골드(기본 + 이자), 상점 새로 채우기, 준비 상태 초기화. */
+/** 희귀도를 확률(%)로 뽑는다. 전설은 includeLegendary일 때만(칸에서 3%). */
+function rollRarity(game: ChessGame, includeLegendary: boolean): Rarity {
+  if (includeLegendary && nextRandom(game) < 0.03) return "legendary";
+  const roll = nextRandom(game) * 100;
+  return roll < 60 ? "common" : roll < 90 ? "uncommon" : "rare";
+}
+
+function rollMaterial(game: ChessGame, includeLegendary: boolean, exclude: string[] = []): string {
+  const rarity = rollRarity(game, includeLegendary);
+  const options = MATERIALS.filter((m) => m.rarity === rarity && !exclude.includes(m.id));
+  const pool = options.length > 0 ? options : MATERIALS.filter((m) => m.rarity === rarity);
+  return pool[Math.floor(nextRandom(game) * pool.length) % pool.length]!.id;
+}
+
+/** 라운드마다 자원 칸 4개(내 쪽 2개 + 거울로 상대 쪽 2개)와 광물 시장을 정한다. */
+function rollResources(game: ChessGame): void {
+  // seat 0 쪽의 앞 두 줄(y 4, 5)에서 서로 다른 칸 2개. seat 1 쪽은 판을 180도 돌린 칸이다.
+  const cells: Array<{ x: number; y: number }> = [];
+  for (let y = 4; y <= 5; y++) for (let x = 0; x < 8; x++) cells.push({ x, y });
+  const picked: Array<{ x: number; y: number }> = [];
+  for (let i = 0; i < 2; i++) {
+    const index = Math.floor(nextRandom(game) * cells.length) % cells.length;
+    picked.push(cells.splice(index, 1)[0]!);
+  }
+  const first = rollMaterial(game, true);
+  const second = rollMaterial(game, true, [first]);
+  const materials = [first, second];
+  game.tiles = [];
+  picked.forEach((cell, i) => {
+    game.tiles.push({ x: cell.x, y: cell.y, material: materials[i]! });
+    game.tiles.push({ x: 7 - cell.x, y: 7 - cell.y, material: materials[i]! });
+  });
+  // 광물 시장: 1~2종 (전설은 팔지 않는다)
+  const count = nextRandom(game) < 0.5 ? 1 : MARKET_MAX;
+  game.market = [];
+  for (let i = 0; i < count; i++) game.market.push(rollMaterial(game, false, game.market));
+}
+
+/** 새 라운드를 시작한다: 재련 완성, 골드(기본 + 이자), 상점 새로 채우기, 준비 상태 초기화. */
 export function startRound(game: ChessGame): void {
   game.round += 1;
   game.combat = null;
   for (const player of game.players) {
+    if (game.resources) {
+      // 재련대의 무기가 완성된다. 디지털 채굴기 포대는 매 라운드 시작에 비트 1개를 만든다.
+      player.smelters = player.smelters.map((weaponId) => {
+        if (weaponId) player.weapons[weaponId] = (player.weapons[weaponId] ?? 0) + 1;
+        return null;
+      });
+      const pouches = [...player.board, ...player.bench.filter((u): u is OwnedUnit => u !== null)].filter((u) => u.weapon === "digital-miner-pouch").length;
+      if (pouches > 0) player.materials.bit = (player.materials.bit ?? 0) + pouches;
+      player.marketBought = false;
+    }
     player.gold += BASE_INCOME + interest(player.gold);
     player.done = false;
     rollShop(game, player);
   }
+  if (game.resources) rollResources(game);
 }
 
 // ---- 기물 찾기와 합성 ----
@@ -232,6 +312,10 @@ function mergeIfPossible(game: ChessGame, player: ChessPlayer, defId: string, ex
   const anchor = three[0]!;
   const anchorBoard = onBoard.find((u) => u.uid === anchor.uid);
   const upgraded: OwnedUnit = { uid: `i${game.nextUid++}`, defId, star: 2 };
+  // 무기는 하나를 ★2가 이어받고, 나머지는 보관함으로 돌아온다.
+  const carried = three.map((u) => u.weapon).filter((w): w is string => !!w);
+  if (carried[0]) upgraded.weapon = carried[0];
+  for (const w of carried.slice(1)) player.weapons[w] = (player.weapons[w] ?? 0) + 1;
 
   const remove = new Set(three.map((u) => u.uid));
   player.board = player.board.filter((u) => !remove.has(u.uid));
@@ -277,6 +361,7 @@ export function sell(game: ChessGame, seat: Seat, uid: string): ChessResult {
   const copies = found.unit.star === 1 ? 1 : 3;
   player.gold += def.cost * copies;
   game.pool[def.id] = (game.pool[def.id] ?? 0) + copies;
+  if (found.unit.weapon) player.weapons[found.unit.weapon] = (player.weapons[found.unit.weapon] ?? 0) + 1;
   if ("bench" in found.where) player.bench[found.where.bench] = null;
   else player.board.splice(found.where.board, 1);
   return { ok: true };
@@ -303,7 +388,7 @@ export function deploy(game: ChessGame, seat: Seat, uid: string, col: number, ro
   if ("bench" in found.where) {
     if (occupantIndex < 0 && player.board.length >= cap) return fail("deploy_full");
     const occupant = occupantIndex >= 0 ? player.board.splice(occupantIndex, 1)[0]! : undefined;
-    player.bench[found.where.bench] = occupant ? { uid: occupant.uid, defId: occupant.defId, star: occupant.star } : null;
+    player.bench[found.where.bench] = occupant ? { uid: occupant.uid, defId: occupant.defId, star: occupant.star, ...(occupant.weapon ? { weapon: occupant.weapon } : {}) } : null;
     player.board.push({ ...found.unit, col, row });
     return { ok: true };
   }
@@ -327,7 +412,64 @@ export function toBench(game: ChessGame, seat: Seat, uid: string): ChessResult {
   const slot = player.bench.findIndex((u) => u === null);
   if (slot < 0) return fail("bench_full");
   const [unit] = player.board.splice(index, 1);
-  player.bench[slot] = { uid: unit!.uid, defId: unit!.defId, star: unit!.star };
+  player.bench[slot] = { uid: unit!.uid, defId: unit!.defId, star: unit!.star, ...(unit!.weapon ? { weapon: unit!.weapon } : {}) };
+  return { ok: true };
+}
+
+// ---- 자원 시스템의 행동 ----
+
+/** 광물 시장에서 재료를 산다. 한 라운드에 한 개. */
+export function buyMaterial(game: ChessGame, seat: Seat, slot: number): ChessResult {
+  const player = game.players[seat];
+  if (!game.resources) return fail("no_resources");
+  if (!Number.isInteger(slot) || slot < 0 || slot >= game.market.length) return fail("invalid_slot");
+  if (player.marketBought) return fail("market_sold");
+  const material = materialDef(game.market[slot]!);
+  const price = material ? MARKET_PRICE[material.rarity] : null;
+  if (!material || price === null) return fail("market_empty");
+  if (player.gold < price) return fail("not_enough_gold");
+  player.gold -= price;
+  player.marketBought = true;
+  player.materials[material.id] = (player.materials[material.id] ?? 0) + 1;
+  return { ok: true };
+}
+
+/** 재료를 재련대에 넣는다. 다음 라운드 시작에 같은 이름의 무기가 나온다. */
+export function smelt(game: ChessGame, seat: Seat, materialId: string): ChessResult {
+  const player = game.players[seat];
+  if (!game.resources) return fail("no_resources");
+  const material = materialDef(materialId);
+  if (!material || (player.materials[materialId] ?? 0) <= 0) return fail("no_material");
+  const slot = player.smelters.findIndex((w) => w === null);
+  if (slot < 0) return fail("no_free_smelter");
+  player.materials[materialId] = (player.materials[materialId] ?? 0) - 1;
+  player.smelters[slot] = material.weaponId;
+  return { ok: true };
+}
+
+/** 무기를 기물(대기석이나 판 위)에 낀다. 기물당 하나이고, 이미 낀 무기는 보관함으로 돌아온다. */
+export function equip(game: ChessGame, seat: Seat, weaponId: string, uid: string): ChessResult {
+  const player = game.players[seat];
+  if (!game.resources) return fail("no_resources");
+  if (!weaponDef(weaponId) || (player.weapons[weaponId] ?? 0) <= 0) return fail("no_weapon");
+  const found = findUnit(player, uid);
+  if (!found) return fail("unit_not_found");
+  const old = found.unit.weapon;
+  if (old) player.weapons[old] = (player.weapons[old] ?? 0) + 1;
+  player.weapons[weaponId] = (player.weapons[weaponId] ?? 0) - 1;
+  found.unit.weapon = weaponId;
+  return { ok: true };
+}
+
+/** 기물에서 무기를 빼서 보관함으로 돌린다. */
+export function unequip(game: ChessGame, seat: Seat, uid: string): ChessResult {
+  const player = game.players[seat];
+  const found = findUnit(player, uid);
+  if (!found) return fail("unit_not_found");
+  const old = found.unit.weapon;
+  if (!old) return fail("no_weapon");
+  player.weapons[old] = (player.weapons[old] ?? 0) + 1;
+  delete found.unit.weapon;
   return { ok: true };
 }
 
@@ -341,13 +483,13 @@ export const bothDone = (game: ChessGame): boolean => game.players.every((p) => 
 
 /** 지금 판의 배치를 전투용 배치로 바꾼다. */
 export function boardPlacements(player: ChessPlayer): Placement[] {
-  return player.board.map((u) => ({ defId: u.defId, star: u.star, col: u.col, row: u.row }));
+  return player.board.map((u) => ({ defId: u.defId, star: u.star, col: u.col, row: u.row, ...(u.weapon ? { weapon: u.weapon } : {}) }));
 }
 
 /** 전투를 계산해서 기록해 둔다. 체력은 전투 단계가 끝날 때(finishRound) 깎는다. */
 export function runRoundCombat(game: ChessGame): CombatRecord {
   const boards: [Placement[], Placement[]] = [boardPlacements(game.players[0]), boardPlacements(game.players[1])];
-  const recording = recordCombat(boards);
+  const recording = recordCombat(boards, game.resources ? game.tiles : []);
   const { winner, survivors } = recording.result;
   const damage: [number, number] = [0, 0];
   if (winner !== null) {
@@ -364,6 +506,13 @@ export function finishRound(game: ChessGame): void {
   if (!combat) return;
   game.players[0].hp -= combat.damage[0];
   game.players[1].hp -= combat.damage[1];
+  // 캔 재료와 무기로 번 골드를 받는다
+  for (const [, tileIndex, seat] of combat.mines) {
+    const material = combat.tiles[tileIndex]?.material;
+    if (material) game.players[seat].materials[material] = (game.players[seat].materials[material] ?? 0) + 1;
+  }
+  game.players[0].gold += combat.goldBonus[0];
+  game.players[1].gold += combat.goldBonus[1];
   if (combat.result.winner !== null) game.roundWins[combat.result.winner] += 1;
   game.lastRound = { round: game.round, winner: combat.result.winner, damage: combat.damage, survivors: combat.result.survivors };
 

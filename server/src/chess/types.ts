@@ -40,6 +40,16 @@ export interface Placement {
   star: 1 | 2;
   col: number;
   row: number;
+  /** 낀 무기 id */
+  weapon?: string;
+}
+
+/** 이번 라운드의 자원 칸(판의 절대 좌표) */
+export interface ResourceTile {
+  x: number;
+  y: number;
+  /** 재료 id */
+  material: string;
 }
 
 export type EffectType = "stun" | "root" | "taunt" | "dmgTaken" | "atkUp" | "dot" | "healBloom";
@@ -76,6 +86,13 @@ export interface CombatUnit {
   atkStack: number;
   /** 마지막으로 이 기물을 때린 기물의 id (처치 보상 계산용) */
   lastHitBy: string | null;
+  /** 낀 무기 id */
+  weapon: string | null;
+  /** "쌓였다가 터지는" 확률 효과의 누적값 (출혈, 회피, 추가 공격...). 난수를 쓰지 않는다. */
+  procs: Record<string, number>;
+  /** 받는 피해 배율(무기), 에너지 충전 배율(무기) */
+  dmgMult: number;
+  energyMult: number;
 }
 
 export interface Hit {
@@ -87,7 +104,7 @@ export interface Hit {
 
 export interface CombatEvent {
   beat: number;
-  type: "attack" | "ability" | "move" | "death" | "promote" | "suddenDeath" | "end";
+  type: "attack" | "ability" | "move" | "death" | "promote" | "mine" | "suddenDeath" | "end";
   unitId?: string;
   targetId?: string;
   text?: string;
@@ -122,6 +139,12 @@ export interface CombatState {
   winner: Seat | null;
   /** 끝났을 때 살아남은 기물 수(소환수 제외) */
   survivors: [number, number];
+  /** 자원 칸. 누가 밟으면 mined가 true가 된다. */
+  tiles: Array<ResourceTile & { mined: boolean }>;
+  /** 채굴 기록: 어느 박자에 어느 칸을 누가 캤는가 */
+  mines: Array<{ beat: number; tile: number; seat: Seat }>;
+  /** 무기로 번 골드 (에드코인 슬링, 비트코인 대검) */
+  goldBonus: [number, number];
 }
 
 export interface CombatResult {
