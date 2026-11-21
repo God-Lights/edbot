@@ -4,6 +4,7 @@
 import { availableIds, currentTurnSeat } from "./game";
 import { deployCap } from "./chess/game";
 import { unitDef } from "./chess/roster";
+import { MARKET_PRICE, materialDef } from "./chess/weapons";
 import type { Role } from "./chess/types";
 import { CHARACTERS } from "./characters";
 import type { Lane } from "./protocol";
@@ -169,6 +170,24 @@ export function runChessBot(state: RoomState, botId: string, now: number, scale:
 
   const cmd = (command: Parameters<typeof playerChess>[2]) => playerChess(state, botId, command, now, scale, rng).ok;
 
+  // 0) 자원: 광물 시장에서 재료를 사고, 재료를 재련대에 넣는다. (자원 시스템이 있는 판만)
+  const rarityRank = (id: string): number => ["common", "uncommon", "rare", "legendary"].indexOf(materialDef(id)?.rarity ?? "common");
+  if (chess.resources) {
+    if (!me.marketBought && chess.round >= 2) {
+      const options = chess.market
+        .map((id, slot) => ({ slot, price: MARKET_PRICE[materialDef(id)?.rarity ?? "common"] ?? 99, rank: rarityRank(id) }))
+        .filter((o) => o.price + 4 <= me.gold)
+        .sort((a, b) => b.rank - a.rank || a.slot - b.slot);
+      if (options[0]) cmd({ t: "market", slot: options[0].slot });
+    }
+    const owned = Object.entries(me.materials).filter(([, n]) => n > 0).map(([id]) => id).sort((a, b) => rarityRank(b) - rarityRank(a));
+    for (const id of owned) {
+      while ((me.materials[id] ?? 0) > 0 && me.smelters.some((w) => w === null)) {
+        if (!cmd({ t: "smelt", material: id })) break;
+      }
+    }
+  }
+
   // 1) 사기: 이미 가진 캐릭터(합치려고) > 비싼 캐릭터 순. 이자(10골드마다 +1)를 위해 10골드 단위는 조금 남긴다.
   for (let i = 0; i < 12; i++) {
     const owned = (defId: string) =>
@@ -200,6 +219,16 @@ export function runChessBot(state: RoomState, botId: string, now: number, scale:
       const weakest = [...me.board].sort((a, b) => unitValue(a.defId, a.star) - unitValue(b.defId, b.star))[0];
       if (weakest && unitValue(weakest.defId, weakest.star) < unitValue(unit.defId, unit.star)) {
         cmd({ t: "deploy", uid: unit.uid, col: weakest.col, row: weakest.row });
+      }
+    }
+  }
+
+  // 3) 무기: 가진 무기를 판 위의 가치 높은 기물부터 낀다.
+  if (chess.resources) {
+    for (const [weaponId, count] of Object.entries(me.weapons)) {
+      for (let i = 0; i < count; i++) {
+        const target = me.board.filter((u) => !u.weapon).sort((a, b) => unitValue(b.defId, b.star) - unitValue(a.defId, a.star))[0];
+        if (!target || !cmd({ t: "equip", weaponId, uid: target.uid })) break;
       }
     }
   }

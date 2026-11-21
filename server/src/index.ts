@@ -1,4 +1,5 @@
 import { ROSTER } from "./chess/roster";
+import { MARKET_PRICE, MATERIALS, WEAPONS as CHESS_WEAPONS } from "./chess/weapons";
 import { ALL_SYNERGIES } from "./chess/synergy";
 import { CHARACTERS } from "./characters";
 import { AuthStore } from "./auth-store";
@@ -23,12 +24,14 @@ const MAX_CREATE_ATTEMPTS = 8;
 
 /** 테스트 대전 방의 코드. 들어가면 사람마다 따로 만들어진 방에서 봇과 한 판을 할 수 있다. */
 const TEST_ROOM_CODE = "ADMN";
+/** 전체 캐릭터와 자원 시스템까지 켜진 봇 대전 (연습을 넘어선 판). */
+const FULL_TEST_ROOM_CODE = "ADMF";
 
 function generateRoomCode(): string {
   for (;;) {
     const bytes = crypto.getRandomValues(new Uint8Array(CODE_LENGTH));
     const code = Array.from(bytes, (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
-    if (code !== TEST_ROOM_CODE) return code; // 일반 방이 테스트 코드와 겹치지 않게
+    if (code !== TEST_ROOM_CODE && code !== FULL_TEST_ROOM_CODE) return code; // 일반 방이 테스트 코드와 겹치지 않게
   }
 }
 
@@ -68,8 +71,8 @@ async function sideStoreSource(origin: string): Promise<Response> {
 }
 
 /** ADMN은 접속한 사람마다 자기만의 방(Durable Object)을 쓴다. 다른 사람과 섞이지 않는다. */
-function testRoomStub(env: Env, owner: string) {
-  return env.ROOM.get(env.ROOM.idFromName(`test:${owner}`));
+function testRoomStub(env: Env, owner: string, full = false) {
+  return env.ROOM.get(env.ROOM.idFromName(full ? `testfull:${owner}` : `test:${owner}`));
 }
 
 function testOwner(user: { id: string } | null, request: Request): string {
@@ -213,6 +216,8 @@ export default {
           id, nameKo, piece, faction, cost, role, hp, atk, abilityText, passive,
         })),
         synergies: ALL_SYNERGIES.map(({ id, piece, need, tier, nameKo, text }) => ({ id, piece, need, tier, nameKo, text })),
+        materials: MATERIALS.map((m) => ({ ...m, price: MARKET_PRICE[m.rarity] })),
+        weapons: CHESS_WEAPONS,
       });
     }
 
@@ -232,11 +237,11 @@ export default {
     if (request.method === "GET" && parts.length === 3 && parts[0] === "api" && parts[1] === "rooms") {
       const code = (parts[2] ?? "").toUpperCase();
       if (!CODE_PATTERN.test(code)) return json({ error: "room_not_found" }, 404);
-      if (code === TEST_ROOM_CODE) {
+      if (code === TEST_ROOM_CODE || code === FULL_TEST_ROOM_CODE) {
         // 아직 만들어지지 않았어도 들어갈 수 있다. (들어가는 순간 만들어진다)
         const me = await identify(env, request);
-        const info = me || !enabled ? await testRoomStub(env, testOwner(me, request)).info() : null;
-        return json(info ?? { code: TEST_ROOM_CODE, phase: "lobby", players: 0, joinable: true, mode: "chess" });
+        const info = me || !enabled ? await testRoomStub(env, testOwner(me, request), code === FULL_TEST_ROOM_CODE).info() : null;
+        return json(info ?? { code, phase: "lobby", players: 0, joinable: true, mode: "chess" });
       }
       const info = await roomStub(env, code).info();
       return info ? json(info) : json({ error: "room_not_found" }, 404);
@@ -249,9 +254,10 @@ export default {
       const forwarded = new Request(request);
       forwarded.headers.delete(USER_HEADER);
       if (user) forwarded.headers.set(USER_HEADER, JSON.stringify({ id: user.id, nickname: user.nickname }));
-      if (code === TEST_ROOM_CODE) {
-        const stub = testRoomStub(env, testOwner(user, request));
-        await stub.init(TEST_ROOM_CODE, true); // 이미 있으면 false를 돌려줄 뿐이다
+      if (code === TEST_ROOM_CODE || code === FULL_TEST_ROOM_CODE) {
+        const full = code === FULL_TEST_ROOM_CODE;
+        const stub = testRoomStub(env, testOwner(user, request), full);
+        await stub.init(code, true, "chess", !full); // 이미 있으면 false를 돌려줄 뿐이다
         return stub.fetch(forwarded);
       }
       return roomStub(env, code).fetch(forwarded);

@@ -48,7 +48,7 @@ enum Labels {
         case ErrorCode.alreadyKnown: return "이미 알고 있는 칸이에요."
         case ErrorCode.notEnoughTalent: return "탈런트가 부족해요."
         case ErrorCode.notEnoughMaterials: return "재료가 부족해요."
-        case ErrorCode.noFreeSmelter: return "빈 재련대가 없어요."
+        case ErrorCode.noFreeSmelter: return "빈 재련대가 없어요. 다음 라운드에 무기가 나와요."
         case ErrorCode.unknownWeapon: return "없는 무기예요."
         case ErrorCode.noWeapon: return "그 무기를 가지고 있지 않아요."
         case ErrorCode.notInZone: return "본진이나 아군 가드 타워 근처에서만 장착할 수 있어요."
@@ -62,6 +62,10 @@ enum Labels {
         case ErrorCode.unitNotFound: return "그 기물이 없어요."
         case ErrorCode.invalidCell: return "놓을 수 없는 칸이에요."
         case ErrorCode.deployFull: return "판에 올릴 수 있는 기물 수를 넘었어요."
+        case ErrorCode.noResources: return "이 판에는 자원 시스템이 없어요."
+        case ErrorCode.marketEmpty: return "살 수 없는 재료예요."
+        case ErrorCode.marketSold: return "이번 라운드에는 이미 시장에서 샀어요."
+        case ErrorCode.noMaterial: return "그 재료가 없어요."
         default: return nil
         }
     }
@@ -107,6 +111,16 @@ enum Labels {
         case .bishop: return "PieceBishop"
         case .knight: return "PieceKnight"
         case .pawn: return "PiecePawn"
+        }
+    }
+
+    static func rarityName(_ rarity: String) -> String {
+        switch rarity {
+        case "common": return "흔함"
+        case "uncommon": return "보통"
+        case "rare": return "희귀"
+        case "legendary": return "전설"
+        default: return rarity
         }
     }
 

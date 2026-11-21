@@ -66,6 +66,8 @@ final class AppModel {
     // 체스판 자동 전투
     private(set) var chessUnits: [ChessUnitInfo] = []
     private(set) var chessSynergies: [ChessSynergyInfo] = []
+    private(set) var chessMaterials: [ChessMaterialInfo] = []
+    private(set) var chessWeapons: [ChessWeaponInfo] = []
     /// 준비 단계에서 고른 내 기물(대기석 또는 판 위). 칸을 누르면 거기에 놓는다.
     var selectedUid: String?
 
@@ -92,6 +94,7 @@ final class AppModel {
         selectedCharacterId = nil
         selectedPlacementId = nil
         selectedUid = nil
+        selectedWeaponId = nil
     }
 
     private func loadRoster(from url: URL) {
@@ -180,6 +183,8 @@ final class AppModel {
 
     func chessUnit(_ id: String) -> ChessUnitInfo? { chessUnits.first { $0.id == id } }
     func chessSynergy(_ id: String) -> ChessSynergyInfo? { chessSynergies.first { $0.id == id } }
+    func chessMaterial(_ id: String) -> ChessMaterialInfo? { chessMaterials.first { $0.id == id } }
+    func chessWeapon(_ id: String) -> ChessWeaponInfo? { chessWeapons.first { $0.id == id } }
 
     private func loadChess(from url: URL) {
         guard chessUnits.isEmpty else { return }
@@ -187,6 +192,8 @@ final class AppModel {
             if let catalog = try? await ApiClient(baseURL: url).chessCatalog() {
                 chessUnits = catalog.units
                 chessSynergies = catalog.synergies
+                chessMaterials = catalog.materials
+                chessWeapons = catalog.weapons
             }
         }
     }
@@ -202,6 +209,29 @@ final class AppModel {
         guard let connection else { return }
         selectedUid = nil
         Task { await connection.sendSell(uid) }
+    }
+
+    // 자원 시스템
+
+    func chessBuyMaterial(slot: Int) {
+        guard let connection else { return }
+        Task { await connection.sendMarket(slot: slot) }
+    }
+
+    func chessSmelt(_ material: String) {
+        guard let connection else { return }
+        Task { await connection.sendSmelt(material) }
+    }
+
+    func chessEquip(_ weaponId: String, uid: String) {
+        guard let connection else { return }
+        selectedWeaponId = nil
+        Task { await connection.sendEquip(weaponId, uid: uid) }
+    }
+
+    func chessUnequip(_ uid: String) {
+        guard let connection else { return }
+        Task { await connection.sendUnequip(uid) }
     }
 
     func chessReroll() {
@@ -522,7 +552,10 @@ final class AppModel {
             selectedCharacterId = nil
         }
         if previous?.phase != room.phase { selectedPlacementId = nil }
-        if previous?.phase != room.phase || previous?.chess?.round != room.chess?.round { selectedUid = nil }
+        if previous?.phase != room.phase || previous?.chess?.round != room.chess?.round {
+            selectedUid = nil
+            selectedWeaponId = nil
+        }
         if let battle = room.battle {
             interpolator.update(battle.units, at: Date.timeIntervalSinceReferenceDate)
         } else if previous?.battle != nil {

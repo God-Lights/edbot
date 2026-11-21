@@ -5,6 +5,17 @@ import type { CombatEvent, CombatState, CombatUnit, Effect, EffectType, Hit } fr
 export const BEAT_ENERGY_ATTACK = 12; // 공격할 때 차는 에너지
 export const BEAT_ENERGY_HURT = 6; // 맞을 때 차는 에너지
 
+/** 확률 p의 효과가 이번에 터지는가. 난수 대신 값을 쌓아서 1이 넘으면 터진다. (같은 입력 -> 같은 결과, 두 팀에 똑같이 적용) */
+export function proc(unit: CombatUnit, key: string, p: number): boolean {
+  const acc = (unit.procs[key] ?? 0) + p;
+  if (acc >= 1 - 1e-9) {
+    unit.procs[key] = acc - 1;
+    return true;
+  }
+  unit.procs[key] = acc;
+  return false;
+}
+
 export function pushEvent(state: CombatState, event: Omit<CombatEvent, "beat">): void {
   state.events.push({ beat: state.beat, ...event });
 }
@@ -26,7 +37,7 @@ export function effectSum(unit: CombatUnit, type: EffectType, beat: number): num
 
 /** 받는 피해 배율: 효과(dmgTaken: 비율)를 곱하고, 팀의 시너지 배율을 곱한다. */
 export function damageTakenMultiplier(state: CombatState, unit: CombatUnit): number {
-  let m = state.bonuses[unit.seat].dmgTaken;
+  let m = state.bonuses[unit.seat].dmgTaken * unit.dmgMult;
   for (const e of unit.effects) if (e.type === "dmgTaken" && e.untilBeat >= state.beat) m *= e.value;
   return m;
 }
@@ -41,7 +52,7 @@ export function effectiveAtk(state: CombatState, unit: CombatUnit): number {
 }
 
 /** ★2는 능력도 1.5배 */
-export const starPower = (unit: CombatUnit): number => (unit.star === 2 ? 1.5 : 1);
+export const starPower = (unit: CombatUnit): number => (unit.star === 2 ? 1.5 : 1) * (unit.weapon === "edgem-orb" ? 1.4 : 1);
 
 export function queueHit(state: CombatState, hit: Hit): void {
   state.hits.push(hit);
@@ -68,7 +79,7 @@ export function shieldUnit(state: CombatState, source: CombatUnit, target: Comba
 
 export function createUnit(
   state: CombatState,
-  fields: Omit<CombatUnit, "id" | "alive" | "shield" | "shieldUntilBeat" | "effects" | "kills" | "atkStack" | "energy" | "promoted" | "lastHitBy"> & { promoted?: boolean },
+  fields: Omit<CombatUnit, "id" | "alive" | "shield" | "shieldUntilBeat" | "effects" | "kills" | "atkStack" | "energy" | "promoted" | "lastHitBy" | "weapon" | "procs" | "dmgMult" | "energyMult"> & { promoted?: boolean; weapon?: string | null },
 ): CombatUnit {
   const unit: CombatUnit = {
     ...fields,
@@ -82,6 +93,10 @@ export function createUnit(
     lastHitBy: null,
     energy: 0,
     promoted: fields.promoted ?? false,
+    weapon: fields.weapon ?? null,
+    procs: {},
+    dmgMult: 1,
+    energyMult: 1,
   };
   state.units.push(unit);
   return unit;

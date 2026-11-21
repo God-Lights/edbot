@@ -68,9 +68,9 @@ export class Room extends DurableObject<Env> {
   // ---- Worker가 부르는 RPC ----
 
   /** 방을 처음 만든다. 이미 있으면 false. (코드가 겹쳤을 때 Worker가 다른 코드로 다시 시도한다.) */
-  async init(code: string, testMatch = false, mode: "lanes" | "chess" = "chess"): Promise<boolean> {
+  async init(code: string, testMatch = false, mode: "lanes" | "chess" = "chess", lite = testMatch): Promise<boolean> {
     if (this.state) return false;
-    this.state = createRoom(code, Date.now(), testMatch, mode);
+    this.state = createRoom(code, Date.now(), testMatch, mode, lite);
     await this.persist();
     return true;
   }
@@ -192,6 +192,10 @@ export class Room extends DurableObject<Env> {
       case "buy":
       case "sell":
       case "reroll":
+      case "market":
+      case "smelt":
+      case "equip":
+      case "unequip":
       case "deploy":
       case "bench":
       case "done":

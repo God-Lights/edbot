@@ -2,7 +2,7 @@ import EdbotKit
 import SwiftUI
 
 enum GuideTab: String, CaseIterable, Identifiable {
-    case flow, prep, combat, characters, synergy, controls
+    case flow, prep, combat, characters, synergy, resources, controls
 
     var id: String { rawValue }
 
@@ -13,6 +13,7 @@ enum GuideTab: String, CaseIterable, Identifiable {
         case .combat: return "전투 규칙"
         case .characters: return "캐릭터"
         case .synergy: return "시너지"
+        case .resources: return "자원과 무기"
         case .controls: return "조작"
         }
     }
@@ -70,6 +71,7 @@ struct GuideView: View {
         case .combat: CombatGuide()
         case .characters: CharacterGuide()
         case .synergy: SynergyGuide()
+        case .resources: ResourceGuide()
         case .controls: ControlsGuide()
         }
     }
@@ -302,6 +304,49 @@ private struct SynergyGuide: View {
     }
 }
 
+private struct ResourceGuide: View {
+    @Environment(AppModel.self) private var model
+    private let rarities: [String] = ["common", "uncommon", "rare", "legendary"]
+
+    var body: some View {
+        VStack(spacing: 14) {
+            GuideCard(title: "자원 시스템이란?") {
+                guideLine("**전체 대전**(그리고 사람끼리의 방)에서만 있어요. 연습 대전에는 없어요.")
+                guideLine("재료를 모아 **재련대**에서 **무기**로 만들고, 기물에 끼워서 강하게 만들어요. 무기는 기물 하나에 하나만 낄 수 있어요.")
+            }
+            GuideCard(title: "재료를 얻는 법") {
+                guideLine("**자원 칸(◆)**: 라운드마다 판에 4칸이 나와요. 내 쪽 2칸, 거울로 상대 쪽 2칸이고 재료도 같아요. 기물이 칸 위에 서 있거나 걸어서 도착하면 재료를 얻고 칸은 사라져요. 같은 순간에 둘이 도착하면 둘 다 얻어요.")
+                guideLine("**광물 시장**: 라운드마다 1~2종이 나와요. 한 라운드에 한 개만 살 수 있어요. 흔함 3골드, 보통 5골드, 희귀 8골드예요. 전설은 팔지 않아요.")
+                guideLine("전투가 끝난 뒤에 캔 재료를 받아요. 에드코인 슬링과 비트코인 대검은 골드도 줘요.")
+            }
+            GuideCard(title: "재련대와 무기 끼기") {
+                guideLine("재료를 누르면 재련대에 들어가요. **재련대는 2칸**이고, 다음 라운드가 시작될 때 같은 이름의 무기로 완성돼요.")
+                guideLine("무기를 누른 뒤 기물(대기석이나 판 위)을 누르면 껴요. 번개 방패 표시가 있는 기물이 무기를 낀 기물이에요.")
+                guideLine("기물을 팔거나 ★2로 합칠 때 무기는 보관함으로 돌아와요. 선택한 기물 정보에서 **무기 빼기**도 할 수 있어요.")
+            }
+            if model.chessMaterials.isEmpty {
+                ProgressView("불러오는 중...").frame(maxWidth: .infinity).panel()
+            } else {
+                ForEach(rarities, id: \.self) { rarity in
+                    GuideCard(title: "\(Labels.rarityName(rarity)) 재료와 무기") {
+                        ForEach(model.chessMaterials.filter { $0.rarity == rarity }) { material in
+                            let weapon = model.chessWeapon(material.weaponId)
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "diamond.fill").foregroundStyle(ChessStyle.rarityColor(rarity))
+                                    Text("\(material.nameKo) → \(weapon?.nameKo ?? "")").font(.subheadline.bold())
+                                    if let price = material.price { Text("시장 \(price)골드").font(.caption).foregroundStyle(.secondary) }
+                                }
+                                Text(weapon?.text ?? "").font(.callout).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 private struct ControlsGuide: View {
     var body: some View {
         VStack(spacing: 14) {
@@ -318,6 +363,10 @@ private struct ControlsGuide: View {
                 guideLine("기물 테두리 색은 가격이에요. 회색 1골드, 초록 2골드, 파랑 3골드, 금색 4골드. ★은 별 등급이에요.")
                 guideLine("전투 중 기물 아래의 막대는 체력이에요. 흰 선은 보호막이에요.")
                 guideLine("전투 중 선은 이번 박자의 공격(흰색)과 능력(보라색)이에요.")
+            }
+            GuideCard(title: "자원 조작") {
+                guideLine("**시장 카드 누르기**: 재료를 사요. **재료 누르기**: 재련대에 넣어요. **무기 누른 뒤 기물 누르기**: 무기를 껴요.")
+                guideLine("판 위의 ◆는 이번 라운드 자원 칸이에요. 기물을 올려 두거나 그쪽으로 걸어가게 하면 얻어요.")
             }
             GuideCard(title: "항복") {
                 guideLine("화면 위의 **항복** 버튼은 준비 중에도, 전투 중에도 눌러요. 누르면 바로 패배해요.")
