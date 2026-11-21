@@ -34,3 +34,19 @@ git tag ios-v0.1.0 && git push origin ios-v0.1.0
 - 로컬 서버(`npx wrangler dev --var REQUIRE_AUTH:false`)에 붙으려면 서버 주소에 `http://<Mac의 IP>:8787` 을 적습니다(로컬 네트워크 http 허용).
 - 서버 메시지 규격이 바뀌면 `EdbotKit/Tests` 의 예시 JSON이 먼저 깨지도록 서버가 실제로 보내는 형식으로 적어 두었습니다.
 - 이 코드는 Swift 컴파일러가 없는 환경에서 작성되어, 첫 빌드는 CI에서 확인합니다. 컴파일 오류가 나면 Actions 로그를 보내 주세요.
+
+## SideStore로 설치하고 업데이트 받기
+
+**소스 주소:** `https://edgame-api.officialgl.com/sidestore.json`
+
+1. iPad의 SideStore에서 **Browse > Sources > +** 를 눌러 위 주소를 붙여 넣고 소스를 추가합니다. (서버 첫 화면 `https://edgame-api.officialgl.com/` 에 있는 **SideStore에 소스 추가** 링크를 iPad에서 눌러도 됩니다. `sidestore://source?url=...` 로 바로 열립니다.)
+2. 목록에 나온 **COMMANDER**를 설치합니다. 서명은 SideStore가 본인 Apple ID로 합니다.
+3. 새 버전이 올라오면 SideStore가 업데이트를 알려 줍니다.
+
+소스는 서버가 GitHub 릴리스(`ios-vX.Y.Z` 태그, `Commander.ipa` 첨부)를 읽어서 만듭니다(5분 캐시). 그래서 **새 버전을 내는 방법**은 태그를 올리는 것뿐입니다.
+
+```bash
+git tag ios-v0.2.0 && git push origin ios-v0.2.0
+```
+
+워크플로가 그 버전 번호로 `.ipa`를 만들어 릴리스에 `Commander.ipa`와 `icon.png`(소스의 앱 아이콘)를 올립니다. 릴리스를 올리기 전에는 소스에 앱이 보이지 않습니다. AltStore에도 같은 주소로 소스를 추가할 수 있습니다.

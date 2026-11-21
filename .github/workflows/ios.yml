@@ -50,6 +50,17 @@ jobs:
         working-directory: ios
         run: xcodegen generate
 
+      - name: 버전 정하기
+        id: version
+        shell: bash
+        run: |
+          # 태그(ios-v0.2.0)로 빌드하면 그 버전(0.2.0)을, 아니면 개발용 버전(0.0.0-dev)을 쓴다.
+          if [[ "${GITHUB_REF}" == refs/tags/ios-v* ]]; then
+            echo "marketing=${GITHUB_REF_NAME#ios-v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "marketing=0.0.0-dev" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: 아카이브 (서명 끔)
         working-directory: ios
         shell: bash
@@ -61,6 +72,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -archivePath build/Commander.xcarchive \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            MARKETING_VERSION="${{ steps.version.outputs.marketing }}" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             | tail -n 40
 
       - name: .ipa 만들기
@@ -83,7 +95,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" ios/build/Commander.ipa \
+          # icon.png 는 SideStore 소스(/sidestore.json)가 앱 아이콘으로 쓴다.
+          cp ios/EdbotApp/Assets.xcassets/AppIcon.appiconset/icon-1024.png ios/build/icon.png
+          gh release create "${{ github.ref_name }}" ios/build/Commander.ipa ios/build/icon.png \
             --repo "${{ github.repository }}" \
             --title "COMMANDER iPad ${{ github.ref_name }}" \
-            --notes "서명 없는 .ipa 입니다. Sideloadly 또는 AltStore 로 본인 Apple ID 로 서명해서 설치하세요."
+            --notes "서명 없는 .ipa 입니다. SideStore 소스 https://edgame-api.officialgl.com/sidestore.json 를 추가하거나, Sideloadly/AltStore 로 본인 Apple ID 로 서명해서 설치하세요."
