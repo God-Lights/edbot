@@ -4,6 +4,9 @@
 
 export const IOS_TAG_PREFIX = "ios-v";
 export const BUNDLE_ID = "com.officialgl.commander";
+/** 릴리스에 아이콘이 없을 때 쓰는 주소. SideStore는 빈 문자열을 잘못된 URL로 보고 소스 추가를 거부한다. */
+export const FALLBACK_ICON_URL =
+  "https://raw.githubusercontent.com/God-Lights/edbot/main/ios/EdbotApp/Assets.xcassets/AppIcon.appiconset/icon-1024.png";
 const IPA_NAME = "Commander.ipa";
 const ICON_NAME = "icon.png";
 
@@ -60,7 +63,7 @@ export function versionsFromReleases(releases: GithubRelease[]): { versions: Sid
 export function buildSource(releases: GithubRelease[], sourceURL: string): unknown {
   const { versions, iconURL } = versionsFromReleases(releases);
   const latest = versions[0];
-  const icon = iconURL ?? "";
+  const icon = iconURL ?? FALLBACK_ICON_URL;
   return {
     name: "COMMANDER",
     identifier: `${BUNDLE_ID}.source`,
@@ -70,7 +73,8 @@ export function buildSource(releases: GithubRelease[], sourceURL: string): unkno
     website: "https://edgame-api.officialgl.com",
     tintColor: "B040BE",
     sourceURL,
-    apps: [
+    // 릴리스가 아직 없으면 앱을 싣지 않는다. 다운로드 주소가 없는 앱은 SideStore가 소스를 거부할 수 있다.
+    apps: !latest ? [] : [
       {
         name: "COMMANDER",
         bundleIdentifier: BUNDLE_ID,
@@ -81,15 +85,11 @@ export function buildSource(releases: GithubRelease[], sourceURL: string): unkno
         iconURL: icon,
         tintColor: "B040BE",
         screenshotURLs: [],
-        ...(latest
-          ? {
-              version: latest.version,
-              versionDate: latest.date,
-              versionDescription: latest.localizedDescription,
-              downloadURL: latest.downloadURL,
-              size: latest.size,
-            }
-          : {}),
+        version: latest.version,
+        versionDate: latest.date,
+        versionDescription: latest.localizedDescription,
+        downloadURL: latest.downloadURL,
+        size: latest.size,
         versions,
         appPermissions: { entitlements: [], privacy: {} },
       },
