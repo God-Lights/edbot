@@ -1,0 +1,77 @@
+name: Server
+
+# 서버 검증과 배포를 한 파일로. 작업은 상황에 따라 하나만 돈다.
+# - PR(server/ 변경): 타입 검사, 단위 테스트, 배포 시험  (main 에 합치기 전에 한 번만 검사한다)
+# - main 에 합쳐짐 또는 수동 실행: Cloudflare Workers 에 배포하고 D1 마이그레이션 적용 (검사는 PR 에서 이미 했다)
+on:
+  pull_request:
+    paths:
+      - "server/**"
+      - ".github/workflows/server.yml"
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - ".github/workflows/server.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-${{ github.event_name == 'pull_request' && github.ref || 'deploy' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  WRANGLER_SEND_METRICS: "false"
+
+defaults:
+  run:
+    working-directory: server
+
+jobs:
+  test:
+    name: 서버 (타입 검사, 단위 테스트, 배포 시험)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      # 실제로 올리지는 않고, 설정과 번들이 올라갈 수 있는 상태인지만 확인한다. (로그인 불필요)
+      - run: npx wrangler deploy --dry-run
+
+  deploy:
+    name: 배포
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    # GitHub 저장소 설정의 Environments > production 에서 승인자를 지정하면 배포 전에 사람이 승인해야 한다.
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: 배포에 필요한 시크릿 확인
+        working-directory: .
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::GitHub 저장소의 Secrets에 CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID 를 등록해야 한다. (server/README.md의 '배포' 참고)"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      # 저장소에 고정된 wrangler 버전으로 배포한다. (별도의 서드파티 액션을 쓰지 않는다)
+      - run: npm run deploy
+      # 전적과 랭킹 테이블. 이미 적용된 마이그레이션은 건너뛴다. (API 토큰에 "D1 편집" 권한이 필요하다)
+      - run: npm run db:migrate
