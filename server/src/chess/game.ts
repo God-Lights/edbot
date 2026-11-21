@@ -59,6 +59,8 @@ export interface CombatRecord extends CombatRecording {
 }
 
 export interface ChessGame {
+  /** 입문 모드: 상점에 쉬운 캐릭터(1~2골드)만 나온다. */
+  lite: boolean;
   round: number;
   rngState: number;
   nextUid: number;
@@ -101,10 +103,17 @@ function emptyPlayer(seat: Seat): ChessPlayer {
   return { seat, hp: START_HP, gold: START_GOLD, shop: Array(SHOP_SIZE).fill(null), bench: Array(BENCH_SIZE).fill(null), board: [], done: false };
 }
 
-export function createChessGame(seed: number): ChessGame {
+/** 입문용 풀: 1~2골드 캐릭터 11명만. 처음 하는 사람이 배울 것을 줄인다. (폰 4, 비숍 3, 룩 2, 킹 1... 시너지는 폰·비숍·룩만 켜진다) */
+export const LITE_IDS: readonly string[] = [
+  "nut-wolf", "xenosaurs", "relic", "mossling", "skritch", "felis",
+  "lappus", "for-the-more", "raufaino", "obelion", "marshal-berg",
+];
+
+export function createChessGame(seed: number, lite = false): ChessGame {
   const pool: Record<string, number> = {};
-  for (const def of ROSTER) pool[def.id] = POOL_COPIES[def.cost];
+  for (const def of ROSTER) if (!lite || LITE_IDS.includes(def.id)) pool[def.id] = POOL_COPIES[def.cost];
   return {
+    lite,
     round: 0,
     rngState: seed | 0,
     nextUid: 1,
@@ -125,7 +134,8 @@ export const deployCap = (round: number): number => Math.min(MAX_DEPLOY, Math.ma
 export const interest = (gold: number): number => Math.min(MAX_INTEREST, Math.floor(gold / 10));
 
 /** 상점의 가격별 등장 확률(%) [1골드, 2골드, 3골드, 4골드]. 라운드가 갈수록 비싼 캐릭터가 늘어난다. */
-export function shopOdds(round: number): [number, number, number, number] {
+export function shopOdds(round: number, lite = false): [number, number, number, number] {
+  if (lite) return round <= 2 ? [75, 25, 0, 0] : [55, 45, 0, 0];
   if (round <= 2) return [75, 25, 0, 0];
   if (round <= 4) return [55, 35, 10, 0];
   if (round <= 6) return [35, 35, 25, 5];
@@ -163,7 +173,7 @@ function drawFromPool(game: ChessGame, cost: 1 | 2 | 3 | 4): string | null {
 
 function rollShop(game: ChessGame, player: ChessPlayer): void {
   returnShopToPool(game, player);
-  const odds = shopOdds(game.round);
+  const odds = shopOdds(game.round, game.lite);
   for (let slot = 0; slot < SHOP_SIZE; slot++) {
     let roll = nextRandom(game) * 100;
     let cost: 1 | 2 | 3 | 4 = 1;

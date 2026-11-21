@@ -294,7 +294,7 @@ function enterPhase(
     for (const p of state.players) p.ready = false;
   } else if (phase === "prep") {
     if (!state.chess) {
-      state.chess = createChessGame(Math.floor(rng() * 0x7fffffff));
+      state.chess = createChessGame(Math.floor(rng() * 0x7fffffff), state.testMatch);
       state.matchStartedAt = startedAt;
       state.recorded = false;
     }

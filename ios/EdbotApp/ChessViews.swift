@@ -22,6 +22,17 @@ enum ChessStyle {
     static func sellValue(cost: Int, star: Int) -> Int { cost * (star >= 2 ? 3 : 1) }
 }
 
+private extension View {
+    /// 첫 판 안내에서 지금 눌러야 할 곳을 노란 테두리로 알려 준다.
+    func coachHighlight(_ on: Bool) -> some View {
+        overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Theme.warn, lineWidth: on ? 3 : 0)
+                .allowsHitTesting(false)
+        )
+    }
+}
+
 /// 기물 하나: 기물 글자, 이름, 별. tint가 있으면 그 색 테두리(전투에서 팀 색).
 struct ChessToken: View {
     @Environment(AppModel.self) private var model
@@ -148,13 +159,19 @@ struct ChessPrepView: View {
     let seat: Int
     /// 첫 판 안내를 닫았는가. 한 번 닫으면 다시 안 나온다.
     @AppStorage("chessCoachDismissed") private var coachDismissed = false
+    /// 2라운드 팁을 봤는가.
+    @AppStorage("chessCoachTipSeen") private var tipSeen = false
     @State private var confirmEmptyDone = false
 
     var body: some View {
         if let me = chess.me {
             VStack(spacing: 10) {
                 ChessHeader(room: room, chess: chess, seat: seat)
-                if !coachDismissed && chess.round == 1 { coachCard }
+                if !coachDismissed && chess.round == 1 {
+                    coachCard(me)
+                } else if !tipSeen && chess.round == 2 {
+                    tipCard
+                }
                 HStack(alignment: .top, spacing: 14) {
                     VStack(spacing: 8) {
                         boardLabels(me)
@@ -171,19 +188,52 @@ struct ChessPrepView: View {
         }
     }
 
-    /// 처음 하는 사람을 위한 4단계 안내. 1라운드 준비 단계에만 나온다.
-    private var coachCard: some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("처음이시네요! 이렇게 해 보세요").font(.subheadline.bold())
-                Text("① 오른쪽 상점에서 캐릭터를 눌러 사요   ② 대기석의 기물을 누르고 판의 칸을 눌러 놓아요")
-                    .font(.caption)
-                Text("③ 판에 3기까지 올리면 '준비 끝'을 눌러요   ④ 전투는 알아서 진행돼요. 항복은 언제든 위에서 할 수 있어요")
-                    .font(.caption)
+    /// 지금 해야 할 일. 내가 가진 기물과 골드를 보고 단계를 고른다.
+    private func coachStep(_ me: ChessSelfSnapshot) -> (n: Int, text: String) {
+        let benchCount: Int = me.bench.compactMap { $0 }.count
+        if me.board.isEmpty && benchCount == 0 {
+            return (1, "오른쪽 상점에서 마음에 드는 캐릭터를 눌러 사 보세요.")
+        }
+        if me.board.isEmpty {
+            return (2, "산 기물을 판에 놓아요. 끌어다 놓거나, 기물을 누르고 칸을 눌러도 돼요. '자동 배치' 버튼도 있어요.")
+        }
+        if me.board.count < chess.deployCap && (benchCount > 0 || me.gold >= 1) {
+            return (3, "이번 라운드는 \(chess.deployCap)기까지 올릴 수 있어요. 골드가 남으면 더 사서 놓아 보세요.")
+        }
+        return (4, "준비 끝! '준비 끝'을 누르면 전투가 시작돼요. 전투는 알아서 진행되고, 항복은 언제든 위에서 할 수 있어요.")
+    }
+
+    /// 처음 하는 사람을 위한 단계별 안내. 1라운드 준비 단계에만 나온다.
+    private func coachCard(_ me: ChessSelfSnapshot) -> some View {
+        let step = coachStep(me)
+        return HStack(alignment: .center, spacing: 14) {
+            HStack(spacing: 5) {
+                ForEach(1...4, id: \.self) { n in
+                    Circle().fill(n <= step.n ? Theme.warn : Color.white.opacity(0.2)).frame(width: 9, height: 9)
+                }
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("처음이시네요! \(step.n) / 4").font(.caption.bold()).foregroundStyle(Theme.warn)
+                Text(step.text).font(.subheadline)
             }
             Spacer()
             Button("가이드") { model.openGuide(.prep) }.buttonStyle(SecondaryButtonStyle())
-            Button("닫기") { coachDismissed = true }.buttonStyle(SecondaryButtonStyle())
+            Button("건너뛰기") { coachDismissed = true }.buttonStyle(SecondaryButtonStyle())
+        }
+        .panel(padding: 10)
+    }
+
+    /// 첫 전투가 끝난 뒤 2라운드에서 한 번만 보이는 팁.
+    private var tipCard: some View {
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("다음 단계 팁").font(.caption.bold()).foregroundStyle(Theme.warn)
+                Text("① 골드 10마다 이자 +1 (최대 +3)  ② 같은 캐릭터 3장 = ★2, 훨씬 강해져요  ③ 같은 기물(킹·룩·비숍·폰...)을 2명 이상 올리면 시너지 보너스")
+                    .font(.subheadline)
+            }
+            Spacer()
+            Button("가이드") { model.openGuide(.synergy) }.buttonStyle(SecondaryButtonStyle())
+            Button("알겠어요") { tipSeen = true }.buttonStyle(SecondaryButtonStyle())
         }
         .panel(padding: 10)
     }
@@ -192,7 +242,13 @@ struct ChessPrepView: View {
         HStack {
             Text("판 \(me.board.count) / \(chess.deployCap)").font(.subheadline.bold())
             Text("(위쪽이 앞줄, 상대와 가까워요)").font(.caption).foregroundStyle(.secondary)
+            if chess.lite == true { Text("입문 모드").font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 3).background(Capsule().fill(Theme.good.opacity(0.25))) }
             Spacer()
+            if me.bench.contains(where: { $0 != nil }) && me.board.count < chess.deployCap {
+                Button { model.chessAutoPlace(me, cap: chess.deployCap) } label: { Label("자동 배치", systemImage: "wand.and.stars") }
+                    .buttonStyle(SecondaryButtonStyle())
+                    .disabled(me.done)
+            }
             if let opponent = chess.opponent {
                 Text("상대 \(opponent.boardCount)기 배치 · \(opponent.done ? "준비 끝" : "준비 중")")
                     .font(.caption)
@@ -212,6 +268,7 @@ struct ChessPrepView: View {
             }
         }
         .aspectRatio(2, contentMode: .fit)
+        .coachHighlight(showCoach && coachStep(me).n == 2)
     }
 
     private func boardCell(_ me: ChessSelfSnapshot, col: Int, row: Int) -> some View {
@@ -223,11 +280,17 @@ struct ChessPrepView: View {
             if let unit {
                 ChessToken(defId: unit.defId, star: unit.star, selected: model.selectedUid == unit.uid)
                     .padding(2)
+                    .draggable(unit.uid)
             }
         }
         .aspectRatio(1, contentMode: .fit)
         .contentShape(Rectangle())
         .onTapGesture { tapCell(me, col: col, row: row, occupant: unit) }
+        .dropDestination(for: String.self) { items, _ in
+            guard let uid = items.first, !me.done else { return false }
+            model.chessDeploy(uid, col: col, row: row)
+            return true
+        }
     }
 
     private func tapCell(_ me: ChessSelfSnapshot, col: Int, row: Int, occupant: ChessUnitView?) {
@@ -260,11 +323,18 @@ struct ChessPrepView: View {
             if let unit {
                 ChessToken(defId: unit.defId, star: unit.star, selected: model.selectedUid == unit.uid)
                     .padding(2)
+                    .draggable(unit.uid)
             }
         }
         .aspectRatio(1, contentMode: .fit)
         .contentShape(Rectangle())
         .onTapGesture { tapBench(me, unit: unit) }
+        .dropDestination(for: String.self) { items, _ in
+            // 판 위의 기물을 대기석으로 끌어 내린다.
+            guard let uid = items.first, me.board.contains(where: { $0.uid == uid }), !me.done else { return false }
+            model.chessBench(uid)
+            return true
+        }
     }
 
     private func tapBench(_ me: ChessSelfSnapshot, unit: ChessUnitView?) {
@@ -302,6 +372,9 @@ struct ChessPrepView: View {
                     .disabled(me.gold < me.rerollCost || me.done)
                     Text(oddsText).font(.caption2).foregroundStyle(.secondary)
                 }
+                .coachHighlight(showCoach && coachStep(me).n == 1)
+
+                sellZone(me)
 
                 if let uid = model.selectedUid, let unit = findUnit(me, uid: uid) {
                     selectedPanel(me, unit: unit)
@@ -330,6 +403,7 @@ struct ChessPrepView: View {
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(me.done)
+                .coachHighlight(showCoach && coachStep(me).n == 4)
                 .confirmationDialog("판에 기물이 없어요", isPresented: $confirmEmptyDone, titleVisibility: .visible) {
                     Button("그래도 준비 끝", role: .destructive) { model.chessDone() }
                     Button("더 놓을게요", role: .cancel) {}
@@ -338,6 +412,22 @@ struct ChessPrepView: View {
                 }
             }
         }
+    }
+
+    private var showCoach: Bool { !coachDismissed && chess.round == 1 }
+
+    /// 기물을 여기로 끌어 놓으면 판다.
+    private func sellZone(_ me: ChessSelfSnapshot) -> some View {
+        Label("여기로 끌어서 팔기", systemImage: "trash")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, minHeight: 36)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.white.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
+            .dropDestination(for: String.self) { items, _ in
+                guard let uid = items.first, !me.done else { return false }
+                model.chessSell(uid)
+                return true
+            }
     }
 
     private var oddsText: String {

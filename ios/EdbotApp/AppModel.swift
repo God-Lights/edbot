@@ -221,6 +221,48 @@ final class AppModel {
         Task { await connection.sendBench(uid) }
     }
 
+    /// 대기석의 기물을 알아서 판에 놓는다. 단단한 역할은 앞줄, 약한 역할은 뒷줄, 가운데 칸부터 채운다.
+    func chessAutoPlace(_ me: ChessSelfSnapshot, cap: Int) {
+        guard let connection else { return }
+        var taken = Set<Int>()
+        for unit in me.board {
+            if let col = unit.col, let row = unit.row { taken.insert(row * chessBoardSize + col) }
+        }
+        var free: Int = cap - me.board.count
+        let cols: [Int] = [3, 4, 2, 5, 1, 6, 0, 7]
+        let bench: [ChessUnitView] = me.bench.compactMap { $0 }.sorted { preferredRow($0) < preferredRow($1) }
+        var moves: [(uid: String, col: Int, row: Int)] = []
+        for unit in bench {
+            if free <= 0 { break }
+            let first: Int = preferredRow(unit)
+            let rows: [Int] = [first] + (0..<chessDeployRows).filter { $0 != first }
+            var placed = false
+            for row in rows where !placed {
+                for col in cols where !taken.contains(row * chessBoardSize + col) {
+                    taken.insert(row * chessBoardSize + col)
+                    moves.append((unit.uid, col, row))
+                    placed = true
+                    break
+                }
+            }
+            if placed { free -= 1 }
+        }
+        selectedUid = nil
+        let finalMoves = moves
+        Task {
+            for move in finalMoves { await connection.sendDeploy(move.uid, col: move.col, row: move.row) }
+        }
+    }
+
+    private func preferredRow(_ unit: ChessUnitView) -> Int {
+        switch chessUnit(unit.defId)?.role ?? "" {
+        case "탱커": return 0
+        case "지휘", "암살", "기동": return 1
+        case "제어", "딜러": return 2
+        default: return 3
+        }
+    }
+
     func chessDone() {
         guard let connection else { return }
         selectedUid = nil
