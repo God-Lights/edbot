@@ -19,6 +19,8 @@ describe("SideStore 소스", () => {
       release("ios-v0.2.0", "2026-11-20T00:00:00Z", { body: "밴·드래프트·배치 추가" }),
     ]);
     expect(versions.map((v) => v.version)).toEqual(["0.2.0", "0.1.0"]);
+    // SideStore는 앱의 CFBundleVersion 이 buildVersion 과 같은지 검사한다. 워크플로가 둘 다 버전 번호로 맞춘다.
+    for (const v of versions) expect(v.buildVersion).toBe(v.version);
     expect(versions[0]).toMatchObject({
       downloadURL: "https://github.com/x/y/releases/download/t/Commander.ipa",
       size: 1234,

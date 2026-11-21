@@ -86,7 +86,8 @@ jobs:
             fi
           fi
           echo "release=${release}" >> "$GITHUB_OUTPUT"
-          echo "marketing=${release:-0.0.0-dev}" >> "$GITHUB_OUTPUT"
+          # CFBundleVersion 은 숫자와 점만 허용된다. 개발용 빌드는 0.0.0.
+          echo "marketing=${release:-0.0.0}" >> "$GITHUB_OUTPUT"
 
       - name: 아카이브 (서명 끔)
         working-directory: ios
@@ -99,15 +100,23 @@ jobs:
             -destination 'generic/platform=iOS' \
             -archivePath build/Commander.xcarchive \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            MARKETING_VERSION="${{ steps.version.outputs.marketing }}" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            MARKETING_VERSION="${{ steps.version.outputs.marketing }}" CURRENT_PROJECT_VERSION="${{ steps.version.outputs.marketing }}" \
             | tail -n 40
 
       - name: .ipa 만들기
         working-directory: ios
+        env:
+          VERSION: ${{ steps.version.outputs.marketing }}
         run: |
           rm -rf build/Payload build/Commander.ipa
           mkdir -p build/Payload
           cp -R build/Commander.xcarchive/Products/Applications/Commander.app build/Payload/
+          # SideStore 는 앱의 CFBundleVersion 이 소스의 buildVersion(= 버전 번호)과 같은지 검사한다.
+          # 빌드 설정이 적용되지 않는 경우에 대비해 앱의 Info.plist 를 직접 맞추고, 맞는지 확인한다.
+          PLIST=build/Payload/Commander.app/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION}" -c "Set :CFBundleVersion ${VERSION}" "$PLIST"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$PLIST")" = "${VERSION}"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")" = "com.officialgl.commander"
           (cd build && zip -qr Commander.ipa Payload)
           ls -lh build/Commander.ipa
 
