@@ -146,11 +146,15 @@ struct ChessPrepView: View {
     let room: RoomSnapshot
     let chess: ChessSnapshot
     let seat: Int
+    /// 첫 판 안내를 닫았는가. 한 번 닫으면 다시 안 나온다.
+    @AppStorage("chessCoachDismissed") private var coachDismissed = false
+    @State private var confirmEmptyDone = false
 
     var body: some View {
         if let me = chess.me {
             VStack(spacing: 10) {
                 ChessHeader(room: room, chess: chess, seat: seat)
+                if !coachDismissed && chess.round == 1 { coachCard }
                 HStack(alignment: .top, spacing: 14) {
                     VStack(spacing: 8) {
                         boardLabels(me)
@@ -165,6 +169,23 @@ struct ChessPrepView: View {
         } else {
             ProgressView()
         }
+    }
+
+    /// 처음 하는 사람을 위한 4단계 안내. 1라운드 준비 단계에만 나온다.
+    private var coachCard: some View {
+        HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("처음이시네요! 이렇게 해 보세요").font(.subheadline.bold())
+                Text("① 오른쪽 상점에서 캐릭터를 눌러 사요   ② 대기석의 기물을 누르고 판의 칸을 눌러 놓아요")
+                    .font(.caption)
+                Text("③ 판에 3기까지 올리면 '준비 끝'을 눌러요   ④ 전투는 알아서 진행돼요. 항복은 언제든 위에서 할 수 있어요")
+                    .font(.caption)
+            }
+            Spacer()
+            Button("가이드") { model.openGuide(.prep) }.buttonStyle(SecondaryButtonStyle())
+            Button("닫기") { coachDismissed = true }.buttonStyle(SecondaryButtonStyle())
+        }
+        .panel(padding: 10)
     }
 
     private func boardLabels(_ me: ChessSelfSnapshot) -> some View {
@@ -301,11 +322,20 @@ struct ChessPrepView: View {
                     .panel(padding: 8)
                 }
 
-                Button { model.chessDone() } label: {
+                Button {
+                    // 판이 비어 있으면 실수일 수 있어서 한 번 물어본다.
+                    if me.board.isEmpty { confirmEmptyDone = true } else { model.chessDone() }
+                } label: {
                     Text(me.done ? "준비 완료 · 상대를 기다리는 중" : "준비 끝").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(me.done)
+                .confirmationDialog("판에 기물이 없어요", isPresented: $confirmEmptyDone, titleVisibility: .visible) {
+                    Button("그래도 준비 끝", role: .destructive) { model.chessDone() }
+                    Button("더 놓을게요", role: .cancel) {}
+                } message: {
+                    Text("기물 없이 싸우면 이 라운드는 져요.")
+                }
             }
         }
     }
@@ -513,6 +543,10 @@ struct ChessArena: View {
             let point = display(x: frame.x, y: frame.y)
             let ratio: Double = unit.maxHp > 0 ? min(1, max(0, frame.hp / unit.maxHp)) : 0
             let side: CGFloat = cell * 0.88
+            // 이번 박자에 쓰러지는 기물은 서서히 사라진다.
+            let k: Int = Int(position.rounded(.down))
+            let dying: Bool = combat.frameUnit(beat: k + 1, index: index)?.alive == false
+            let fade: Double = dying ? max(0, 1 - (position - Double(k))) : 1
             ZStack(alignment: .bottom) {
                 ChessToken(defId: unit.defId, star: unit.star, tint: unit.seat == seat ? Theme.mine : Theme.theirs)
                 VStack(spacing: 1) {
@@ -528,6 +562,7 @@ struct ChessArena: View {
                 .padding(.bottom, 2)
             }
             .frame(width: side, height: side)
+            .opacity(fade)
             .position(x: (point.x + 0.5) * cell, y: (point.y + 0.5) * cell)
         }
     }

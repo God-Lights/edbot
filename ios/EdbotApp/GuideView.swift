@@ -2,25 +2,24 @@ import EdbotKit
 import SwiftUI
 
 enum GuideTab: String, CaseIterable, Identifiable {
-    case flow, scoring, map, characters, synergy, workshop, controls
+    case flow, prep, combat, characters, synergy, controls
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .flow: return "게임 흐름"
-        case .scoring: return "승리와 점수"
-        case .map: return "지도와 타워"
+        case .prep: return "상점과 배치"
+        case .combat: return "전투 규칙"
         case .characters: return "캐릭터"
         case .synergy: return "시너지"
-        case .workshop: return "탐사·대장간"
         case .controls: return "조작"
         }
     }
 }
 
-/// 게임 가이드: 처음 하는 사람이 규칙을 이해하도록 단계, 점수, 지도, 캐릭터, 시너지, 탐사·대장간, 조작을 설명한다.
-/// 캐릭터, 시너지, 무기는 서버가 알려 주는 데이터를 그대로 보여 주므로 서버가 바뀌어도 가이드가 어긋나지 않는다.
+/// 게임 가이드: 체스판 자동 전투의 흐름, 상점·경제, 전투 규칙, 캐릭터, 시너지, 조작을 설명한다.
+/// 캐릭터와 시너지는 서버가 알려 주는 데이터(GET /api/chess)를 그대로 보여 주므로 서버가 바뀌어도 가이드가 어긋나지 않는다.
 struct GuideView: View {
     @Environment(AppModel.self) private var model
 
@@ -67,11 +66,10 @@ struct GuideView: View {
     @ViewBuilder private var content: some View {
         switch model.guideTab {
         case .flow: FlowGuide()
-        case .scoring: ScoringGuide()
-        case .map: MapGuide()
+        case .prep: PrepGuide()
+        case .combat: CombatGuide()
         case .characters: CharacterGuide()
         case .synergy: SynergyGuide()
-        case .workshop: WorkshopGuide()
         case .controls: ControlsGuide()
         }
     }
@@ -79,7 +77,7 @@ struct GuideView: View {
 
 // MARK: 공통 조각
 
-private struct GuideCard<Content: View>: View {
+struct GuideCard<Content: View>: View {
     let title: String
     @ViewBuilder var content: Content
 
@@ -93,7 +91,7 @@ private struct GuideCard<Content: View>: View {
     }
 }
 
-private func line(_ text: LocalizedStringKey) -> some View {
+func guideLine(_ text: LocalizedStringKey) -> some View {
     HStack(alignment: .top, spacing: 8) {
         Text("•").foregroundStyle(Theme.accent)
         Text(text).fixedSize(horizontal: false, vertical: true)
@@ -110,7 +108,7 @@ private struct StepRow: View {
         HStack(alignment: .top, spacing: 12) {
             Text(time)
                 .font(.subheadline.bold().monospacedDigit())
-                .frame(width: 70)
+                .frame(width: 84)
                 .padding(.vertical, 6)
                 .background(Capsule().fill(Theme.panelStrong))
             VStack(alignment: .leading, spacing: 2) {
@@ -121,213 +119,176 @@ private struct StepRow: View {
     }
 }
 
-// MARK: 1. 게임 흐름
+// MARK: 탭
 
 private struct FlowGuide: View {
     var body: some View {
         VStack(spacing: 14) {
             GuideCard(title: "한눈에 보기") {
-                Text("COMMANDER는 둘이서 하는 실시간 전략 대전이에요. 캐릭터 12명 중 5명을 뽑아 세 갈래 길(레인)로 보내면, 캐릭터들이 알아서 싸우며 상대 본진의 타워를 부숴요. 직접 정하는 건 **누구를 뽑을지, 어느 길로 보낼지, 궁극기를 언제 쓸지**예요.")
-                    .font(.callout)
+                guideLine("상점에서 캐릭터를 사서 체스판에 놓으면, 기물들이 **체스 규칙**으로 알아서 싸워요.")
+                guideLine("상대의 체력(30)을 먼저 0으로 만들면 이겨요. 직접 조작하는 건 **준비 단계**뿐이에요.")
+                guideLine("한 판은 최대 8라운드, 약 7분이에요.")
             }
-            GuideCard(title: "한 판의 순서 (약 4분)") {
-                StepRow(time: "10초", name: "밴", text: "서로 모르게 캐릭터 1명씩 금지해요. 상대가 무엇을 밴했는지는 단계가 끝나야 보여요.")
-                StepRow(time: "40초", name: "드래프트", text: "번갈아 5명씩 뽑아요(내 차례 4초). 선공이 먼저 1명, 그다음 후공이 2명, 이런 식으로 이어지는 스네이크 순서예요. 시간이 지나면 서버가 대신 뽑아 줘요.")
-                StepRow(time: "20초", name: "배치", text: "내 캐릭터 5명을 세 레인 중 어디로 보낼지 정해요. 상대의 배치는 전투가 시작될 때까지 보이지 않아요. 정하지 않으면 기물별 기본 레인으로 가요.")
-                StepRow(time: "20초", name: "탐사", text: "지도에서 재료를 모아요. 이후에도 계속할 수 있어요.")
-                StepRow(time: "20초", name: "대장간", text: "재료로 무기를 만들어 캐릭터에게 끼워요. 이후에도 계속할 수 있어요.")
-                StepRow(time: "2분", name: "전투", text: "자동으로 싸워요. 궁극기를 쓰고, 탐사와 대장간을 함께 다루며 점수를 모아요.")
-                StepRow(time: "1분", name: "데스매치", text: "전투가 동점일 때만 이어지는 연장전이에요.")
-                StepRow(time: "10초", name: "결과", text: "승패와 레이팅 변화를 보고 로비로 돌아가요.")
-            }
-            GuideCard(title: "처음이라면") {
-                line("로비의 **테스트 대전**으로 봇과 한 판 해 보세요. 연습용이라 전적에 기록되지 않아요.")
-                line("뽑는 중에도 지금까지 뽑은 캐릭터가 만드는 **시너지**가 화면에 나와요. 시너지 탭을 읽어 두면 좋아요.")
-            }
-        }
-    }
-}
-
-// MARK: 2. 승리와 점수
-
-private struct ScoringGuide: View {
-    var body: some View {
-        VStack(spacing: 14) {
-            GuideCard(title: "점수") {
-                line("**킹사이드** 레인의 메인 타워를 부수면 **+7점**")
-                line("**퀸사이드·센터** 레인의 메인 타워(언더 타워)를 부수면 각각 **+5점**")
-                line("상대 캐릭터를 쓰러뜨리면 **+1점** (5번 처치 = 언더 타워 하나)")
-                line("가드 타워를 부수는 건 점수가 없어요. 대신 길이 열려요.")
-                line("메인 타워로 얻을 수 있는 점수는 팀당 최대 17점(7+5+5)이에요.")
+            GuideCard(title: "한 라운드의 순서") {
+                StepRow(time: "준비 25초", name: "사고, 놓고, 팔기", text: "상점 5칸에서 캐릭터를 사서 판에 올려요. 첫 라운드는 40초예요. 둘 다 '준비 끝'을 누르면 바로 전투로 가요.")
+                StepRow(time: "전투 약 30초", name: "자동 전투", text: "기물들이 알아서 싸워요. 지켜보기만 하면 돼요. 항복은 언제든 가능해요.")
+                StepRow(time: "결과 5초", name: "체력 깎기", text: "진 쪽은 '상대의 살아남은 기물 수 × 2 + 라운드 번호'만큼 체력을 잃어요.")
             }
             GuideCard(title: "이기는 방법") {
-                line("한 팀의 **메인 타워 3개가 모두 무너지면** 바로 끝나요. 점수가 높은 팀이 이겨요.")
-                line("2분이 지났을 때 **점수가 높은 팀**이 이겨요.")
-                line("점수가 **같으면 데스매치**(60초)예요. 모두 센터에 모여 싸우고, 한 팀이 전멸하면 끝나요. 끝나지 않으면 남은 체력의 합이 높은 팀이, 그것도 같으면 먼저 처치한 팀이 이겨요.")
+                guideLine("상대의 체력을 0으로 만들면 즉시 승리해요.")
+                guideLine("8라운드가 끝날 때까지 안 끝나면 **체력이 더 많은 쪽**이 이겨요. 같으면 라운드 승수로 정해요.")
+                guideLine("항복하면 바로 패배하고, 연결이 30초 넘게 끊겨도 패배해요.")
             }
-            GuideCard(title: "쓰러지면") {
-                line("쓰러진 캐릭터는 8초 뒤 본진에서 되살아나요. 폰은 3초 빨라요.")
-                line("부서진 타워는 복구되지 않아요.")
+            GuideCard(title: "처음이라면") {
+                guideLine("1라운드는 가장 마음에 드는 캐릭터 몇 명을 사서 **판에 올리는 것**만 해 보세요.")
+                guideLine("같은 캐릭터 3장을 모으면 ★2가 돼서 훨씬 강해져요.")
+                guideLine("골드를 10 모을 때마다 다음 라운드에 이자 +1을 받아요. (최대 +3)")
+                guideLine("같은 기물(킹, 퀸, 룩...)을 여러 종류 모으면 팀 전체가 보너스를 받는 **시너지**가 켜져요.")
             }
         }
     }
 }
 
-// MARK: 3. 지도와 타워
-
-private struct MapGuide: View {
+private struct PrepGuide: View {
     var body: some View {
         VStack(spacing: 14) {
-            GuideCard(title: "지도") {
-                line("위에서 내려다본 지도예요. **내 본진은 항상 왼쪽 아래**, 적 본진은 오른쪽 위에 있어요.")
-                line("길은 세 갈래예요: 위쪽 길(**퀸사이드**), 가운데 대각선(**센터**), 아래쪽 길(**킹사이드**).")
-                line("캐릭터는 정해진 레인을 따라 적 쪽으로 걸어가고, 적과 만나면 싸워요. 레인 사이는 오갈 수 없어요. 나이트만 직접 옮겨 갈 수 있어요.")
+            GuideCard(title: "상점") {
+                guideLine("상점은 5칸이고, 칸을 누르면 바로 사요. 산 캐릭터는 **대기석**(6칸)에 들어가요.")
+                guideLine("새로고침은 2골드예요. (리치몬드가 판에 있으면 1골드)")
+                guideLine("1~2라운드에는 1~2골드 캐릭터 위주로 나오고, 6라운드부터 3~4골드도 나와요. 상점 아래에 지금 등장 확률이 적혀 있어요.")
+                guideLine("캐릭터는 **둘이 나눠 쓰는 공용 풀**에서 나와요. 상대가 많이 사 가면 그만큼 구하기 어려워요.")
             }
-            GuideCard(title: "타워") {
-                line("레인마다 팀당 **가드 타워 2개**와 **메인 타워 1개**가 줄지어 서 있어요. 바깥 가드 → 안쪽 가드 → 메인 순서로 부숴야 해요.")
-                line("가드 타워 주변(점선 고리)은 **아군에게 회복 구간**, **적에게 피해 구간이자 장애물**이에요. 가드 타워를 부수기 전에는 그 레인을 지나갈 수 없어요.")
-                line("그래서 한 레인에 인원을 모아야 뚫을 수 있어요. 수비하는 쪽은 회복 구간에서 싸우니까 유리해요.")
+            GuideCard(title: "골드") {
+                guideLine("처음 5골드. 라운드가 시작될 때마다 **기본 5골드 + 이자**를 받아요.")
+                guideLine("이자: 가진 골드 10마다 +1, 최대 +3. 아껴서 이자를 받을지, 지금 써서 강해질지 고르는 게 핵심이에요.")
+                guideLine("기물을 팔면 산 값을 돌려받아요. ★2는 3장 값이에요.")
             }
-            GuideCard(title: "타워 스킬") {
-                line("가드 타워는 **화염 화살**(가장 가까운 적에게 불화살, 화상)을 쏴요.")
-                line("메인 타워는 **대포**를 쏴요. 느리게 날아가서 움직이는 캐릭터는 피하기 쉬워요.")
-                line("킹사이드 메인 타워는 체력이 절반 아래로 내려가면 범위 안의 모든 적에게 **일제 사격**을 한 번 해요.")
+            GuideCard(title: "판 위에 놓기") {
+                guideLine("기물을 누르면 선택돼요. 그다음 **판의 칸**을 누르면 거기에 놓여요. 이미 기물이 있는 칸이면 서로 자리를 바꿔요.")
+                guideLine("판에 올릴 수 있는 수는 1라운드 3기, 이후 라운드마다 +1, 최대 7기예요.")
+                guideLine("판은 내 쪽 4줄이에요. **위쪽이 앞줄**이라 상대와 가까워요. 단단한 기물은 앞줄에, 약한 기물은 뒷줄에 두세요.")
+                guideLine("판 위의 기물을 선택한 채 빈 대기석을 누르면 내려와요.")
+            }
+            GuideCard(title: "★2 합치기") {
+                guideLine("같은 캐릭터 3장을 사면 자동으로 ★2 하나로 합쳐져요. 체력과 공격이 약 1.8배, 능력도 강해져요.")
+                guideLine("판 위에 이미 있던 기물이 있으면 ★2는 그 자리에 생겨요.")
+                guideLine("대기석이 가득 차도 합쳐지는 캐릭터는 살 수 있어요.")
             }
         }
     }
 }
 
-// MARK: 4. 캐릭터
+private struct CombatGuide: View {
+    private struct Row: Identifiable {
+        let id: Piece
+        let move: String
+        let attack: String
+    }
+
+    private let rows: [Row] = [
+        Row(id: .king, move: "8방향 1칸", attack: "인접한 8칸"),
+        Row(id: .queen, move: "직선·대각선 최대 3칸", attack: "직선·대각선 최대 4칸"),
+        Row(id: .rook, move: "직선 최대 3칸", attack: "직선 최대 4칸"),
+        Row(id: .bishop, move: "대각선 최대 3칸", attack: "대각선 최대 4칸"),
+        Row(id: .knight, move: "L자 점프 (막혀도 넘어요)", attack: "L자 위치"),
+        Row(id: .pawn, move: "앞으로 1칸 (항상 전진)", attack: "바로 앞과 앞쪽 대각선"),
+    ]
+
+    var body: some View {
+        VStack(spacing: 14) {
+            GuideCard(title: "기물의 움직임과 공격") {
+                ForEach(rows) { row in
+                    HStack(alignment: .top, spacing: 10) {
+                        PieceBadge(piece: row.id, size: 40)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(Labels.pieceName(row.id)).font(.subheadline.bold()).foregroundStyle(Theme.color(for: row.id))
+                            Text("이동: \(row.move)").font(.callout)
+                            Text("공격: \(row.attack)").font(.callout).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            GuideCard(title: "전투는 이렇게 흘러가요") {
+                guideLine("1초가 한 박자예요. 박자마다 모든 기물이 **동시에** 한 번씩 행동해요.")
+                guideLine("공격할 수 있는 적이 있으면 공격해요. 체력이 가장 낮은 적을 먼저, 같으면 가까운 적을 쳐요.")
+                guideLine("칠 수 있는 적이 없으면 가장 가까운 적 쪽으로 움직여요.")
+                guideLine("공격은 '잡기'가 아니라 **피해**예요. 기물마다 체력이 있어요.")
+                guideLine("룩·비숍·퀸은 사이에 다른 기물이 있으면 그 너머를 칠 수 없어요.")
+            }
+            GuideCard(title: "에너지와 능력") {
+                guideLine("공격하거나 맞으면 **에너지**가 차요. 가득 차면 캐릭터의 능력이 자동으로 나가요.")
+                guideLine("일부 캐릭터는 쓰러질 때나 처치할 때 발동하는 패시브 능력이에요.")
+            }
+            GuideCard(title: "특별 규칙") {
+                guideLine("**폰 승급**: 폰이 상대 쪽 끝줄에 닿으면 그 전투 동안 퀸이 돼요.")
+                guideLine("**돌발 사망**: 20초가 지나도 안 끝나면 모든 기물이 점점 커지는 피해를 받아서 반드시 끝나요.")
+                guideLine("전투는 서버가 미리 계산하고 화면은 그걸 재생해요. 같은 배치는 언제나 같은 결과예요.")
+            }
+        }
+    }
+}
 
 private struct CharacterGuide: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
         VStack(spacing: 14) {
-            GuideCard(title: "기물과 탐사 특성") {
-                Text("캐릭터는 체스 기물 6종으로 나뉘어요. 기물마다 탐사에서 팀에 주는 보너스가 달라요. (같은 기물이 둘이면 보너스도 둘, 그리고 시너지가 켜져요)")
-                    .font(.callout).foregroundStyle(.secondary)
-                traitRow(.king, "10초마다 탈런트 +1")
-                traitRow(.queen, "정찰할 때 안개 칸 1개를 더 확인")
-                traitRow(.rook, "돌·광석을 채집할 때 +1")
-                traitRow(.bishop, "나뭇가지를 채집할 때 +1")
-                traitRow(.knight, "매복으로 빼앗는 양 +1")
-                traitRow(.pawn, "없음 (대신 부활 3초 단축, 타워를 부수면 승급)")
+            GuideCard(title: "캐릭터 20명") {
+                guideLine("가격이 비쌀수록 체력과 공격이 높고 능력이 강해요. 능력치는 ★1 기준이에요.")
+                guideLine("캐릭터마다 기물이 정해져 있어서, 기물에 따라 움직임과 시너지가 달라요.")
             }
-            if model.roster.isEmpty {
-                Text("캐릭터 데이터를 불러오는 중...").foregroundStyle(.secondary)
-            }
-            ForEach(model.roster) { info in
-                characterCard(info)
-            }
-        }
-    }
-
-    private func traitRow(_ piece: Piece, _ text: String) -> some View {
-        HStack(spacing: 10) {
-            PieceBadge(piece: piece, size: 30)
-            Text(Labels.pieceName(piece)).font(.subheadline.bold()).frame(width: 52, alignment: .leading)
-            Text(text).font(.callout)
-        }
-    }
-
-    private func characterCard(_ info: CharacterInfo) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
-                PieceBadge(piece: info.piece, size: 48)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(info.nameKo).font(.title3.bold())
-                    Text("\(Labels.pieceName(info.piece)) · 체력 \(info.hp) · 공격 \(info.attack) · \(Labels.speed(info.speed)) · \(Labels.range(info.range))")
-                        .font(.caption).foregroundStyle(.secondary)
+            if model.chessUnits.isEmpty {
+                ProgressView("불러오는 중...").frame(maxWidth: .infinity).panel()
+            } else {
+                ForEach(1...4, id: \.self) { cost in
+                    GuideCard(title: "\(cost)골드") {
+                        ForEach(model.chessUnits.filter { $0.cost == cost }) { info in
+                            unitRow(info)
+                        }
+                    }
                 }
             }
-            skillLine("패시브", info.passive ?? "없음", color: Theme.good)
-            skillLine("스킬", info.skill ?? "자동 스킬이 없어요 (궁극기와 레인 이동 중심)", color: Theme.mine)
-            skillLine("궁극기", info.ultimate ?? "-", color: Theme.accent)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .panel()
     }
 
-    private func skillLine(_ title: String, _ text: String, color: Color) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text(title).font(.caption.bold()).padding(.horizontal, 8).padding(.vertical, 3)
-                .background(Capsule().fill(color.opacity(0.3))).frame(width: 60)
-            Text(text).font(.callout).fixedSize(horizontal: false, vertical: true)
+    private func unitRow(_ info: ChessUnitInfo) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            PieceBadge(piece: info.piece, size: 46)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(info.nameKo).font(.subheadline.bold())
+                    Text("\(Labels.pieceName(info.piece)) · \(info.faction) · \(info.role)")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Text("♥ \(info.hp)   ⚔ \(info.atk)").font(.caption.monospacedDigit())
+                Text((info.passive ? "패시브: " : "능력: ") + info.abilityText)
+                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 }
 
-// MARK: 5. 시너지
-
 private struct SynergyGuide: View {
     @Environment(AppModel.self) private var model
+    private let pieces: [Piece] = [.king, .queen, .rook, .bishop, .knight, .pawn]
 
     var body: some View {
         VStack(spacing: 14) {
             GuideCard(title: "시너지란?") {
-                Text("뽑은 5명의 구성이 조건을 채우면 **팀 전체**가 보너스를 받아요. 전투가 시작될 때 정해지고 판이 끝날 때까지 유지돼요. 여러 시너지가 동시에 켜지면 효과가 모두 더해져요. 드래프트 화면의 팀 칸에 지금 켜진 시너지가 나와요.")
-                    .font(.callout)
+                guideLine("**판 위에** 같은 기물의 캐릭터가 2명 모이면 팀 전체가 보너스를 받아요. (폰은 2명, 4명)")
+                guideLine("3명(폰은 4명)이 모이면 효과가 약 2배예요.")
+                guideLine("같은 캐릭터는 몇 장이든 한 명으로 세요. 서로 다른 캐릭터를 모아야 해요.")
             }
-            if model.synergies.isEmpty {
-                Text("시너지 데이터를 불러오는 중...").foregroundStyle(.secondary)
-            }
-            ForEach(model.synergies) { synergy in
-                HStack(alignment: .top, spacing: 12) {
-                    Text("🔗").font(.title2)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(synergy.nameKo).font(.headline)
-                        Text("조건: " + synergy.requirement).font(.callout).foregroundStyle(Theme.warn)
-                        Text(synergy.description).font(.callout)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .panel()
-            }
-        }
-    }
-}
-
-// MARK: 6. 탐사와 대장간
-
-private struct WorkshopGuide: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        VStack(spacing: 14) {
-            GuideCard(title: "탐사: 재료 모으기") {
-                line("4×4 지도에서 칸을 눌러 **채집**(3초), **매복**(10초), **정찰**을 해요. 행동마다 행동 게이지 1칸을 쓰고, 게이지는 최대 3칸에 12초마다 1칸씩 차요.")
-                line("채집한 칸은 25초 뒤에 다시 자원이 생겨요. 보물상자는 한 번만 열 수 있고, 희귀 재료나 무기 설계도가 나오지만 가끔 함정(탈런트 손실)이에요.")
-                line("안개 칸은 **정찰**하면 정체와 상대의 매복이 보여요.")
-            }
-            GuideCard(title: "칸이 겹칠 때") {
-                line("둘이 같은 칸을 동시에 채집하면 **반씩 나눠 가져요.**")
-                line("내가 채집하는데 상대가 그 칸에 **매복**해 있었다면, 채집이 끝나는 순간 **매복한 쪽이 자원을 가져가요.**")
-                line("둘 다 같은 칸에 매복하면 서로 사라져요.")
-            }
-            GuideCard(title: "대장간: 무기 만들기") {
-                line("**상점**에서 탈런트로 광석을 사고, **재련**(광석 1 + 탈런트 2 + 스팀포스 3, 15초)으로 철괴를 만들어요. 재련대는 2개예요.")
-                line("재료를 합쳐 무기를 **조합**하고, 캐릭터에게 **장착**해요(3초, 캐릭터당 1개). 전투 중에는 본진이나 아군 가드 타워 근처에 있는 캐릭터에게만 끼울 수 있어요.")
-                line("무기는 공격력을 올려 줘요. 보물상자의 설계도로 특수 무기(화상, 둔화, 흡혈)도 만들 수 있어요.")
-                line("**상성:** 중량이 장병을, 장병이 원거리를, 원거리가 중량을 이겨요. 유리하면 피해가 20% 늘고 불리하면 15% 줄어요. 상대 무기는 맞붙기 전까지 보이지 않아요.")
-            }
-            GuideCard(title: "자원") {
-                line("탈런트(화폐): 판 시작 15, 10초마다 +2, 처치하면 +2")
-                line("스팀포스: 시간이 지나면 저절로 차요(최대 10, 초당 0.5). 재련과 궁극기가 같이 써서, 한꺼번에 쓰면 정작 궁극기가 필요할 때 비어 있어요.")
-                line("나뭇가지 3과 돌 3으로 시작해서 첫 무기는 바로 만들 수 있어요. 모든 자원과 무기는 판이 끝나면 사라져요.")
-            }
-            if !model.weapons.isEmpty {
-                GuideCard(title: "무기 목록") {
-                    ForEach(model.weapons) { weapon in
-                        HStack(alignment: .top) {
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text("\(weapon.nameKo)  (\(Labels.weaponKind(weapon.kind)), 공격 +\(Int((weapon.atkBonus * 100).rounded()))%)").font(.subheadline.bold())
-                                Text(weapon.recipe.sorted { $0.key < $1.key }.map { "\(Labels.materialName($0.key)) \($0.value)" }.joined(separator: ", "))
-                                    .font(.caption).foregroundStyle(.secondary)
-                                if let effect = weapon.effectText { Text("★ " + effect).font(.caption).foregroundStyle(Theme.warn) }
+            if model.chessSynergies.isEmpty {
+                ProgressView("불러오는 중...").frame(maxWidth: .infinity).panel()
+            } else {
+                ForEach(pieces, id: \.self) { piece in
+                    GuideCard(title: Labels.pieceName(piece)) {
+                        ForEach(model.chessSynergies.filter { $0.piece == piece }) { info in
+                            HStack(alignment: .top, spacing: 8) {
+                                Text(info.nameKo).font(.subheadline.bold()).frame(width: 90, alignment: .leading)
+                                Text(info.text).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                             }
-                            Spacer(minLength: 0)
                         }
                     }
                 }
@@ -336,26 +297,28 @@ private struct WorkshopGuide: View {
     }
 }
 
-// MARK: 7. 조작
-
 private struct ControlsGuide: View {
     var body: some View {
         VStack(spacing: 14) {
-            GuideCard(title: "전투 중에 할 수 있는 것") {
-                line("**궁극기:** 아래 캐릭터 카드의 버튼을 눌러요. 스팀포스 5가 들고, 한 번 쓰면 40초 뒤에 다시 쓸 수 있어요. 상대의 스팀포스는 보이지 않아요.")
-                line("**안키오의 궁극기:** 순간이동할 레인을 골라요. 그 레인의 적 가드 타워 뒤로 가서 타워의 스킬을 3초 막아요.")
-                line("**나이트의 레인 이동:** 12초마다 한 번 다른 레인으로 옮겨 갈 수 있어요. 새 레인의 적 타워는 넘지 못해요.")
-                line("**탐사·대장간:** 위쪽의 버튼으로 패널을 열어요. 열어 둔 동안에도 전투는 멈추지 않아요.")
+            GuideCard(title: "준비 단계 조작") {
+                guideLine("**상점 칸 누르기**: 캐릭터를 사요. (골드가 부족하면 흐리게 보여요)")
+                guideLine("**기물 누르기 → 판의 칸 누르기**: 그 칸에 놓아요. 기물이 있는 칸이면 자리를 바꿔요.")
+                guideLine("기물을 누르면 오른쪽에 능력치와 **판매**, **대기석으로** 버튼이 나와요.")
+                guideLine("**준비 끝**: 둘 다 누르면 기다리지 않고 바로 전투가 시작돼요.")
             }
             GuideCard(title: "화면 읽기") {
-                line("파란색이 우리 편, 붉은색이 상대예요. 동그라미 안의 글자(♚♛♜♝♞♟)는 기물이에요.")
-                line("체력 막대가 짧아지면 노란색이 돼요. 쓰러진 캐릭터는 카드에 부활까지 남은 시간이 나와요.")
-                line("캐릭터 옆의 ⚔는 무기를 끼고 있다는 표시예요.")
+                guideLine("파란색이 우리 편, 붉은색이 상대예요. 내 쪽은 언제나 판의 아래예요.")
+                guideLine("기물 테두리 색은 가격이에요. 회색 1골드, 초록 2골드, 파랑 3골드, 금색 4골드. ★은 별 등급이에요.")
+                guideLine("전투 중 기물 아래의 막대는 체력이에요. 흰 선은 보호막이에요.")
+                guideLine("전투 중 선은 이번 박자의 공격(흰색)과 능력(보라색)이에요.")
+            }
+            GuideCard(title: "항복") {
+                guideLine("화면 위의 **항복** 버튼은 준비 중에도, 전투 중에도 눌러요. 누르면 바로 패배해요.")
             }
             GuideCard(title: "팁") {
-                line("한 레인에 몰아서 싸우는 편이 흩어지는 것보다 타워를 뚫기 쉬워요.")
-                line("킹사이드 메인 타워는 7점이라 가장 비싸지만 일제 사격이 있어요.")
-                line("시너지와 기물별 탐사 특성을 함께 보고 5명을 고르세요.")
+                guideLine("앞줄에는 체력이 높은 기물(룩, 폰 탱커)을, 뒷줄에는 회복이나 강화 능력의 기물을 두세요.")
+                guideLine("내가 판 캐릭터는 공용 풀로 돌아가서 상대도 살 수 있어요.")
+                guideLine("지난 라운드 결과는 준비 화면 위쪽에 한 줄로 나와요.")
             }
         }
     }
