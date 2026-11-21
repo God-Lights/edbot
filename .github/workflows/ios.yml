@@ -1,0 +1,89 @@
+name: iOS
+
+# EdbotKit 테스트(Linux)와 서명 없는 .ipa 빌드(macOS). 태그 ios-v* 를 올리면 릴리스에 .ipa를 올린다.
+# 서명하지 않은 .ipa 라서 설치할 때 Sideloadly/AltStore 에서 자기 Apple ID로 서명한다.
+# (인증서와 비밀번호를 저장소나 워크플로에 두지 않는다.)
+on:
+  push:
+    branches: [main]
+    tags: ["ios-v*"]
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kit-tests:
+    name: EdbotKit 테스트
+    runs-on: ubuntu-latest
+    container: swift:5.10
+    steps:
+      - uses: actions/checkout@v4
+      - name: swift test
+        working-directory: ios/EdbotKit
+        run: swift test
+
+  build-ipa:
+    name: .ipa 빌드 (서명 없음)
+    needs: kit-tests
+    runs-on: macos-15
+    permissions:
+      contents: write # 태그일 때 릴리스에 올리려고
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: XcodeGen 설치
+        run: brew install xcodegen
+
+      - name: 프로젝트 생성
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: 아카이브 (서명 끔)
+        working-directory: ios
+        shell: bash
+        run: |
+          xcodebuild archive \
+            -project Commander.xcodeproj \
+            -scheme Commander \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/Commander.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            | tail -n 40
+
+      - name: .ipa 만들기
+        working-directory: ios
+        run: |
+          rm -rf build/Payload build/Commander.ipa
+          mkdir -p build/Payload
+          cp -R build/Commander.xcarchive/Products/Applications/Commander.app build/Payload/
+          (cd build && zip -qr Commander.ipa Payload)
+          ls -lh build/Commander.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Commander-unsigned-ipa
+          path: ios/build/Commander.ipa
+          if-no-files-found: error
+
+      - name: 릴리스에 올리기
+        if: startsWith(github.ref, 'refs/tags/ios-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" ios/build/Commander.ipa \
+            --repo "${{ github.repository }}" \
+            --title "COMMANDER iPad ${{ github.ref_name }}" \
+            --notes "서명 없는 .ipa 입니다. Sideloadly 또는 AltStore 로 본인 Apple ID 로 서명해서 설치하세요."
