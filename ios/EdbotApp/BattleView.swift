@@ -216,7 +216,8 @@ struct UnitControl: View {
     }
 }
 
-/// 세 레인을 그리는 캔버스. 내 본진이 항상 왼쪽에 오고, 유닛은 새 상태 사이를 보간해서 60fps로 그린다.
+/// 위에서 내려다본 2D 지도(롤 같은 배치). 내 본진은 항상 왼쪽 아래, 적 본진은 오른쪽 위에 온다.
+/// 유닛은 서버가 보내는 상태 사이를 보간해서 60fps로 그린다. (좌표 계산은 EdbotKit의 MapGeometry)
 struct LaneCanvas: View {
     @Environment(AppModel.self) private var model
     let battle: BattleSnapshot
@@ -224,107 +225,164 @@ struct LaneCanvas: View {
 
     var body: some View {
         let pieces = Dictionary(uniqueKeysWithValues: model.roster.map { ($0.id, $0.piece) })
+        let names = Dictionary(uniqueKeysWithValues: model.roster.map { ($0.id, $0.nameKo) })
         TimelineView(.animation) { timeline in
             Canvas { context, size in
-                draw(context, size: size, now: timeline.date.timeIntervalSinceReferenceDate, pieces: pieces)
+                let geometry = MapGeometry(width: Double(size.width), height: Double(size.height), seat: seat)
+                draw(context, size: size, geometry: geometry, now: timeline.date.timeIntervalSinceReferenceDate, pieces: pieces, names: names)
             }
         }
     }
 
-    private func laneRect(_ index: Int, size: CGSize) -> CGRect {
-        let gap: CGFloat = 8
-        let height = (size.height - gap * 2) / 3
-        return CGRect(x: 0, y: CGFloat(index) * (height + gap), width: size.width, height: height)
+    private func pt(_ v: Vec2) -> CGPoint { CGPoint(x: v.x, y: v.y) }
+
+    private func polyline(_ points: [Vec2]) -> Path {
+        var path = Path()
+        guard let first = points.first else { return path }
+        path.move(to: pt(first))
+        for point in points.dropFirst() { path.addLine(to: pt(point)) }
+        return path
     }
 
-    /// 레인 위의 위치(0~100)를 화면 x 좌표로. 내 본진이 왼쪽이 되게 seat 1이면 뒤집는다.
-    private func x(_ pos: Double, in rect: CGRect) -> CGFloat {
-        let p = seat == 1 ? 100 - pos : pos
-        return rect.minX + 28 + CGFloat(p / 100) * (rect.width - 56)
-    }
+    private func draw(_ context: GraphicsContext, size: CGSize, geometry: MapGeometry, now: TimeInterval, pieces: [String: Piece], names: [String: String]) {
+        drawTerrain(context, size: size, geometry: geometry)
 
-    private func draw(_ context: GraphicsContext, size: CGSize, now: TimeInterval, pieces: [String: Piece]) {
-        for (index, lane) in Lane.allCases.enumerated() {
-            let rect = laneRect(index, size: size)
-            drawLane(context, lane: lane, rect: rect, now: now, pieces: pieces)
+        for lane in Lane.allCases {
+            if !battle.isDeathmatch {
+                // 구역(샘, 벽)과 타워 사거리 고리는 유닛 밑에 깔고
+                drawZones(context, lane: lane, geometry: geometry)
+            }
+        }
+        for lane in Lane.allCases where !battle.isDeathmatch {
+            for tower in battle.towers where tower.lane == lane {
+                drawTower(context, tower, geometry: geometry)
+            }
+        }
+        for (index, unit) in battle.units.filter({ $0.alive }).enumerated() {
+            let pos = model.interpolator.position(of: unit.id, at: now) ?? unit.pos
+            drawUnit(context, unit, pos: pos, index: index, geometry: geometry, piece: pieces[unit.characterId], name: names[unit.characterId])
         }
     }
 
-    private func drawLane(_ context: GraphicsContext, lane: Lane, rect: CGRect, now: TimeInterval, pieces: [String: Piece]) {
-        let midY = rect.midY + 6
+    // MARK: 지형
 
-        // 레인 바탕과 이름
-        context.fill(Path(roundedRect: rect, cornerRadius: 12), with: .color(Color.white.opacity(0.05)))
-        context.draw(Text(Labels.laneName(lane) + (lane == .kingside ? "  +7점" : "  +5점")).font(.caption.bold()).foregroundColor(Theme.silver.opacity(0.7)),
-                     at: CGPoint(x: rect.minX + 12, y: rect.minY + 12), anchor: .leading)
-        context.fill(Path(CGRect(x: rect.minX + 16, y: midY - 1, width: rect.width - 32, height: 2)), with: .color(Color.white.opacity(0.15)))
+    private func drawTerrain(_ context: GraphicsContext, size: CGSize, geometry: MapGeometry) {
+        let rect = CGRect(origin: .zero, size: size)
+        context.fill(Path(roundedRect: rect, cornerRadius: 14), with: .color(Color(red: 0.07, green: 0.10, blue: 0.10)))
 
-        // 구역: 샘과 벽
+        // 정글 느낌의 어두운 덩어리 (모서리 사이 빈 공간)
+        for (cx, cy, r) in [(0.30, 0.45, 0.13), (0.70, 0.55, 0.13), (0.25, 0.22, 0.08), (0.75, 0.78, 0.08)] as [(Double, Double, Double)] {
+            let c = geometry.rotated ? (1 - cx, 1 - cy) : (cx, cy)
+            let box = CGRect(x: c.0 * size.width - r * size.width, y: c.1 * size.height - r * size.width, width: r * 2 * size.width, height: r * 2 * size.width)
+            context.fill(Path(ellipseIn: box), with: .color(Color(red: 0.09, green: 0.14, blue: 0.11)))
+        }
+
+        // 강: 레인 사이를 대각선으로 가로지른다.
+        var river = Path()
+        river.move(to: CGPoint(x: 0, y: 0))
+        river.addLine(to: CGPoint(x: size.width, y: size.height))
+        context.stroke(river, with: .color(Color(red: 0.16, green: 0.32, blue: 0.5).opacity(0.28)), style: StrokeStyle(lineWidth: 34, lineCap: .round))
+
+        // 길
+        for lane in Lane.allCases {
+            let path = polyline(geometry.path(for: lane))
+            context.stroke(path, with: .color(Color(red: 0.20, green: 0.19, blue: 0.16)), style: StrokeStyle(lineWidth: 46, lineCap: .round, lineJoin: .round))
+            context.stroke(path, with: .color(Color.white.opacity(0.06)), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round, dash: [8, 10]))
+            let label = geometry.point(lane: lane, pos: 50)
+            context.draw(Text(Labels.laneName(lane) + (lane == .kingside ? " +7" : " +5")).font(.caption2.bold()).foregroundColor(Theme.silver.opacity(0.55)),
+                         at: CGPoint(x: label.x, y: label.y + (lane == .center ? 0 : 0) - 30), anchor: .center)
+        }
+
+        // 본진
+        for owner in 0...1 {
+            let base = geometry.basePoint(seat: owner)
+            let color = owner == seat ? Theme.mine : Theme.theirs
+            context.fill(Path(ellipseIn: CGRect(x: base.x - 40, y: base.y - 40, width: 80, height: 80)), with: .color(color.opacity(0.18)))
+            context.stroke(Path(ellipseIn: CGRect(x: base.x - 40, y: base.y - 40, width: 80, height: 80)), with: .color(color.opacity(0.7)), lineWidth: 3)
+            context.draw(Text("✦").font(.system(size: 26)).foregroundColor(color), at: pt(base), anchor: .center)
+        }
+    }
+
+    // MARK: 구역, 타워
+
+    private func drawZones(_ context: GraphicsContext, lane: Lane, geometry: MapGeometry) {
+        let scale = geometry.pixelsPerUnit(lane)
         for well in battle.wells where well.lane == lane {
-            let cx = x(well.pos, in: rect)
-            context.fill(Path(ellipseIn: CGRect(x: cx - 26, y: midY - 26, width: 52, height: 52)), with: .color(Theme.good.opacity(0.22)))
+            let c = geometry.point(lane: lane, pos: well.pos)
+            let r = 6 * scale
+            context.fill(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)), with: .color(Theme.good.opacity(0.2)))
         }
         for wall in battle.walls where wall.lane == lane {
-            let cx = x(wall.pos, in: rect)
-            context.fill(Path(roundedRect: CGRect(x: cx - 3, y: midY - 30, width: 6, height: 60), cornerRadius: 2), with: .color(Theme.silver))
-        }
-
-        // 타워 (데스매치에는 없다)
-        if !battle.isDeathmatch {
-            for tower in battle.towers where tower.lane == lane {
-                drawTower(context, tower, rect: rect, midY: midY)
-            }
-        }
-
-        // 유닛: 아군은 선 아래, 적은 선 위에 그려서 겹쳐도 구분된다.
-        let units = battle.units.filter { $0.lane == lane && $0.alive }
-        for unit in units {
-            let pos = model.interpolator.position(of: unit.id, at: now) ?? unit.pos
-            drawUnit(context, unit, pos: pos, rect: rect, midY: midY, piece: pieces[unit.characterId])
+            let frame = geometry.frame(lane: lane, pos: wall.pos)
+            let normal = Vec2(-frame.direction.y, frame.direction.x)
+            var path = Path()
+            path.move(to: pt(frame.point + normal * 30))
+            path.addLine(to: pt(frame.point - normal * 30))
+            context.stroke(path, with: .color(Theme.silver), style: StrokeStyle(lineWidth: 6, lineCap: .round))
         }
     }
 
-    private func drawTower(_ context: GraphicsContext, _ tower: TowerSnapshot, rect: CGRect, midY: CGFloat) {
-        let cx = x(tower.pos, in: rect)
-        let w: CGFloat = tower.isMain ? 34 : 22
-        let h: CGFloat = tower.isMain ? 46 : 32
-        let box = CGRect(x: cx - w / 2, y: midY - h - 4, width: w, height: h)
-        let color: Color = !tower.alive ? Color.gray.opacity(0.35) : (tower.seat == seat ? Theme.mine : Theme.theirs)
-        context.fill(Path(roundedRect: box, cornerRadius: 5), with: .color(color.opacity(tower.alive ? 0.85 : 1)))
-        if tower.isMain {
-            context.draw(Text("♜").font(.system(size: 22)).foregroundColor(.white.opacity(tower.alive ? 0.9 : 0.4)), at: CGPoint(x: box.midX, y: box.midY), anchor: .center)
+    private func drawTower(_ context: GraphicsContext, _ tower: TowerSnapshot, geometry: MapGeometry) {
+        let c = geometry.point(lane: tower.lane, pos: tower.pos)
+        let color: Color = !tower.alive ? Color.gray.opacity(0.4) : (tower.seat == seat ? Theme.mine : Theme.theirs)
+
+        // 사거리 고리: 가드 타워는 아군에게 회복 구간, 적에게 피해 구간이다. (사거리 10)
+        if tower.alive && !tower.isMain {
+            let r = 10 * geometry.pixelsPerUnit(tower.lane)
+            context.fill(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)), with: .color(color.opacity(0.07)))
+            context.stroke(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)), with: .color(color.opacity(0.35)), style: StrokeStyle(lineWidth: 1.5, dash: [5, 5]))
         }
+
+        let radius: CGFloat = tower.isMain ? 22 : 15
+        let box = CGRect(x: c.x - radius, y: c.y - radius, width: radius * 2, height: radius * 2)
+        context.fill(Path(roundedRect: box, cornerRadius: tower.isMain ? 7 : 12), with: .color(color.opacity(tower.alive ? 0.9 : 1)))
+        context.stroke(Path(roundedRect: box, cornerRadius: tower.isMain ? 7 : 12), with: .color(Color.white.opacity(0.5)), lineWidth: 2)
+        context.draw(Text(tower.isMain ? "♜" : "▲").font(.system(size: tower.isMain ? 24 : 14)).foregroundColor(.white.opacity(tower.alive ? 0.95 : 0.4)), at: pt(c), anchor: .center)
+
         if tower.alive {
             let ratio = CGFloat(tower.maxHp > 0 ? Double(tower.hp) / Double(tower.maxHp) : 0)
-            context.fill(Path(CGRect(x: box.minX, y: box.minY - 7, width: w, height: 4)), with: .color(Color.white.opacity(0.15)))
-            context.fill(Path(CGRect(x: box.minX, y: box.minY - 7, width: w * ratio, height: 4)), with: .color(Theme.good))
+            let w = radius * 2.4
+            context.fill(Path(CGRect(x: c.x - w / 2, y: c.y - radius - 9, width: w, height: 5)), with: .color(Color.black.opacity(0.5)))
+            context.fill(Path(CGRect(x: c.x - w / 2, y: c.y - radius - 9, width: w * ratio, height: 5)), with: .color(Theme.good))
         }
     }
 
-    private func drawUnit(_ context: GraphicsContext, _ unit: UnitSnapshot, pos: Double, rect: CGRect, midY: CGFloat, piece: Piece?) {
+    // MARK: 유닛
+
+    private func drawUnit(_ context: GraphicsContext, _ unit: UnitSnapshot, pos: Double, index: Int, geometry: MapGeometry, piece: Piece?, name: String?) {
         let mine = unit.seat == seat
-        let cx = x(pos, in: rect)
-        let radius: CGFloat = unit.summon ? 9 : 15
-        let cy = midY + (mine ? 22 : -4) + (mine ? 0 : 0)
+        // 같은 길 위의 유닛이 한 줄로 겹치지 않게 유닛마다 정해진 만큼 옆으로 흩어 놓는다.
+        let seed = unit.id.unicodeScalars.reduce(0) { $0 &+ Int($1.value) } // 실행마다 같은 값(hashValue는 매번 달라진다)
+        let sideways = Double((seed % 5) - 2) * 7 + (mine ? 6 : -6)
+        let c = pt(geometry.offset(lane: unit.lane, pos: pos, sideways: sideways))
+        let radius: CGFloat = unit.summon ? 9 : 16
         let color = mine ? Theme.mine : Theme.theirs
-        let circle = CGRect(x: cx - radius, y: cy - radius, width: radius * 2, height: radius * 2)
-        context.fill(Path(ellipseIn: circle), with: .color(color.opacity(0.9)))
+
+        let circle = CGRect(x: c.x - radius, y: c.y - radius, width: radius * 2, height: radius * 2)
+        context.fill(Path(ellipseIn: circle.offsetBy(dx: 0, dy: 3)), with: .color(Color.black.opacity(0.3))) // 그림자
+        context.fill(Path(ellipseIn: circle), with: .color(color.opacity(0.92)))
+        context.stroke(Path(ellipseIn: circle), with: .color(Color.white.opacity(0.85)), lineWidth: 2)
         if unit.shield > 0 {
-            context.stroke(Path(ellipseIn: circle.insetBy(dx: -3, dy: -3)), with: .color(Theme.silver), lineWidth: 2)
+            context.stroke(Path(ellipseIn: circle.insetBy(dx: -4, dy: -4)), with: .color(Theme.silver), lineWidth: 2)
         }
         if let piece, !unit.summon {
-            context.draw(Text(Labels.pieceGlyph(piece)).font(.system(size: 19)).foregroundColor(.white), at: CGPoint(x: cx, y: cy), anchor: .center)
+            context.draw(Text(Labels.pieceGlyph(piece)).font(.system(size: 20)).foregroundColor(.white), at: c, anchor: .center)
         }
         if unit.effects.contains("stun") {
-            context.draw(Text("✦").font(.system(size: 14)).foregroundColor(Theme.warn), at: CGPoint(x: cx, y: cy - radius - 8), anchor: .center)
+            context.draw(Text("✦").font(.system(size: 14)).foregroundColor(Theme.warn), at: CGPoint(x: c.x, y: c.y - radius - 14), anchor: .center)
         }
         if unit.weapon != nil {
-            context.draw(Text("⚔").font(.system(size: 10)).foregroundColor(.white), at: CGPoint(x: cx + radius, y: cy - radius), anchor: .center)
+            context.draw(Text("⚔").font(.system(size: 10)).foregroundColor(.white), at: CGPoint(x: c.x + radius, y: c.y - radius), anchor: .center)
         }
+
         let ratio = CGFloat(unit.maxHp > 0 ? Double(unit.hp) / Double(unit.maxHp) : 0)
-        let barW = radius * 2
-        context.fill(Path(CGRect(x: cx - radius, y: cy + radius + 3, width: barW, height: 3)), with: .color(Color.white.opacity(0.2)))
-        context.fill(Path(CGRect(x: cx - radius, y: cy + radius + 3, width: barW * ratio, height: 3)), with: .color(ratio < 0.3 ? Theme.warn : Theme.good))
+        let w = radius * 2.2
+        context.fill(Path(CGRect(x: c.x - w / 2, y: c.y - radius - 8, width: w, height: 4)), with: .color(Color.black.opacity(0.5)))
+        context.fill(Path(CGRect(x: c.x - w / 2, y: c.y - radius - 8, width: w * ratio, height: 4)), with: .color(ratio < 0.3 ? Theme.warn : (mine ? Theme.good : Theme.theirs)))
+
+        if let name, !unit.summon {
+            context.draw(Text(name).font(.system(size: 10, weight: .semibold)).foregroundColor(.white.opacity(0.85)), at: CGPoint(x: c.x, y: c.y + radius + 9), anchor: .center)
+        }
     }
 }
 
