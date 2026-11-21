@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSource, versionsFromReleases } from "../src/sidestore";
+import { FALLBACK_ICON_URL, buildSource, versionsFromReleases } from "../src/sidestore";
 import type { GithubRelease } from "../src/sidestore";
 
 const asset = (name: string, size = 100) => ({ name, size, browser_download_url: `https://github.com/x/y/releases/download/t/${name}` });
@@ -61,9 +61,23 @@ describe("SideStore 소스", () => {
     expect(JSON.parse(JSON.stringify(source))).toEqual(source); // JSON으로 직렬화 가능
   });
 
-  it("릴리스가 하나도 없어도 소스는 만들어진다 (버전 목록만 빔)", () => {
-    const source = buildSource([], "https://s.test/sidestore.json") as { apps: Array<Record<string, unknown>> };
-    expect(source.apps[0]!.versions).toEqual([]);
-    expect(source.apps[0]).not.toHaveProperty("downloadURL");
+  it("릴리스가 하나도 없으면 앱 없이 소스만 만들고, 아이콘 주소는 비지 않는다", () => {
+    const source = buildSource([], "https://s.test/sidestore.json") as { apps: unknown[]; iconURL: string };
+    expect(source.apps).toEqual([]);
+    expect(source.iconURL).toBe(FALLBACK_ICON_URL);
+  });
+
+  it("어떤 경우에도 URL 필드는 빈 문자열이 아니다 (SideStore가 거부한다)", () => {
+    const check = (value: unknown, path: string) => {
+      if (Array.isArray(value)) value.forEach((v, i) => check(v, `${path}[${i}]`));
+      else if (value && typeof value === "object")
+        for (const [k, v] of Object.entries(value)) {
+          if (/url$/i.test(k) && typeof v === "string") expect(() => new URL(v), `${path}.${k}`).not.toThrow();
+          check(v, `${path}.${k}`);
+        }
+    };
+    check(buildSource([], "https://s.test/sidestore.json"), "empty");
+    check(buildSource([release("ios-v1.0.0", "2026-11-01T00:00:00Z", { assets: [asset("Commander.ipa")] })], "https://s.test/sidestore.json"), "noIcon");
+    check(buildSource([release("ios-v1.0.0", "2026-11-01T00:00:00Z")], "https://s.test/sidestore.json"), "full");
   });
 });
