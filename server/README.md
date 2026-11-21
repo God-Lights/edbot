@@ -285,3 +285,11 @@ offset = 내 시각(수신 순간) - room.serverTime
 | 왕의 돌격 | 에이션트 로드 + 부캉죠스 | 이동 속도 +5% |
 
 `GET /api/characters` 에는 캐릭터마다 `passive`, `skill`, `ultimate` 설명(없으면 null)이 들어 있습니다. 앱의 가이드가 이를 그대로 보여 줍니다.
+
+## 체스판 자동 전투 (새 게임, 개발 중)
+설계는 `docs/DESIGN-autochess.md`. 1단계로 전투 시뮬레이션이 `src/chess/`에 구현되어 있다(방/프로토콜에는 아직 연결 전).
+```bash
+npm run balance                  # 기본 2000판
+npx tsx scripts/chess-balance.ts 5000 14 6 1   # 판수, 예산(골드), 기물 수, 시드
+```
+같은 예산의 무작위 팀을 자리를 바꿔 싸우게 하고 캐릭터와 시너지 승률, 돌발 사망 비율, seat 쏠림을 표로 출력한다.

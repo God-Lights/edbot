@@ -11,6 +11,9 @@ export const PHASE_SECONDS: Record<TimedPhase, number> = {
   explore: 20,
   forge: 20,
   battle: 120,
+  /** 체스판 자동 전투: 실제 시간은 라운드마다 정해서 덮어쓴다(chess/game.ts) */
+  prep: 25,
+  combat: 30,
   /** 전투가 동점일 때만 이어지는 연장전. PHASE_ORDER에는 없다. */
   deathmatch: 60,
   result: 10,

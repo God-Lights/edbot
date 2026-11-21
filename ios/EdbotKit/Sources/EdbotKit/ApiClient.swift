@@ -65,6 +65,14 @@ public struct ApiClient: Sendable {
         return body.matches
     }
 
+    /// 체스판 자동 전투의 캐릭터 20명과 기물 시너지를 가져온다.
+    public func chessCatalog() async throws -> ChessCatalog {
+        let (data, status) = try await http.send(Http.request(baseURL, "/api/chess"))
+        guard (200..<300).contains(status) else { throw ApiError.status(status) }
+        guard let catalog = MessageCodec.parseChessCatalog(data) else { throw ApiError.badResponse }
+        return catalog
+    }
+
     /// 캐릭터 시너지 목록을 가져온다.
     public func synergies() async throws -> [SynergyInfo] {
         let (data, status) = try await http.send(Http.request(baseURL, "/api/synergies"))

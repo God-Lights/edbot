@@ -90,6 +90,30 @@ public enum MessageCodec {
         "{\"t\":\"forge\",\"action\":\"equip\",\"weaponId\":\(quoted(weaponId)),\"characterId\":\(quoted(characterId))}"
     }
 
+    // ---- 체스판 자동 전투 ----
+
+    /// 준비 단계: 상점 slot(0~4)의 캐릭터를 산다.
+    public static func buy(slot: Int) -> String { "{\"t\":\"buy\",\"slot\":\(slot)}" }
+    /// 내 기물을 판다.
+    public static func sell(_ uid: String) -> String { "{\"t\":\"sell\",\"uid\":\(quoted(uid))}" }
+    /// 상점을 새로 고친다.
+    public static func reroll() -> String { "{\"t\":\"reroll\"}" }
+    /// 기물을 판의 (col 0~7, row 0~3)에 놓는다. 대기석이나 다른 칸에서 옮겨 온다. 있는 칸이면 자리를 바꾼다.
+    public static func deploy(_ uid: String, col: Int, row: Int) -> String {
+        "{\"t\":\"deploy\",\"uid\":\(quoted(uid)),\"col\":\(col),\"row\":\(row)}"
+    }
+    /// 판 위의 기물을 대기석으로 내린다.
+    public static func bench(_ uid: String) -> String { "{\"t\":\"bench\",\"uid\":\(quoted(uid))}" }
+    /// 준비 끝. 둘 다 끝내면 바로 전투가 시작된다.
+    public static func done() -> String { "{\"t\":\"done\"}" }
+    /// 항복. 언제든 할 수 있고 상대가 바로 이긴다.
+    public static func surrender() -> String { "{\"t\":\"surrender\"}" }
+
+    /// GET /api/chess 의 응답을 해석한다. 형식이 틀리면 nil.
+    public static func parseChessCatalog(_ json: Data) -> ChessCatalog? {
+        try? JSONDecoder().decode(ChessCatalog.self, from: json)
+    }
+
     /// GET /api/synergies 의 응답을 해석한다. 형식이 틀리면 nil.
     public static func parseSynergies(_ json: Data) -> [SynergyInfo]? {
         struct Body: Decodable { let synergies: [SynergyInfo] }

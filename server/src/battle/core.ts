@@ -200,7 +200,8 @@ export interface BattleEvent {
   text?: string;
 }
 
-export type BattleReason = "towers" | "time" | "deathmatch" | "deathmatchTime";
+/** surrender: 항복, forfeit: 연결이 오래 끊겨서 기권패 */
+export type BattleReason = "towers" | "time" | "deathmatch" | "deathmatchTime" | "surrender" | "forfeit";
 
 export interface BattleState {
   mode: "battle" | "deathmatch";

@@ -529,6 +529,15 @@ function finish(state: BattleState, winner: Seat | null, reason: BattleReason): 
   pushEvent(state, { type: "end", seat: winner ?? undefined, text: reason });
 }
 
+/**
+ * 한쪽이 졌다고 인정하거나(항복) 연결이 오래 끊겨서 기권패 처리할 때. 상대가 바로 이기고, 점수는 그대로 둔다.
+ * 이미 끝난 판이면 아무것도 하지 않는다.
+ */
+export function concede(state: BattleState, loserSeat: Seat, reason: "surrender" | "forfeit"): void {
+  if (state.finished) return;
+  finish(state, otherSeat(loserSeat), reason);
+}
+
 /** 제한 시간이 끝났을 때. 전투는 점수, 데스매치는 남은 체력으로 승부를 가린다. */
 export function finishByTime(state: BattleState): void {
   if (state.finished) return;

@@ -5,7 +5,7 @@ import Foundation
 
 /// 한 판이 흐르는 단계. 서버의 Phase와 같은 문자열이다.
 public enum Phase: String, Codable, Sendable, Equatable {
-    case lobby, ban, draft, placement, explore, forge, battle, deathmatch, result
+    case lobby, ban, draft, placement, explore, forge, battle, deathmatch, prep, combat, result
 }
 
 public struct PublicPlayer: Codable, Equatable, Sendable, Identifiable {
@@ -442,6 +442,8 @@ public struct RoomSnapshot: Codable, Equatable, Sendable {
     public let explore: ExploreSnapshot?
     /// 대장간. 탐사와 함께 시작해서 판이 끝날 때까지.
     public let forge: ForgeSnapshot?
+    /// 체스판 자동 전투(준비·전투 단계). 예전 레인 게임에서는 nil.
+    public let chess: ChessSnapshot?
     /// 결과 단계에서만 있다.
     public let result: ResultSnapshot?
 
@@ -501,6 +503,14 @@ public enum ErrorCode {
     public static let alreadyEquipping = "already_equipping"
     public static let alreadyEquipped = "already_equipped"
     public static let invalidQuantity = "invalid_quantity"
+    // 체스판 자동 전투
+    public static let shopEmpty = "shop_empty"
+    public static let notEnoughGold = "not_enough_gold"
+    public static let invalidSlot = "invalid_slot"
+    public static let benchFull = "bench_full"
+    public static let unitNotFound = "unit_not_found"
+    public static let invalidCell = "invalid_cell"
+    public static let deployFull = "deploy_full"
 
     /// 다시 시도해도 소용없는 오류. 이 오류를 받으면 자동 재접속을 멈춘다.
     public static func isFatal(_ code: String) -> Bool {

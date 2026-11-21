@@ -2,12 +2,16 @@
 // 솜씨는 일부러 단순하다: 무작위로 밴·뽑기·배치하고, 간단히 채집·조합·장착하고, 적과 맞붙으면 궁극기를 쓴다.
 
 import { availableIds, currentTurnSeat } from "./game";
+import { deployCap } from "./chess/game";
+import { unitDef } from "./chess/roster";
+import type { Role } from "./chess/types";
 import { CHARACTERS } from "./characters";
 import type { Lane } from "./protocol";
 import { LANES } from "./protocol";
 import {
   BOT_ID,
   playerBan,
+  playerChess,
   playerExplore,
   playerForge,
   playerLock,
@@ -28,6 +32,7 @@ const pickRandom = <T>(items: readonly T[], rng: () => number): T | undefined =>
 export function runBot(state: RoomState, now: number, scale: number, rng: () => number): boolean {
   const bot = state.players.find((p) => p.bot);
   if (!bot || !state.testMatch) return false;
+  if (state.mode === "chess") return runChessBot(state, bot.id, now, scale, rng);
   const seat = bot.seat;
   const game = state.game;
   const act = (ok: { ok: boolean }): boolean => ok.ok;
@@ -134,4 +139,71 @@ export function runBotUntilIdle(state: RoomState, now: number, scale: number, rn
     changed = true;
   }
   return changed;
+}
+
+
+// ---- 체스판 자동 전투 봇 ----
+// 사람과 같은 명령(사기, 놓기, 준비 끝)으로만 행동한다. 솜씨는 일부러 단순하다:
+// 같은 캐릭터를 모으려고 하고, 비싼 캐릭터를 우선 사서 역할에 맞는 줄에 놓는다.
+
+/** 역할별로 놓는 줄(0이 앞줄) */
+const BOT_ROW: Record<Role, number> = { 탱커: 0, 지휘: 1, 암살: 1, 기동: 1, 제어: 2, 딜러: 2, 서포터: 3 };
+const BOT_COLS = [3, 4, 2, 5, 1, 6, 0, 7];
+
+const unitValue = (defId: string, star: number): number => (unitDef(defId)?.cost ?? 1) * (star === 2 ? 3 : 1);
+
+/** 한 번 부르면 준비 단계에서 할 수 있는 것을 하고 준비를 끝낸다. 무언가 했으면 true. */
+export function runChessBot(state: RoomState, botId: string, now: number, scale: number, rng: () => number): boolean {
+  const player = state.players.find((p) => p.id === botId);
+  const chess = state.chess;
+  if (!player) return false;
+
+  if (state.phase === "lobby") {
+    const humanHere = state.players.some((p) => !p.bot && p.connected);
+    if (humanHere && !player.ready) return setReady(state, botId, true, now, scale, rng).ok;
+    return false;
+  }
+  if (!chess || state.phase !== "prep") return false;
+  const me = chess.players[player.seat];
+  if (me.done) return false;
+
+  const cmd = (command: Parameters<typeof playerChess>[2]) => playerChess(state, botId, command, now, scale, rng).ok;
+
+  // 1) 사기: 이미 가진 캐릭터(합치려고) > 비싼 캐릭터 순. 이자(10골드마다 +1)를 위해 10골드 단위는 조금 남긴다.
+  for (let i = 0; i < 12; i++) {
+    const owned = (defId: string) =>
+      [...me.board, ...me.bench.filter((u): u is NonNullable<typeof u> => u !== null)].filter((u) => u.defId === defId && u.star === 1).length;
+    const reserve = 0;
+    const options = me.shop
+      .map((defId, slot) => ({ defId, slot }))
+      .filter((o): o is { defId: string; slot: number } => o.defId !== null && unitDef(o.defId)!.cost <= me.gold - reserve)
+      .sort((a, b) => owned(b.defId) - owned(a.defId) || unitDef(b.defId)!.cost - unitDef(a.defId)!.cost || a.slot - b.slot);
+    const pick = options[0];
+    if (!pick || !cmd({ t: "buy", slot: pick.slot })) break;
+  }
+
+  // 2) 놓기: 가치가 높은 기물을 판 위로. 판이 가득 차면 더 약한 기물과 자리를 바꾼다.
+  const cap = deployCap(chess.round);
+  const cellFree = (col: number, row: number) => !me.board.some((u) => u.col === col && u.row === row);
+  const bestCell = (defId: string): { col: number; row: number } | undefined => {
+    const base = BOT_ROW[unitDef(defId)!.role];
+    for (let row = base; row < 4; row++) for (const col of BOT_COLS) if (cellFree(col, row)) return { col, row };
+    for (let row = 0; row < base; row++) for (const col of BOT_COLS) if (cellFree(col, row)) return { col, row };
+    return undefined;
+  };
+  const benchUnits = me.bench.filter((u): u is NonNullable<typeof u> => u !== null).sort((a, b) => unitValue(b.defId, b.star) - unitValue(a.defId, a.star));
+  for (const unit of benchUnits) {
+    if (me.board.length < cap) {
+      const cell = bestCell(unit.defId);
+      if (cell) cmd({ t: "deploy", uid: unit.uid, col: cell.col, row: cell.row });
+    } else {
+      const weakest = [...me.board].sort((a, b) => unitValue(a.defId, a.star) - unitValue(b.defId, b.star))[0];
+      if (weakest && unitValue(weakest.defId, weakest.star) < unitValue(unit.defId, unit.star)) {
+        cmd({ t: "deploy", uid: unit.uid, col: weakest.col, row: weakest.row });
+      }
+    }
+  }
+
+  cmd({ t: "done" });
+  return true;
 }

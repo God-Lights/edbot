@@ -10,6 +10,9 @@ export type Phase =
   | "forge"
   | "battle"
   | "deathmatch"
+  // 체스판 자동 전투 (설계: docs/DESIGN-autochess.md)
+  | "prep" // 준비: 상점과 배치
+  | "combat" // 전투 재생
   | "result";
 
 /** 세 레인. 킹사이드는 체스에서 킹이 서 있는 쪽이다. */
@@ -60,7 +63,15 @@ export type ErrorCode =
   | "not_in_zone"
   | "already_equipping"
   | "already_equipped"
-  | "invalid_quantity";
+  | "invalid_quantity"
+  // ---- 체스판 자동 전투 ----
+  | "invalid_slot"
+  | "shop_empty"
+  | "not_enough_gold"
+  | "bench_full"
+  | "unit_not_found"
+  | "invalid_cell"
+  | "deploy_full";
 
 export interface PublicPlayer {
   id: string;
@@ -223,6 +234,76 @@ export interface ForgeSnapshot {
   events: Array<{ seq: number; tick: number; type: string; detail: string | null }>;
 }
 
+export interface ChessUnitView {
+  /** 이 기물을 가리키는 id (사고팔고 놓을 때 쓴다) */
+  uid: string;
+  defId: string;
+  star: 1 | 2;
+  /** 판 위에 있을 때만. col 0~7, row 0~3 (row 0이 가운데에 가장 가까운 앞줄) */
+  col?: number;
+  row?: number;
+}
+
+export interface ChessSelfSnapshot {
+  hp: number;
+  gold: number;
+  /** 상점 5칸의 캐릭터 id. 산 칸은 null */
+  shop: Array<string | null>;
+  bench: Array<ChessUnitView | null>;
+  board: ChessUnitView[];
+  done: boolean;
+  rerollCost: number;
+  /** 다음 라운드에 받을 골드(기본 + 이자) */
+  nextIncome: number;
+  /** 판 위의 기물로 켜진 시너지 id */
+  synergies: string[];
+}
+
+export interface ChessOpponentSnapshot {
+  hp: number;
+  done: boolean;
+  /** 준비 단계에서 상대의 판은 숨겨지고, 판에 올린 수만 보인다. */
+  boardCount: number;
+}
+
+/** 전투 한 판의 기록. 클라이언트가 박자마다 재생한다. 좌표는 판의 절대 좌표(seat 0이 아래)다. */
+export interface ChessCombatSnapshot {
+  /** 두 팀이 실제로 낸 배치(각자 시점) */
+  boards: [Array<{ defId: string; star: 1 | 2; col: number; row: number }>, Array<{ defId: string; star: 1 | 2; col: number; row: number }>];
+  units: Array<{ defId: string; seat: Seat; star: 1 | 2; maxHp: number; summon: boolean }>;
+  /** frames[k][i] = [x, y, hp, energy, shield, flags(1=생존, 2=승급)]. 아직 없는 소환수는 배열이 짧다. */
+  frames: number[][][];
+  /** [박자, 종류(attack|ability|death|promote|move), 행동한 기물 번호, 대상 번호(-1 없음), 능력 id] */
+  events: Array<[number, string, number, number, string]>;
+  winner: Seat | null;
+  survivors: [number, number];
+  /** 이 전투로 각자 잃는 체력 */
+  damage: [number, number];
+  beats: number;
+}
+
+export interface ChessRoundSummary {
+  round: number;
+  winner: Seat | null;
+  damage: [number, number];
+  survivors: [number, number];
+}
+
+export interface ChessSnapshot {
+  round: number;
+  maxRounds: number;
+  /** 지금 판에 올릴 수 있는 기물 수 */
+  deployCap: number;
+  /** 상점의 가격별 등장 확률(%) [1골드, 2골드, 3골드, 4골드] */
+  shopOdds: [number, number, number, number];
+  me: ChessSelfSnapshot | null;
+  opponent: ChessOpponentSnapshot | null;
+  /** 전투 단계에만 있다. */
+  combat: ChessCombatSnapshot | null;
+  lastRound: ChessRoundSummary | null;
+  roundWins: [number, number];
+}
+
 export interface ResultSnapshot {
   /** seat 순서로 레이팅 변화. 로그인하지 않은 판이거나 아직 저장 전이면 null. */
   ratings: Array<{ before: number; after: number } | null>;
@@ -246,6 +327,8 @@ export interface RoomSnapshot {
   game: GameSnapshot | null;
   /** 전투와 데스매치 중에만 있다. */
   battle: BattleSnapshot | null;
+  /** 체스판 자동 전투 상태. 준비·전투 단계에 있다. */
+  chess: ChessSnapshot | null;
   /** 탐사 단계부터 판이 끝날 때까지. */
   explore: ExploreSnapshot | null;
   /** 대장간. 탐사와 함께 시작해서 판이 끝날 때까지. */
@@ -271,6 +354,20 @@ export type ClientMessage =
   | { t: "ultimate"; characterId: string; lane?: Lane }
   /** 전투 중 나이트가 다른 레인으로 옮겨 간다. */
   | { t: "move"; characterId: string; lane: Lane }
+  /** 체스판 자동 전투 (준비 단계): 상점 칸(0~4)의 캐릭터를 산다. */
+  | { t: "buy"; slot: number }
+  /** 기물(uid)을 판다. */
+  | { t: "sell"; uid: string }
+  /** 상점을 새로 고친다. */
+  | { t: "reroll" }
+  /** 기물(uid)을 판의 칸에 놓는다. 이미 있는 기물과는 자리를 바꾼다. */
+  | { t: "deploy"; uid: string; col: number; row: number }
+  /** 판 위의 기물(uid)을 대기석으로 내린다. */
+  | { t: "bench"; uid: string }
+  /** 준비를 끝냈다. 둘 다 끝내면 바로 전투가 시작된다. */
+  | { t: "done" }
+  /** 전투 중 항복한다. 상대가 바로 이긴다. 데스매치에서도 할 수 있다. */
+  | { t: "surrender" }
   /** 탐사: 칸(0~15, 4x4)에 채집·매복·정찰을 한다. 행동 게이지가 1 든다. */
   | { t: "explore"; action: ExploreAction; tile: number }
   /** 대장간: buy 광석 구입, smelt 재련 시작, craft 무기 조합, equip 무기 장착. */
@@ -368,6 +465,28 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       const tile = msg.tile;
       if (!action || typeof tile !== "number" || !Number.isInteger(tile) || tile < 0 || tile > 15) return null;
       return { t: "explore", action, tile };
+    }
+    case "surrender":
+      return { t: "surrender" };
+    case "buy": {
+      const slot = msg.slot;
+      return typeof slot === "number" && Number.isInteger(slot) && slot >= 0 && slot <= 4 ? { t: "buy", slot } : null;
+    }
+    case "sell":
+    case "bench": {
+      const uid = characterId(msg.uid);
+      return uid ? { t: msg.t, uid } : null;
+    }
+    case "reroll":
+      return { t: "reroll" };
+    case "done":
+      return { t: "done" };
+    case "deploy": {
+      const uid = characterId(msg.uid);
+      const { col, row } = msg;
+      if (!uid || typeof col !== "number" || typeof row !== "number") return null;
+      if (!Number.isInteger(col) || !Number.isInteger(row) || col < 0 || col > 7 || row < 0 || row > 3) return null;
+      return { t: "deploy", uid, col, row };
     }
     case "move": {
       const id = characterId(msg.characterId);

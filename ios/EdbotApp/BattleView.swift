@@ -407,8 +407,8 @@ struct ResultView: View {
                 Text(outcome.title).font(.system(size: 64, weight: .heavy, design: .rounded)).foregroundStyle(outcome.color)
                 Text(Labels.resultReason(result.reason)).font(.title3).foregroundStyle(.secondary)
                 HStack(spacing: 40) {
-                    stat("점수", "\(result.score[safe: seat] ?? 0) : \(result.score[safe: 1 - seat] ?? 0)")
-                    stat("처치", "\(result.kills[safe: seat] ?? 0) : \(result.kills[safe: 1 - seat] ?? 0)")
+                    stat(room.chess != nil ? "남은 체력" : "점수", "\(result.score[safe: seat] ?? 0) : \(result.score[safe: 1 - seat] ?? 0)")
+                    stat(room.chess != nil ? "라운드 승" : "처치", "\(result.kills[safe: seat] ?? 0) : \(result.kills[safe: 1 - seat] ?? 0)")
                 }
                 .panel()
                 if seat < result.ratings.count, let rating = result.ratings[seat] {
