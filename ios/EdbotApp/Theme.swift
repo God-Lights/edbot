@@ -82,3 +82,41 @@ extension View {
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
 }
+
+extension Array {
+    /// 범위를 벗어나면 nil.
+    subscript(safe index: Int) -> Element? { indices.contains(index) ? self[index] : nil }
+}
+
+/// 켜진 시너지를 알약 모양으로 보여 준다. 누르면 가이드의 시너지 탭이 열린다.
+struct SynergyChips: View {
+    @Environment(AppModel.self) private var model
+    let ids: [String]
+    var emptyText: String? = nil
+
+    var body: some View {
+        if ids.isEmpty {
+            if let emptyText { Text(emptyText).font(.caption2).foregroundStyle(.secondary) }
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(ids, id: \.self) { id in
+                    Button { model.openGuide(.synergy) } label: {
+                        HStack(spacing: 4) {
+                            Text("🔗").font(.caption2)
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(model.synergy(id)?.nameKo ?? id).font(.caption.bold())
+                                if let description = model.synergy(id)?.description {
+                                    Text(description).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(Capsule().fill(Theme.accent.opacity(0.22)))
+                        .overlay(Capsule().strokeBorder(Theme.accent.opacity(0.6), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+}

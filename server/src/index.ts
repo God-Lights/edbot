@@ -3,6 +3,7 @@ import { AuthStore } from "./auth-store";
 import { USER_HEADER, authRequired, authStore, bearerToken, identify, loginRedirectUrl } from "./auth";
 import type { AuthEnv } from "./auth";
 import { loadSourceJson } from "./sidestore";
+import { SYNERGIES } from "./synergy";
 import { WEAPONS } from "./forge/weapons";
 import { getLeaderboard, getPlayerStats, getRecentMatches } from "./ranking/store";
 import { approvedPage, donePage, failedPage, homePage } from "./pages";
@@ -199,6 +200,13 @@ export default {
     // GET /sidestore.json -> SideStore(AltStore 호환) 소스. SideStore에서 "소스 추가"에 이 주소를 넣는다.
     if (request.method === "GET" && url.pathname === "/sidestore.json") {
       return sideStoreSource(origin);
+    }
+
+    // GET /api/synergies -> 캐릭터 시너지 목록 (이름, 조건, 효과 설명).
+    if (request.method === "GET" && parts.length === 2 && parts[0] === "api" && parts[1] === "synergies") {
+      return json({
+        synergies: SYNERGIES.map(({ id, nameKo, requirement, description }) => ({ id, nameKo, requirement, description })),
+      });
     }
 
     // GET /api/weapons -> 무기 목록과 레시피.

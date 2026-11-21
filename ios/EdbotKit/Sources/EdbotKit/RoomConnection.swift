@@ -110,6 +110,15 @@ public actor RoomConnection {
     public func sendMoveLane(_ characterId: String, lane: Lane) async -> Bool {
         await send(MessageCodec.move(characterId, lane: lane))
     }
+    public func sendExplore(_ action: ExploreAction, tile: Int) async -> Bool {
+        await send(MessageCodec.explore(action, tile: tile))
+    }
+    public func sendForgeBuy(quantity: Int = 1) async -> Bool { await send(MessageCodec.forgeBuy(quantity: quantity)) }
+    public func sendForgeSmelt() async -> Bool { await send(MessageCodec.forgeSmelt()) }
+    public func sendForgeCraft(_ weaponId: String) async -> Bool { await send(MessageCodec.forgeCraft(weaponId)) }
+    public func sendForgeEquip(_ weaponId: String, characterId: String) async -> Bool {
+        await send(MessageCodec.forgeEquip(weaponId, characterId: characterId))
+    }
     public func sendLock() async -> Bool { await send(MessageCodec.lock()) }
 
     public func sendReady(_ ready: Bool) async -> Bool {

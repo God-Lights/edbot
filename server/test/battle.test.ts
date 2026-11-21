@@ -18,7 +18,7 @@ const team = (ids: string[], lane: Lane = "center") => ids.map((characterId) => 
 
 /** 피해 계수 1로 만든 전투. 숫자를 그대로 검증할 수 있다. */
 function battle(a: string[], b: string[], lane: Lane = "center", tuning = { unitDamageScale: 1 }): BattleState {
-  return createBattle({ teams: [team(a, lane), team(b, lane)], secondPicker: 1, tuning });
+  return createBattle({ teams: [team(a, lane), team(b, lane)], secondPicker: 1, tuning, synergies: false });
 }
 
 const unit = (s: BattleState, seat: 0 | 1, id: string): Unit => unitById(s, `${seat}:${id}`)!;

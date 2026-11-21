@@ -22,6 +22,7 @@ import type { ActionResult, GameState } from "./game";
 import type { MatchInput } from "./ranking/store";
 import { createBattle, TICKS_PER_SECOND } from "./battle/core";
 import type { BattleState } from "./battle/core";
+import { activeSynergyIds } from "./synergy";
 import { toBattleSnapshot } from "./battle/snapshot";
 import { awardKill, createExplore, startAmbush, startGather, startScout, stepExplore } from "./explore/explore";
 import type { ExploreState } from "./explore/explore";
@@ -892,6 +893,7 @@ export function toGameSnapshot(state: RoomState, viewerSeat: Seat | null): GameS
     turnEndsAt: inDraft ? game.turnEndsAt : null,
     lanes: [lanes(0), lanes(1)],
     placementLocked: [game.placementLocked[0], game.placementLocked[1]],
+    synergies: [activeSynergyIds(game.picks[0]), activeSynergyIds(game.picks[1])],
   };
 }
 

@@ -24,7 +24,7 @@ struct DraftView: View {
             orderStrip
 
             HStack(alignment: .top, spacing: 16) {
-                team("내 팀", picks: game.picks[seat], color: Theme.mine)
+                team("내 팀", picks: game.picks[seat], color: Theme.mine, synergies: game.synergies?[safe: seat] ?? [])
                     .frame(width: 210)
 
                 ScrollView {
@@ -41,7 +41,7 @@ struct DraftView: View {
                 }
                 .overlay(alignment: .bottom) { confirmBar }
 
-                team("상대 팀", picks: game.picks[1 - seat], color: Theme.theirs)
+                team("상대 팀", picks: game.picks[1 - seat], color: Theme.theirs, synergies: game.synergies?[safe: 1 - seat] ?? [])
                     .frame(width: 210)
             }
         }
@@ -73,7 +73,7 @@ struct DraftView: View {
         }
     }
 
-    private func team(_ title: String, picks: [String], color: Color) -> some View {
+    private func team(_ title: String, picks: [String], color: Color, synergies: [String]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("\(title) (\(picks.count)/5)").font(.headline).foregroundStyle(color)
             ForEach(0..<5, id: \.self) { index in
@@ -83,6 +83,7 @@ struct DraftView: View {
                     EmptySlot()
                 }
             }
+            SynergyChips(ids: synergies, emptyText: "시너지 없음")
             Spacer(minLength: 0)
         }
         .panel(padding: 12)

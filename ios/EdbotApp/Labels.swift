@@ -1,4 +1,5 @@
 import EdbotKit
+import Foundation
 
 /// 화면에 보여 줄 한국어 문구.
 enum Labels {
@@ -38,6 +39,20 @@ enum Labels {
         case ErrorCode.notEnoughSteam: return "스팀포스가 부족해요."
         case ErrorCode.noTarget: return "대상이 없어요."
         case ErrorCode.notAKnight: return "나이트만 레인을 옮길 수 있어요."
+        case ErrorCode.invalidTile: return "없는 칸이에요."
+        case ErrorCode.noActionGauge: return "행동 게이지가 부족해요."
+        case ErrorCode.tileBusy: return "이미 그 칸에서 행동 중이에요."
+        case ErrorCode.nothingToGather: return "채집할 게 없는 칸이에요."
+        case ErrorCode.alreadyKnown: return "이미 알고 있는 칸이에요."
+        case ErrorCode.notEnoughTalent: return "탈런트가 부족해요."
+        case ErrorCode.notEnoughMaterials: return "재료가 부족해요."
+        case ErrorCode.noFreeSmelter: return "빈 재련대가 없어요."
+        case ErrorCode.unknownWeapon: return "없는 무기예요."
+        case ErrorCode.noWeapon: return "그 무기를 가지고 있지 않아요."
+        case ErrorCode.notInZone: return "본진이나 아군 가드 타워 근처에서만 장착할 수 있어요."
+        case ErrorCode.alreadyEquipping: return "이미 무기를 끼우는 중이에요."
+        case ErrorCode.alreadyEquipped: return "이미 끼고 있는 무기예요."
+        case ErrorCode.invalidQuantity: return "살 수 있는 개수가 아니에요."
         default: return nil
         }
     }
@@ -109,6 +124,108 @@ enum Labels {
         case "deathmatchTime": return "데스매치 시간 종료 (남은 체력)"
         default: return reason
         }
+    }
+
+    static func tileName(_ kind: String?) -> String {
+        switch kind {
+        case "tree": return "나무"
+        case "rock": return "바위"
+        case "ore": return "광맥"
+        case "chest": return "보물상자"
+        case "empty": return "빈 땅"
+        default: return "안개"
+        }
+    }
+
+    static func tileGlyph(_ kind: String?) -> String {
+        switch kind {
+        case "tree": return "🌲"
+        case "rock": return "🪨"
+        case "ore": return "⛏️"
+        case "chest": return "🎁"
+        case "empty": return "·"
+        default: return "☁️"
+        }
+    }
+
+    static func actionName(_ action: ExploreAction) -> String {
+        switch action {
+        case .gather: return "채집"
+        case .ambush: return "매복"
+        case .scout: return "정찰"
+        }
+    }
+
+    static func materialName(_ key: String) -> String {
+        switch key {
+        case "talent": return "탈런트"
+        case "branch": return "나뭇가지"
+        case "stone": return "돌"
+        case "ore": return "광석"
+        case "ironIngot": return "철괴"
+        case "rare": return "희귀 재료"
+        case "blueprints": return "설계도"
+        default: return key
+        }
+    }
+
+    static func weaponKind(_ kind: String) -> String {
+        switch kind {
+        case "heavy": return "중량"
+        case "polearm": return "장병"
+        case "ranged": return "원거리"
+        default: return kind
+        }
+    }
+
+    /// 자원 변화를 "나뭇가지 +2" 형태로.
+    static func gain(_ gain: ResourceGain?) -> String {
+        guard let gain else { return "" }
+        let pairs: [(String, Int?)] = [("talent", gain.talent), ("branch", gain.branch), ("stone", gain.stone), ("ore", gain.ore),
+                                       ("ironIngot", gain.ironIngot), ("rare", gain.rare), ("blueprints", gain.blueprints)]
+        let parts = pairs.compactMap { key, value -> String? in
+            guard let value, value != 0 else { return nil }
+            return "\(materialName(key)) \(value > 0 ? "+" : "")\(value)"
+        }
+        return parts.isEmpty ? "" : "(" + parts.joined(separator: ", ") + ")"
+    }
+
+    static func exploreEvent(_ event: ExploreEventSnapshot) -> String {
+        let tile = "(\(event.tile % 4 + 1),\(event.tile / 4 + 1))"
+        switch event.type {
+        case "gathered": return "\(tile) 채집 완료 \(gain(event.gain))"
+        case "split": return "\(tile) 같은 칸을 채집해서 나눠 가졌어요 \(gain(event.gain))"
+        case "stolen": return "\(tile) 상대의 매복에 빼앗겼어요!"
+        case "ambushHit": return "\(tile) 매복 성공! \(gain(event.gain))"
+        case "ambushClash": return "\(tile) 서로 매복해서 둘 다 사라졌어요"
+        case "ambushExpired": return "\(tile) 매복이 아무도 못 잡고 끝났어요"
+        case "scouted":
+            let detail = event.detail ?? ""
+            return "\(tile) 정찰: \(tileName(detail.split(separator: ",").first.map(String.init)))" + (detail.contains("ambush") ? " — 상대 매복 있음!" : "")
+        case "trap": return "\(tile) 함정! \(gain(event.gain))"
+        case "empty": return "\(tile) 빈 땅이었어요"
+        default: return event.type
+        }
+    }
+
+    static func matchResult(_ result: String) -> String {
+        switch result {
+        case "win": return "승"
+        case "loss": return "패"
+        case "draw": return "무"
+        default: return result
+        }
+    }
+
+    /// 레이팅 변화를 "+20" 형태로.
+    static func delta(_ value: Int) -> String { value > 0 ? "+\(value)" : "\(value)" }
+
+    /// 서버 시각(ms)을 "11월 21일 14:35" 형태로.
+    static func matchDate(_ ms: Int64) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ko_KR")
+        formatter.dateFormat = "M월 d일 HH:mm"
+        return formatter.string(from: Date(timeIntervalSince1970: Double(ms) / 1000))
     }
 
     static func countdown(_ ms: Int64?) -> String {

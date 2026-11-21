@@ -36,6 +36,51 @@ public struct ApiClient: Sendable {
         return list
     }
 
+    /// 레이팅 순위 상위 limit명. 로그인했다면 내 줄에 isMe가 붙는다.
+    public func leaderboard(limit: Int = 20) async throws -> [LeaderboardEntry] {
+        struct Body: Decodable { let entries: [LeaderboardEntry] }
+        let (data, status) = try await http.send(Http.request(baseURL, "/api/leaderboard?limit=\(limit)", token: authToken))
+        guard (200..<300).contains(status) else { throw ApiError.status(status) }
+        guard let body = try? JSONDecoder().decode(Body.self, from: data) else { throw ApiError.badResponse }
+        return body.entries
+    }
+
+    /// 내 레이팅과 순위. 아직 한 판도 안 했으면 nil. 로그인이 필요하다.
+    public func myStats() async throws -> PlayerStats? {
+        struct Body: Decodable { let stats: PlayerStats? }
+        let (data, status) = try await http.send(Http.request(baseURL, "/api/me/stats", token: authToken))
+        if status == 401 { throw ApiError.unauthorized }
+        guard (200..<300).contains(status) else { throw ApiError.status(status) }
+        guard let body = try? JSONDecoder().decode(Body.self, from: data) else { throw ApiError.badResponse }
+        return body.stats
+    }
+
+    /// 내 최근 판. 로그인이 필요하다.
+    public func myMatches(limit: Int = 10) async throws -> [MatchSummary] {
+        struct Body: Decodable { let matches: [MatchSummary] }
+        let (data, status) = try await http.send(Http.request(baseURL, "/api/me/matches?limit=\(limit)", token: authToken))
+        if status == 401 { throw ApiError.unauthorized }
+        guard (200..<300).contains(status) else { throw ApiError.status(status) }
+        guard let body = try? JSONDecoder().decode(Body.self, from: data) else { throw ApiError.badResponse }
+        return body.matches
+    }
+
+    /// 캐릭터 시너지 목록을 가져온다.
+    public func synergies() async throws -> [SynergyInfo] {
+        let (data, status) = try await http.send(Http.request(baseURL, "/api/synergies"))
+        guard (200..<300).contains(status) else { throw ApiError.status(status) }
+        guard let list = MessageCodec.parseSynergies(data) else { throw ApiError.badResponse }
+        return list
+    }
+
+    /// 무기 목록과 레시피를 가져온다.
+    public func weapons() async throws -> [WeaponInfo] {
+        let (data, status) = try await http.send(Http.request(baseURL, "/api/weapons"))
+        guard (200..<300).contains(status) else { throw ApiError.status(status) }
+        guard let list = MessageCodec.parseWeapons(data) else { throw ApiError.badResponse }
+        return list
+    }
+
     /// 방 정보를 조회한다. 방이 없으면 nil.
     public func room(code: String) async throws -> RoomInfo? {
         let normalized = code.trimmingCharacters(in: .whitespaces).uppercased()

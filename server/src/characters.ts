@@ -14,6 +14,12 @@ export interface Character {
   attack: number;
   speed: SpeedTier;
   range: RangeTier;
+  /** 패시브 설명. 없으면 null. */
+  passive: string | null;
+  /** 자동으로 나가는 스킬 설명. 없으면 null. */
+  skill: string | null;
+  /** 궁극기 설명 (스팀포스 5, 40초 재사용). */
+  ultimate: string;
 }
 
 // 데이터 파일(JSON)은 문자열을 넓은 타입으로 읽기 때문에 한 번 좁혀 준다. 내용은 테스트가 검증한다.

@@ -40,6 +40,29 @@ final class AppModel {
     /// 전투 중 유닛 위치를 부드럽게 보이게 하는 보간기. 화면이 매 프레임 읽는다.
     let interpolator = BattleInterpolator()
 
+    // 랭킹
+    private(set) var leaderboard: [LeaderboardEntry] = []
+    private(set) var myStats: PlayerStats?
+    private(set) var myMatches: [MatchSummary] = []
+    private(set) var isLoadingRanking = false
+    private(set) var rankingError: String?
+    var showRanking = false
+
+    // 가이드와 시너지
+    private(set) var synergies: [SynergyInfo] = []
+    /// 가이드 화면을 열어 두었는가. (방 안에서도 열 수 있고, 열어 둔 동안에도 게임은 계속된다)
+    var showGuide = false
+    var guideTab: GuideTab = .flow
+
+    // 탐사·대장간
+    private(set) var weapons: [WeaponInfo] = []
+    /// 전투 중 오른쪽에 탐사·대장간 패널을 열어 두었는가.
+    var showWorkshop = false
+    /// 탐사에서 칸을 누르면 할 행동.
+    var exploreAction: ExploreAction = .gather
+    /// 대장간에서 장착하려고 고른 무기.
+    var selectedWeaponId: String?
+
     private let tokens: TokenStore
     private var connection: RoomConnection?
     private var eventTask: Task<Void, Never>?
@@ -107,6 +130,99 @@ final class AppModel {
     /// 테스트 대전: 봇과 한 판. (서버의 방 코드 ADMN)
     func joinTestMatch() {
         join(code: "ADMN")
+    }
+
+    // MARK: 탐사·대장간
+
+    /// 랭킹 화면을 열고 최신 순위와 내 전적을 불러온다. 로그인하지 않았으면 순위만 가져온다.
+    func openRanking() {
+        showRanking = true
+        refreshRanking()
+    }
+
+    func refreshRanking() {
+        guard !isLoadingRanking, let url = serverURL else { return }
+        isLoadingRanking = true
+        rankingError = nil
+        let token = authToken
+        Task {
+            defer { isLoadingRanking = false }
+            do {
+                let api = ApiClient(baseURL: url, authToken: token)
+                leaderboard = try await api.leaderboard(limit: 20)
+                if token != nil {
+                    do {
+                        myStats = try await api.myStats()
+                        myMatches = try await api.myMatches(limit: 10)
+                    } catch ApiError.unauthorized {
+                        clearLogin() // 로그인이 만료되었다
+                        myStats = nil
+                        myMatches = []
+                    }
+                } else {
+                    myStats = nil
+                    myMatches = []
+                }
+            } catch ApiError.status(503) {
+                rankingError = "랭킹 서버가 아직 준비되지 않았어요. 잠시 뒤에 다시 시도해 주세요."
+            } catch {
+                rankingError = "랭킹을 불러오지 못했어요: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func synergy(_ id: String) -> SynergyInfo? { synergies.first { $0.id == id } }
+
+    /// 가이드를 열 때 서버 데이터(캐릭터, 시너지, 무기)가 아직 없으면 불러온다. 방에 들어가기 전에도 볼 수 있다.
+    func openGuide(_ tab: GuideTab = .flow) {
+        guideTab = tab
+        showGuide = true
+        guard let url = serverURL else { return }
+        loadRoster(from: url)
+        loadWeapons(from: url)
+        loadSynergies(from: url)
+    }
+
+    private func loadSynergies(from url: URL) {
+        guard synergies.isEmpty else { return }
+        Task {
+            if let list = try? await ApiClient(baseURL: url).synergies() { synergies = list }
+        }
+    }
+
+    func weapon(_ id: String) -> WeaponInfo? { weapons.first { $0.id == id } }
+
+    func explore(tile: Int) {
+        guard let connection else { return }
+        let action = exploreAction
+        Task { await connection.sendExplore(action, tile: tile) }
+    }
+
+    func buyOre(quantity: Int = 1) {
+        guard let connection else { return }
+        Task { await connection.sendForgeBuy(quantity: quantity) }
+    }
+
+    func smelt() {
+        guard let connection else { return }
+        Task { await connection.sendForgeSmelt() }
+    }
+
+    func craft(_ weaponId: String) {
+        guard let connection else { return }
+        Task { await connection.sendForgeCraft(weaponId) }
+    }
+
+    func equip(characterId: String) {
+        guard let connection, let weaponId = selectedWeaponId else { return }
+        Task { await connection.sendForgeEquip(weaponId, characterId: characterId) }
+    }
+
+    private func loadWeapons(from url: URL) {
+        guard weapons.isEmpty else { return }
+        Task {
+            if let list = try? await ApiClient(baseURL: url).weapons() { weapons = list }
+        }
     }
 
     func lockPlacement() {
@@ -230,6 +346,8 @@ final class AppModel {
         leave()
         message = nil
         loadRoster(from: url)
+        loadWeapons(from: url)
+        loadSynergies(from: url)
         status = .connecting
         let connection = RoomConnection(factory: URLSessionWebSocketFactory())
         self.connection = connection
@@ -255,6 +373,8 @@ final class AppModel {
         clock = ServerClock()
         clearSelections()
         interpolator.reset()
+        showWorkshop = false
+        selectedWeaponId = nil
         if let connection { Task { await connection.stop() } }
     }
 

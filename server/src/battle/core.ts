@@ -3,6 +3,8 @@
 // 같은 시작 조건과 같은 입력(궁극기·레인 이동)이면 언제나 같은 결과가 나온다. (난수를 쓰지 않는다)
 // Cloudflare에 의존하지 않는 순수 함수만 둔다.
 
+import { activeSynergyIds, combineEffects } from "../synergy";
+import type { SynergyEffects } from "../synergy";
 import { characterById } from "../characters";
 import type { RangeTier, SpeedTier } from "../characters";
 import type { Lane, Seat } from "../protocol";
@@ -228,6 +230,9 @@ export interface BattleState {
    * 탈런트는 탐사 쪽 자원이라 전투는 사본만 본다. 방이 틱마다 [talent]를 채워 주고,
    * 전투가 쓰고 얻은 양을 [talentDelta]에 쌓아 두면 방이 가져가서 반영한다.
    */
+  /** seat별로 채운 시너지 id와 그 효과. 전투가 시작될 때의 팀 구성으로 정해진다. */
+  synergies: [string[], string[]];
+  synergyFx: [SynergyEffects, SynergyEffects];
   talent: [number, number];
   talentDelta: [number, number];
   /** 리치몬드의 황금 계약: 진행 중인 재련을 단축할 틱. 방이 가져간다. */
@@ -282,6 +287,8 @@ export interface BattleSetup {
   secondPicker: Seat;
   /** 전투가 시작될 때 쌓여 있는 스팀포스. 기본 10. */
   steam?: [number, number];
+  /** false로 하면 시너지를 끈다. 개별 규칙을 시험할 때만 쓴다. 기본은 켜짐. */
+  synergies?: boolean;
   tuning?: Partial<BattleTuning>;
 }
 
@@ -381,6 +388,19 @@ export function createBattle(setup: BattleSetup): BattleState {
     }
   }
   const tuning: BattleTuning = { ...DEFAULT_TUNING, ...setup.tuning };
+  const synergies: [string[], string[]] =
+    setup.synergies === false
+      ? [[], []]
+      : [
+          activeSynergyIds(setup.teams[0].map((m) => m.characterId)),
+          activeSynergyIds(setup.teams[1].map((m) => m.characterId)),
+        ];
+  const synergyFx: [SynergyEffects, SynergyEffects] = [combineEffects(synergies[0]), combineEffects(synergies[1])];
+  for (const unit of units) {
+    const factor = synergyFx[unit.seat].maxHp;
+    unit.maxHp *= factor; // 성가대: 최대 체력 보너스는 전투가 시작될 때 한 번 적용한다
+    unit.hp *= factor;
+  }
   return {
     mode: "battle",
     tick: 0,
@@ -403,6 +423,8 @@ export function createBattle(setup: BattleSetup): BattleState {
     heals: [],
     nextSummonNumber: 1,
     firstDeathmatchKill: null,
+    synergies,
+    synergyFx,
     talent: [0, 0],
     talentDelta: [0, 0],
     smeltHaste: [0, 0],

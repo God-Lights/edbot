@@ -7,7 +7,7 @@ import type { Lane } from "../src/protocol";
 const team = (ids: string[], lane: Lane = "center") => ids.map((characterId) => ({ characterId, lane }));
 
 function battle(a: string[], b: string[], lane: Lane = "center"): BattleState {
-  return createBattle({ teams: [team(a, lane), team(b, lane)], secondPicker: 1, tuning: { unitDamageScale: 1 } });
+  return createBattle({ teams: [team(a, lane), team(b, lane)], secondPicker: 1, tuning: { unitDamageScale: 1 }, synergies: false });
 }
 const unit = (s: BattleState, seat: 0 | 1, id: string): Unit => unitById(s, `${seat}:${id}`)!;
 const tower = (s: BattleState, seat: 0 | 1, lane: Lane, order: 0 | 1 | 2) => towerById(s, `t${seat}:${lane}:${order}`)!;
