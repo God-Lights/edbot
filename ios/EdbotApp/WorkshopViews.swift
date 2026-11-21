@@ -248,10 +248,6 @@ struct ForgePanel: View {
     }
 }
 
-private extension Array {
-    subscript(safe index: Int) -> Element? { indices.contains(index) ? self[index] : nil }
-}
-
 /// 전투 전(탐사·대장간 단계): 지도와 대장간을 나란히 크게 보여 준다.
 struct PreBattleView: View {
     @Environment(AppModel.self) private var model

@@ -39,6 +39,20 @@ public struct CharacterInfo: Codable, Equatable, Sendable, Identifiable {
     public let speed: String
     /// melee | mid | long
     public let range: String
+    /// 패시브, 스킬, 궁극기 설명. 없는 항목은 nil.
+    public let passive: String?
+    public let skill: String?
+    public let ultimate: String?
+}
+
+/// 캐릭터 시너지: 뽑은 5명의 구성에 따라 팀 전체가 받는 보너스. 서버의 GET /api/synergies 가 돌려준다.
+public struct SynergyInfo: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let nameKo: String
+    /// 어떻게 만드는가 (예: "킹 2명")
+    public let requirement: String
+    /// 무엇을 주는가 (예: "팀 전체가 받는 피해 -5%")
+    public let description: String
 }
 
 /// 한 사람의 밴 상태.
@@ -64,6 +78,8 @@ public struct GameSnapshot: Codable, Equatable, Sendable {
     /// seat별 캐릭터 id -> 레인. 상대 것은 전투가 시작되기 전에는 nil.
     public let lanes: [[String: Lane]?]
     public let placementLocked: [Bool]
+    /// seat별로 지금까지 뽑은 캐릭터가 채운 시너지 id. 서버가 오래된 버전이면 nil.
+    public let synergies: [[String]]?
 
     public var pickCount: Int { picks.reduce(0) { $0 + $1.count } }
 

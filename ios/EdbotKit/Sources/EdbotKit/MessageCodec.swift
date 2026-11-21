@@ -90,6 +90,12 @@ public enum MessageCodec {
         "{\"t\":\"forge\",\"action\":\"equip\",\"weaponId\":\(quoted(weaponId)),\"characterId\":\(quoted(characterId))}"
     }
 
+    /// GET /api/synergies 의 응답을 해석한다. 형식이 틀리면 nil.
+    public static func parseSynergies(_ json: Data) -> [SynergyInfo]? {
+        struct Body: Decodable { let synergies: [SynergyInfo] }
+        return try? JSONDecoder().decode(Body.self, from: json).synergies
+    }
+
     /// GET /api/weapons 의 응답을 해석한다. 형식이 틀리면 nil.
     public static func parseWeapons(_ json: Data) -> [WeaponInfo]? {
         struct Body: Decodable { let weapons: [WeaponInfo] }

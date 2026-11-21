@@ -72,3 +72,34 @@ final class ExploreForgeTests: XCTestCase {
         XCTAssertEqual(MessageCodec.forgeEquip("a", characterId: "b"), #"{"t":"forge","action":"equip","weaponId":"a","characterId":"b"}"#)
     }
 }
+
+/// 캐릭터 설명과 시너지(가이드용).
+final class GuideModelTests: XCTestCase {
+    func testCharacterWithDescriptions() throws {
+        let json = #"{"characters":[{"id":"ankio","nameKo":"안키오","nameEn":"Ankio","piece":"knight","hp":850,"attack":70,"speed":"veryFast","range":"melee","passive":null,"skill":null,"ultimate":"측면 기습: 순간이동"},{"id":"dwargon","nameKo":"드워곤","nameEn":"Dwargon","piece":"rook","hp":1400,"attack":65,"speed":"slow","range":"melee","passive":"용의 비늘","skill":"화염 숨결","ultimate":"용암 파괴"}]}"#
+        let list = try XCTUnwrap(MessageCodec.parseCharacters(Data(json.utf8)))
+        XCTAssertNil(list[0].passive)
+        XCTAssertNil(list[0].skill)
+        XCTAssertEqual(list[0].ultimate, "측면 기습: 순간이동")
+        XCTAssertEqual(list[1].passive, "용의 비늘")
+    }
+
+    func testOldServerWithoutDescriptionsStillParses() {
+        let json = #"{"characters":[{"id":"x","nameKo":"엑스","nameEn":"X","piece":"pawn","hp":1,"attack":1,"speed":"slow","range":"melee"}]}"#
+        let list = MessageCodec.parseCharacters(Data(json.utf8))
+        XCTAssertEqual(list?.count, 1)
+        XCTAssertNil(list?.first?.ultimate)
+    }
+
+    func testSynergiesAndGameSnapshotSynergies() throws {
+        let json = #"{"synergies":[{"id":"twin-kings","nameKo":"쌍왕","requirement":"킹 2명","description":"팀 전체가 받는 피해 -5%"}]}"#
+        let list = try XCTUnwrap(MessageCodec.parseSynergies(Data(json.utf8)))
+        XCTAssertEqual(list[0].nameKo, "쌍왕")
+        XCTAssertEqual(list[0].requirement, "킹 2명")
+        XCTAssertNil(MessageCodec.parseSynergies(Data("nope".utf8)))
+
+        let state = #"{"t":"state","room":{"code":"ABCD","phase":"draft","phaseStartedAt":1,"phaseEndsAt":2,"serverTime":3,"players":[],"game":{"firstPicker":0,"bans":[],"pickOrder":[],"picks":[["dwargon","raufaino"],[]],"turnSeat":0,"turnEndsAt":9,"lanes":[{},null],"placementLocked":[false,false],"synergies":[["twin-rooks"],[]]}}}"#
+        guard case let .state(room)? = MessageCodec.parse(state), let game = room.game else { return XCTFail() }
+        XCTAssertEqual(game.synergies, [["twin-rooks"], []])
+    }
+}

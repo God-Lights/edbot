@@ -5,6 +5,7 @@ struct RootView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
+        @Bindable var model = model
         ZStack {
             AppBackground()
             if model.isInRoom {
@@ -13,6 +14,8 @@ struct RootView: View {
                 LobbyView()
             }
         }
+        // 가이드는 로비에서도, 방 안에서도 열 수 있다. (방 안에서 열어 둔 동안에도 게임은 계속된다)
+        .sheet(isPresented: $model.showGuide) { GuideView() }
     }
 }
 
@@ -101,6 +104,11 @@ struct LobbyView: View {
             .buttonStyle(PrimaryButtonStyle())
             .disabled(model.isCreatingRoom)
 
+            Button { model.openGuide() } label: {
+                Label("게임 가이드", systemImage: "book").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(SecondaryButtonStyle())
+
             Button { model.joinTestMatch() } label: {
                 Label("테스트 대전 (봇과 한 판)", systemImage: "cpu").frame(maxWidth: .infinity)
             }
@@ -174,6 +182,7 @@ struct RoomView: View {
                 .padding(.horizontal, 12).padding(.vertical, 6)
                 .background(Capsule().fill((player.id == model.myPlayerId ? Theme.mine : Theme.theirs).opacity(0.18)))
             }
+            Button { model.openGuide() } label: { Label("가이드", systemImage: "book") }.buttonStyle(SecondaryButtonStyle())
             Button("나가기") { model.leave() }.buttonStyle(SecondaryButtonStyle())
         }
     }

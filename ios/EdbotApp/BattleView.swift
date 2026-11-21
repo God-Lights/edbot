@@ -15,6 +15,17 @@ struct BattleView: View {
                 .frame(maxHeight: .infinity)
                 .panel(padding: 6)
             eventFeed
+            if let mine = room.game?.synergies?[safe: seat], !mine.isEmpty {
+                HStack(spacing: 8) {
+                    Text("우리 시너지").font(.caption).foregroundStyle(.secondary)
+                    ForEach(mine, id: \.self) { id in
+                        Text("🔗 " + (model.synergy(id)?.nameKo ?? id)).font(.caption.bold())
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Capsule().fill(Theme.accent.opacity(0.22)))
+                    }
+                    Spacer()
+                }
+            }
             controls
         }
     }
@@ -123,10 +134,6 @@ struct BattleView: View {
             }
         }
     }
-}
-
-private extension Array {
-    subscript(safe index: Int) -> Element? { indices.contains(index) ? self[index] : nil }
 }
 
 /// 내 캐릭터 한 명: 체력, 상태, 궁극기 버튼. 안키오는 레인을 고르고, 나이트는 레인을 옮길 수 있다.

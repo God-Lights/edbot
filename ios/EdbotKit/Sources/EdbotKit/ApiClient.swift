@@ -36,6 +36,14 @@ public struct ApiClient: Sendable {
         return list
     }
 
+    /// 캐릭터 시너지 목록을 가져온다.
+    public func synergies() async throws -> [SynergyInfo] {
+        let (data, status) = try await http.send(Http.request(baseURL, "/api/synergies"))
+        guard (200..<300).contains(status) else { throw ApiError.status(status) }
+        guard let list = MessageCodec.parseSynergies(data) else { throw ApiError.badResponse }
+        return list
+    }
+
     /// 무기 목록과 레시피를 가져온다.
     public func weapons() async throws -> [WeaponInfo] {
         let (data, status) = try await http.send(Http.request(baseURL, "/api/weapons"))

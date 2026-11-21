@@ -40,6 +40,12 @@ final class AppModel {
     /// 전투 중 유닛 위치를 부드럽게 보이게 하는 보간기. 화면이 매 프레임 읽는다.
     let interpolator = BattleInterpolator()
 
+    // 가이드와 시너지
+    private(set) var synergies: [SynergyInfo] = []
+    /// 가이드 화면을 열어 두었는가. (방 안에서도 열 수 있고, 열어 둔 동안에도 게임은 계속된다)
+    var showGuide = false
+    var guideTab: GuideTab = .flow
+
     // 탐사·대장간
     private(set) var weapons: [WeaponInfo] = []
     /// 전투 중 오른쪽에 탐사·대장간 패널을 열어 두었는가.
@@ -119,6 +125,25 @@ final class AppModel {
     }
 
     // MARK: 탐사·대장간
+
+    func synergy(_ id: String) -> SynergyInfo? { synergies.first { $0.id == id } }
+
+    /// 가이드를 열 때 서버 데이터(캐릭터, 시너지, 무기)가 아직 없으면 불러온다. 방에 들어가기 전에도 볼 수 있다.
+    func openGuide(_ tab: GuideTab = .flow) {
+        guideTab = tab
+        showGuide = true
+        guard let url = serverURL else { return }
+        loadRoster(from: url)
+        loadWeapons(from: url)
+        loadSynergies(from: url)
+    }
+
+    private func loadSynergies(from url: URL) {
+        guard synergies.isEmpty else { return }
+        Task {
+            if let list = try? await ApiClient(baseURL: url).synergies() { synergies = list }
+        }
+    }
 
     func weapon(_ id: String) -> WeaponInfo? { weapons.first { $0.id == id } }
 
@@ -277,6 +302,7 @@ final class AppModel {
         message = nil
         loadRoster(from: url)
         loadWeapons(from: url)
+        loadSynergies(from: url)
         status = .connecting
         let connection = RoomConnection(factory: URLSessionWebSocketFactory())
         self.connection = connection
