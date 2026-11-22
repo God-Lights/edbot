@@ -35,6 +35,7 @@ export function toChessSnapshot(game: ChessGame, viewerSeat: Seat | null, showCo
     deployCap: deployCap(game.round),
     shopOdds: shopOdds(game.round, game.lite),
     lite: game.lite,
+    hps: [game.players[0].hp, game.players[1].hp],
     me: viewerSeat === null ? null : self(game.players[viewerSeat]),
     tiles: game.resources ? game.tiles.map((t) => ({ ...t })) : [],
     market: game.resources

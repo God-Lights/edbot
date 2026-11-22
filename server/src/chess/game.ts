@@ -66,6 +66,21 @@ export interface RoundSummary {
   survivors: [number, number];
 }
 
+/** 다시 보기용 라운드 기록 (클라이언트가 그대로 재생한다) */
+export interface ReplayRound {
+  round: number;
+  boards: [Placement[], Placement[]];
+  units: CombatRecording["units"];
+  frames: CombatRecording["frames"];
+  events: CombatRecording["events"];
+  tiles: CombatRecording["tiles"];
+  mines: CombatRecording["mines"];
+  winner: Seat | null;
+  survivors: [number, number];
+  damage: [number, number];
+  beats: number;
+}
+
 export interface CombatRecord extends CombatRecording {
   /** 전투에 나간 배치(자기 시점) */
   boards: [Placement[], Placement[]];
@@ -80,6 +95,8 @@ export interface ChessGame {
   tiles: ResourceTile[];
   /** 이번 라운드 광물 시장에 나온 재료 id */
   market: string[];
+  /** 지난 라운드들의 전투 기록. 판이 끝나면 다시 보기로 저장한다. */
+  history: ReplayRound[];
   /** 입문 모드: 상점에 쉬운 캐릭터(1~2골드)만 나온다. */
   lite: boolean;
   round: number;
@@ -142,6 +159,7 @@ export function createChessGame(seed: number, lite = false): ChessGame {
   for (const def of ROSTER) if (!lite || LITE_IDS.includes(def.id)) pool[def.id] = POOL_COPIES[def.cost];
   return {
     resources: !lite,
+    history: [],
     tiles: [],
     market: [],
     lite,
@@ -516,6 +534,11 @@ export function finishRound(game: ChessGame): void {
   game.players[0].gold += combat.goldBonus[0];
   game.players[1].gold += combat.goldBonus[1];
   if (combat.result.winner !== null) game.roundWins[combat.result.winner] += 1;
+  game.history.push({
+    round: game.round, boards: combat.boards, units: combat.units, frames: combat.frames, events: combat.events,
+    tiles: combat.tiles, mines: combat.mines, winner: combat.result.winner, survivors: combat.result.survivors,
+    damage: combat.damage, beats: combat.result.beats,
+  });
   game.lastRound = { round: game.round, winner: combat.result.winner, damage: combat.damage, survivors: combat.result.survivors };
 
   const [a, b] = [game.players[0].hp, game.players[1].hp];

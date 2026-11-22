@@ -35,7 +35,8 @@ export function rankingModal() {
     const recent = (r.matches ?? []).map((m) => {
       const [t, c] = RESULT[m.result] ?? [m.result, ""];
       const delta = m.ratingAfter - m.ratingBefore;
-      return `<tr><td class="${c}">${t}</td><td>${esc(m.opponent)}</td><td>${delta >= 0 ? "+" : ""}${delta}</td></tr>`;
+      return `<tr><td class="${c}">${t}</td><td>${esc(m.opponent)}</td><td>${delta >= 0 ? "+" : ""}${delta}</td>
+        <td>${m.id ? `<button class="btn sec" data-act="replay-match" data-id="${esc(m.id)}">▶ 다시 보기</button>` : ""}</td></tr>`;
     }).join("");
     body = `${stats}<div class="panel"><table class="tbl"><thead><tr><th>#</th><th>이름</th><th>레이팅</th><th>판</th><th>승/패/무</th></tr></thead><tbody>${rows || `<tr><td colspan="5" class="sub">아직 기록이 없어요.</td></tr>`}</tbody></table></div>
       ${recent ? `<div class="panel"><b>최근 판</b><table class="tbl"><tbody>${recent}</tbody></table></div>` : ""}`;

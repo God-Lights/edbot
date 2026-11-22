@@ -1,12 +1,13 @@
 import { DurableObject } from "cloudflare:workers";
 import { USER_HEADER } from "./auth";
 import { runBotUntilIdle } from "./bot";
-import { recordMatch } from "./ranking/store";
+import { matchIdOf, recordMatch, saveReplay } from "./ranking/store";
 import { parseClientMessage } from "./protocol";
 import type { ErrorCode, ServerMessage } from "./protocol";
 import {
   addBotIfNeeded, setBotLevel,
   advancePhase,
+  buildReplay,
   createRoom,
   isExpired,
   joinRoom,
@@ -34,7 +35,12 @@ const STATE_KEY = "state";
 /** 소켓에 붙여 두는 값. 소켓이 잠들었다 깨어나도 누구의 소켓인지 알 수 있다. */
 interface SocketAttachment {
   playerId: string;
+  /** 관전자 (플레이어가 아니다) */
+  spectator?: boolean;
 }
+
+const SPECTATOR_TAG = "spectator";
+const MAX_SPECTATORS = 8;
 
 export interface RoomInfo {
   code: string;
@@ -104,6 +110,7 @@ export class Room extends DurableObject<Env> {
     } catch {
       glUser = null;
     }
+    if (url.searchParams.get("spectate") === "1") return this.acceptSpectator(now);
     const result = joinRoom(
       this.state,
       {
@@ -147,10 +154,35 @@ export class Room extends DurableObject<Env> {
     return new Response(null, { status: 101, webSocket: client });
   }
 
+  /** 관전자로 들어온다. 전투만 볼 수 있고(준비 단계의 상점·배치는 안 보인다) 아무것도 조작할 수 없다. */
+  private acceptSpectator(now: number): Response {
+    const [client, server] = Object.values(new WebSocketPair()) as [WebSocket, WebSocket];
+    const state = this.state!;
+    const reject = (code: ErrorCode, message: string) => {
+      this.ctx.acceptWebSocket(server);
+      sendTo(server, { t: "error", code, message });
+      server.close(1008, code);
+      return new Response(null, { status: 101, webSocket: client });
+    };
+    if (state.mode !== "chess" || state.testMatch) return reject("spectate_unavailable", "이 방은 관전할 수 없다.");
+    if (this.ctx.getWebSockets(SPECTATOR_TAG).length >= MAX_SPECTATORS) return reject("room_full", "관전자가 가득 찼다.");
+    this.ctx.acceptWebSocket(server, [SPECTATOR_TAG]);
+    server.serializeAttachment({ playerId: "", spectator: true } satisfies SocketAttachment);
+    sendTo(server, { t: "welcome", playerId: "spectator", token: "", room: toSnapshot(state, now, undefined) });
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     if (!this.state) return;
     const attachment = ws.deserializeAttachment() as SocketAttachment | null;
     if (!attachment) return;
+    if (attachment.spectator) {
+      // 관전자는 ping만 보낼 수 있다.
+      const spectatorMsg = parseClientMessage(message);
+      if (spectatorMsg?.t === "ping") sendTo(ws, { t: "pong", ts: spectatorMsg.ts, serverTime: Date.now() });
+      else sendTo(ws, { t: "error", code: "wrong_phase", message: "관전 중에는 할 수 없다." });
+      return;
+    }
 
     const msg = parseClientMessage(message);
     if (!msg) {
@@ -248,6 +280,8 @@ export class Room extends DurableObject<Env> {
       const ratings = await recordMatch(this.env.DB, match);
       if (ratings && this.state.result) {
         this.state.result.ratings = [ratings[0], ratings[1]];
+        const replay = buildReplay(this.state);
+        if (replay) await saveReplay(this.env.DB, matchIdOf(match.roomCode, match.startedAt), replay);
       }
     } catch (error) {
       // 랭킹 저장이 실패해도 판 진행에는 영향이 없다. (예: 아직 마이그레이션을 적용하지 않았을 때)
@@ -269,7 +303,7 @@ export class Room extends DurableObject<Env> {
   private async handleSocketGone(ws: WebSocket): Promise<void> {
     if (!this.state) return;
     const attachment = ws.deserializeAttachment() as SocketAttachment | null;
-    if (!attachment) return; // 거절된 소켓 등 플레이어와 연결되지 않은 소켓
+    if (!attachment || attachment.spectator) return; // 거절된 소켓, 관전자 등 플레이어와 연결되지 않은 소켓
     const stillOpen = this.ctx
       .getWebSockets(attachment.playerId)
       .some((other) => other !== ws && other.readyState === WebSocket.OPEN);
@@ -327,7 +361,8 @@ export class Room extends DurableObject<Env> {
     for (const ws of this.ctx.getWebSockets()) {
       let viewerId: string | undefined;
       try {
-        viewerId = (ws.deserializeAttachment() as SocketAttachment | null)?.playerId;
+        const attached = ws.deserializeAttachment() as SocketAttachment | null;
+        viewerId = attached?.spectator ? undefined : attached?.playerId;
         const message: ServerMessage = { t: "state", room: toSnapshot(this.state, now, viewerId) };
         ws.send(JSON.stringify(message));
       } catch {

@@ -990,6 +990,17 @@ export function playerMoveLane(
 
 // ---- 전적 ----
 
+/** 끝난 체스 판의 다시 보기 데이터. 라운드별 전투 기록과 이름, 결과를 담는다. */
+export function buildReplay(state: RoomState): string | null {
+  if (!state.chess || !state.result) return null;
+  return JSON.stringify({
+    version: 1,
+    players: [0, 1].map((seat) => ({ name: state.players.find((p) => p.seat === seat)?.name ?? "?" })),
+    rounds: state.chess.history,
+    result: { winner: state.result.winner, reason: state.result.reason, score: state.result.score, kills: state.result.kills },
+  });
+}
+
 /**
  * 끝난 판을 전적으로 남길 수 있으면 저장할 내용을 만든다.
  * 두 사람 모두 GL 계정으로 로그인한 판만 기록하고(개발 서버의 익명 판은 기록하지 않는다), 한 번만 만든다.

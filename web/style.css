@@ -176,3 +176,10 @@ small { font-size: 11px; color: var(--muted); }
 @keyframes pulse { to { opacity: .55; } }
 
 .levelrow { display: flex; align-items: center; gap: 10px; } .levelrow .sel { margin: 0; flex: 1; }
+
+/* 다시 보기 */
+.modal-box.replay { width: min(1100px, 100%); }
+.replay .combat { grid-template-columns: minmax(0, 1fr) 260px; }
+.replay .arena { width: min(100%, calc(100vh - 330px)); }
+.controls { margin-top: 10px; gap: 8px; } .controls .btn.on { background: rgba(176,64,190,.6); }
+.scrub { flex: 1; min-width: 120px; accent-color: var(--accent); }

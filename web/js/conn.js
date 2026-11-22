@@ -28,13 +28,15 @@ export class Connection {
     this.offset = 0;
     this.playerId = null;
     this.level = "";
+    this.spectate = false;
   }
 
-  start(code, name, level = "") {
+  start(code, name, level = "", spectate = false) {
     this.stop();
     this.code = code;
     this.name = name;
     this.level = level;
+    this.spectate = spectate;
     this.stopped = false;
     this.attempt = 0;
     this.open();
@@ -56,7 +58,8 @@ export class Connection {
     const params = new URLSearchParams();
     if (this.name) params.set("name", this.name);
     if (this.level) params.set("level", this.level);
-    const token = loadToken(this.code);
+    if (this.spectate) params.set("spectate", "1");
+    const token = this.spectate ? null : loadToken(this.code);
     if (token) params.set("token", token);
     const ws = new WebSocket(`${scheme}://${location.host}/ws/${this.code}?${params}`);
     this.ws = ws;
@@ -70,7 +73,7 @@ export class Connection {
           welcomed = true;
           this.attempt = 0;
           this.playerId = msg.playerId;
-          saveToken(this.code, msg.token);
+          if (msg.token) saveToken(this.code, msg.token);
           this.observe(msg.room);
           this.onEvent({ type: "connected", playerId: msg.playerId, room: msg.room });
           clearInterval(this.pingTimer);

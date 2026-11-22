@@ -39,6 +39,11 @@ export const api = {
   async matchCancel(ticket) {
     await request(`/api/match/cancel?ticket=${encodeURIComponent(ticket)}`, { method: "POST" });
   },
+  /** 끝난 판의 다시 보기 데이터. 없으면 null */
+  async replay(id) {
+    const r = await request(`/api/replays/${encodeURIComponent(id)}`);
+    return r.ok ? r.body : null;
+  },
   async chessCatalog() {
     const r = await request("/api/chess");
     return r.ok ? r.body : null;

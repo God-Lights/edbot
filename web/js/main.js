@@ -1,10 +1,11 @@
 // COMMANDER 웹 클라이언트. 서버(Cloudflare Worker)와 같은 출처에서 열린다.
 
 import { api } from "./api.js";
-import { combatView, startPlayback, stopPlayback } from "./combat.js";
+import { arenaHtml, combatView, startPlayback, stopPlayback, teamPanels } from "./combat.js";
 import { guideModal, openGuide } from "./guide.js";
 import { autoPlace, S, act, conn, join, leave, me, mySeat, setRender, store, toast, update } from "./state.js";
-import { prepView } from "./prep.js";
+import { hpPill, prepView } from "./prep.js";
+import { openMatchReplay, openReplay, replayAction, replayModal, replayScrub, startReplay } from "./replay.js";
 import { openRanking, rankingModal } from "./ranking.js";
 import { sfx } from "./sfx.js";
 import { PHASE_NAME, REASON_TEXT, countdown, esc } from "./util.js";
@@ -34,6 +35,8 @@ function lobbyView() {
         <button class="btn sec wide" data-act="join-code" data-code="ADMN">🤖 연습 대전 (봇과 한 판, 쉬운 캐릭터만)</button>
         <button class="btn sec wide" data-act="join-code" data-code="ADMF">🤖 전체 대전 (봇, 모든 캐릭터와 자원 시스템)</button>
         <div class="or"><i></i><span>또는</span><i></i></div>
+        <form class="row" data-form="watch"><input id="watch" class="input code" maxlength="4" placeholder="관전할 방 코드" autocapitalize="characters" autocomplete="off" value="${esc(S.watchCode ?? "")}">
+          <button class="btn sec" type="submit">👁 관전</button></form>
         <form class="row" data-form="join"><input id="code" class="input code" maxlength="4" placeholder="방 코드 4자리" autocapitalize="characters" autocomplete="off" value="${esc(S.roomCode)}">
           <button class="btn sec" type="submit">입장</button></form>
       </div>
@@ -55,7 +58,8 @@ function roomLobbyView(room) {
   return `<div class="roomlobby"><div class="sub">방 코드</div><div class="code-big">${esc(room.code)}</div>
     ${room.players.length < 2 ? `<div class="sub">상대를 기다리는 중... 방 코드를 알려 주세요.</div>` : ""}
     <div class="row center">${cards}</div>
-    <button class="btn primary" data-act="ready">${ready ? "준비 취소" : "준비"}</button></div>`;
+    <button class="btn primary" data-act="ready">${ready ? "준비 취소" : "준비"}</button>
+    ${["ADMN", "ADMF"].includes(room.code) ? "" : `<button class="btn sec" data-act="copy-watch" data-code="${esc(room.code)}">👁 관전 링크 복사</button>`}</div>`;
 }
 
 function resultView(room) {
@@ -70,10 +74,45 @@ function resultView(room) {
       <div class="stat"><small>라운드 승</small><b>${r.kills[seat] ?? 0} : ${r.kills[1 - seat] ?? 0}</b></div></div>
     ${rating ? `<div class="big ${delta >= 0 ? "good" : "bad"}">레이팅 ${rating.before} → ${rating.after} (${delta >= 0 ? "+" : ""}${delta})</div>` : ""}
     <div class="sub" data-timer="${room.phaseEndsAt ?? ""}" data-suffix=" 뒤 로비로 돌아가요">${countdown(conn.remainingMs(room.phaseEndsAt))} 뒤 로비로 돌아가요</div>
-    <button class="btn sec" data-act="ranking">🏆 랭킹 보기</button></div>`;
+    <div class="row center">${Object.keys(S.sessionRounds).length ? `<button class="btn sec" data-act="rewatch-all">▶ 전투 다시 보기 (${Object.keys(S.sessionRounds).length}라운드)</button>` : ""}
+    <button class="btn sec" data-act="ranking">🏆 랭킹 보기</button></div></div>`;
+}
+
+function spectatorHeader(room, chess) {
+  const names = [0, 1].map((seat) => room.players.find((p) => p.seat === seat)?.name ?? "?");
+  return `<div class="panel header"><div class="hrow">${hpPill(names[0], chess.hps[0], "var(--mine)")}
+    <div class="center"><b>라운드 ${chess.round} / ${chess.maxRounds}</b><span class="sub" data-timer="${room.phaseEndsAt ?? ""}" data-label="${PHASE_NAME[room.phase]}">${PHASE_NAME[room.phase]} ${countdown(conn.remainingMs(room.phaseEndsAt))}</span></div>
+    ${hpPill(names[1], chess.hps[1], "var(--theirs)")}<span class="grow"></span><span class="badge">👁 관전 중</span></div></div>`;
+}
+
+function spectatorBody(room) {
+  const chess = room.chess;
+  const names = [0, 1].map((seat) => room.players.find((p) => p.seat === seat)?.name ?? "?");
+  if (room.phase === "lobby" || !chess) {
+    return `<div class="roomlobby"><div class="sub">방 코드</div><div class="code-big">${esc(room.code)}</div>
+      <div class="sub">${esc(names.join(" vs "))} · 경기가 시작되기를 기다리는 중... (관전 화면은 전투부터 보여요)</div></div>`;
+  }
+  if (room.phase === "prep") {
+    return `${spectatorHeader(room, chess)}<div class="center-msg"><div class="spinner"></div><b>플레이어들이 준비하는 중...</b><div class="sub">준비 단계의 상점과 배치는 보이지 않아요. 전투가 시작되면 함께 볼 수 있어요.</div></div>`;
+  }
+  if (room.phase === "combat" && chess.combat) {
+    return `${spectatorHeader(room, chess)}<div class="combat">${arenaHtml(chess.combat, 0)}<div class="side">${teamPanels(chess.combat, 0)}</div></div>`;
+  }
+  if (room.phase === "result" && room.result) {
+    const r = room.result;
+    const title = r.winner == null ? "무승부" : `${esc(names[r.winner])} 승리!`;
+    return `<div class="result"><div class="rtitle">${title}</div><div class="sub big">${esc(REASON_TEXT[r.reason] ?? r.reason)}</div>
+      <div class="panel row center"><div class="stat"><small>남은 체력</small><b>${r.score[0]} : ${r.score[1]}</b></div><div class="stat"><small>라운드 승</small><b>${r.kills[0]} : ${r.kills[1]}</b></div></div></div>`;
+  }
+  return `<div class="center-msg">불러오는 중...</div>`;
 }
 
 function roomShell(room) {
+  if (S.spectating) {
+    return `<div class="topbar"><img class="mini-logo" src="assets/logo.png" alt=""><b class="mono">${esc(room.code)}</b><span class="grow"></span>
+      <button class="btn sec" data-act="mute">${sfx.muted ? "🔇" : "🔊"}</button><button class="btn sec" data-act="leave">관전 끝내기</button></div>
+      ${S.status === "reconnecting" ? `<div class="warn center">다시 연결하는 중...</div>` : ""}<div class="room">${spectatorBody(room)}</div>`;
+  }
   const players = room.players.map((p) => `<span class="pchip ${p.id === S.myId ? "me" : "them"}"><i class="dot ${p.connected ? "on" : ""}"></i>${esc(p.name)}${p.id === S.myId ? " (나)" : ""}</span>`).join("");
   let body = "";
   switch (room.phase) {
@@ -94,14 +133,17 @@ function render() {
   const keepFocus = active && active.id ? { id: active.id, start: active.selectionStart, end: active.selectionEnd } : null;
   const room = S.room;
   const inRoom = !!room && S.status !== "idle";
+  // 전투가 시작되면 열려 있던 다시 보기는 닫는다. (판이 두 개 겹치지 않게)
+  if (S.modal === "replay" && room?.phase === "combat") S.modal = null;
   // 전투 재생은 화면을 다시 그릴 때만 다시 시작한다.
   stopPlayback();
   const modalScroll = document.querySelector(".modal-body")?.scrollTop ?? 0;
   app.innerHTML = (inRoom ? roomShell(room) : S.quick ? quickView() : S.status === "connecting" ? `<div class="center-msg">접속하는 중...</div>` : lobbyView())
-    + (S.modal === "guide" ? guideModal() : S.modal === "ranking" ? rankingModal() : "");
+    + (S.modal === "guide" ? guideModal() : S.modal === "ranking" ? rankingModal() : S.modal === "replay" && S.replay ? replayModal() : "");
   const modalBody = document.querySelector(".modal-body");
   if (modalBody) modalBody.scrollTop = modalScroll;
-  if (inRoom && room.phase === "combat") startPlayback(room);
+  if (S.modal === "replay") startReplay();
+  else if (inRoom && room.phase === "combat") startPlayback(room);
   if (keepFocus) {
     const el = document.getElementById(keepFocus.id);
     if (el) {
@@ -222,11 +264,26 @@ document.addEventListener("click", (event) => {
   const el = event.target.closest("[data-act]");
   if (!el || el.disabled) return;
   const d = el.dataset;
+  if (d.act.startsWith("replay-") && d.act !== "replay-match") { replayAction(d.act, d); return; }
   const SFX = { buy: "buy", market: "buy", smelt: "buy", sell: "sell", "sell-sel": "sell", cell: "place", auto: "place", done: "ready", ready: "ready", reroll: "click", "pick-weapon": "click", "bench-slot": "click" };
   if (SFX[d.act]) sfx.play(SFX[d.act]);
   switch (d.act) {
     case "create": createRoom(); break;
     case "mute": sfx.toggle(); render(); break;
+    case "watch": join(S.watchCode ?? "", "", true); break;
+    case "copy-watch": copyWatchLink(d.code); break;
+    case "rewatch": {
+      const keys = Object.keys(S.sessionRounds).map(Number).sort((a, b) => a - b);
+      if (keys.length) openReplay([S.sessionRounds[keys[keys.length - 1]]], mySeat() ?? 0, "지난 전투 다시 보기");
+      break;
+    }
+    case "rewatch-all": {
+      const rounds = Object.keys(S.sessionRounds).map(Number).sort((a, b) => a - b).map((k) => S.sessionRounds[k]);
+      openReplay(rounds, mySeat() ?? 0, "이번 판 전투 다시 보기");
+      S.replay && (S.replay.idx = 0);
+      break;
+    }
+    case "replay-match": openMatchReplay(d.id); break;
     case "quick": quickMatch(); break;
     case "quick-cancel": cancelQuick(); break;
     case "join-code": join(d.code, S.botLevel); break;
@@ -277,7 +334,23 @@ document.addEventListener("change", (event) => {
   }
 });
 
+async function copyWatchLink(code) {
+  const link = `${location.origin}/?watch=${code}`;
+  try {
+    await navigator.clipboard.writeText(link);
+    toast("관전 링크를 복사했어요. 보내 주세요!");
+  } catch {
+    toast(link);
+  }
+}
+
 document.addEventListener("input", (event) => {
+  if (event.target.id === "scrub") replayScrub(event.target.value);
+  if (event.target.id === "watch") {
+    const cleaned = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+    if (cleaned !== event.target.value) event.target.value = cleaned;
+    S.watchCode = cleaned;
+  }
   if (event.target.id === "name") S.name = event.target.value;
   if (event.target.id === "code") {
     const cleaned = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
@@ -291,6 +364,7 @@ document.addEventListener("submit", (event) => {
   if (!form) return;
   event.preventDefault();
   if (form.dataset.form === "join") join(S.roomCode);
+  if (form.dataset.form === "watch") join(S.watchCode ?? "", "", true);
 });
 
 // 드래그: 기물을 판, 대기석, 판매 칸으로 끌어다 놓는다.
@@ -356,7 +430,8 @@ window.addEventListener("keydown", (event) => {
     if (catalog) update({ catalog });
   } catch { /* 가이드를 열 때 다시 시도하지 않아도 게임은 된다 */ }
   // 주소의 ?room=ABCD 로 바로 들어갈 수 있다.
-  const code = new URLSearchParams(location.search).get("room");
-  if (code) join(code);
+  const params = new URLSearchParams(location.search);
+  if (params.get("watch")) join(params.get("watch"), "", true);
+  else if (params.get("room")) join(params.get("room"));
 })();
 

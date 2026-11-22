@@ -8,7 +8,7 @@ import type { AuthEnv } from "./auth";
 import { loadSourceJson } from "./sidestore";
 import { SYNERGIES } from "./synergy";
 import { WEAPONS } from "./forge/weapons";
-import { getLeaderboard, getPlayerStats, getRecentMatches } from "./ranking/store";
+import { getLeaderboard, getPlayerStats, getRecentMatches, getReplay } from "./ranking/store";
 import { approvedPage, donePage, failedPage, homePage } from "./pages";
 import { Room } from "./room";
 import { Matchmaker } from "./matchmaker";
@@ -198,6 +198,17 @@ export default {
     // GET /api/characters -> 캐릭터 12명의 데이터 (이름, 기물, 능력치).
     if (request.method === "GET" && parts.length === 2 && parts[0] === "api" && parts[1] === "characters") {
       return json({ characters: CHARACTERS });
+    }
+
+    // GET /api/replays/:id -> 끝난 판의 다시 보기 데이터 (id는 내 전적 목록의 id).
+    if (request.method === "GET" && parts.length === 3 && parts[0] === "api" && parts[1] === "replays") {
+      try {
+        const data = await getReplay(env.DB, decodeURIComponent(parts[2] ?? ""));
+        if (!data) return json({ error: "replay_not_found" }, 404);
+        return new Response(data, { headers: { "content-type": "application/json", ...CORS_HEADERS } });
+      } catch {
+        return json({ error: "replay_unavailable" }, 503);
+      }
     }
 
     // GET /api/leaderboard?limit=20 -> 레이팅 순위. 로그인했다면 내 줄에 isMe가 붙는다.
