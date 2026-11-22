@@ -104,4 +104,27 @@ final class ChessTests: XCTestCase {
         XCTAssertEqual(catalog.weapons.first?.materialId, "bit")
         XCTAssertNil(MessageCodec.parseChessCatalog(Data("{}".utf8)))
     }
+
+    func testGuestLogin() {
+        XCTAssertTrue(GuestLogin.isValidStudentId("20211"))
+        XCTAssertTrue(GuestLogin.isValidStudentId("1234567890"))
+        for bad in ["", "123", "12345678901", "20211a", "2021 1", "２０２１１"] { XCTAssertFalse(GuestLogin.isValidStudentId(bad), bad) }
+        XCTAssertEqual(GuestLogin.make(studentId: " 20211 ", name: " 홍길동 "), GuestLogin(studentId: "20211", name: "홍길동"))
+        XCTAssertNil(GuestLogin.make(studentId: "20211", name: "  "))
+        XCTAssertNil(GuestLogin.make(studentId: "12", name: "홍길동"))
+        XCTAssertEqual(GuestLogin.make(studentId: "20211", name: String(repeating: "가", count: 30))?.name.count, 16)
+    }
+
+    func testParsesLiveRooms() throws {
+        let json = #"{"rooms":[{"code":"9ZCH","host":"발표자","players":[{"name":"홍길동","studentId":"20211","connected":true},{"name":"김철수","studentId":"20212","connected":false}],"phase":"combat","round":3,"maxRounds":8,"hps":[30,22],"updatedAt":1700000000000},{"code":"AAAA","host":"","players":[],"phase":"lobby","round":0,"maxRounds":8,"hps":null,"updatedAt":5}]}"#
+        struct Body: Decodable { let rooms: [LiveRoom] }
+        let rooms = try JSONDecoder().decode(Body.self, from: Data(json.utf8)).rooms
+        XCTAssertEqual(rooms.count, 2)
+        XCTAssertEqual(rooms[0].id, "9ZCH")
+        XCTAssertEqual(rooms[0].players[0].studentId, "20211")
+        XCTAssertFalse(rooms[0].players[1].connected)
+        XCTAssertEqual(rooms[0].hps, [30, 22])
+        XCTAssertNil(rooms[1].hps)
+        XCTAssertTrue(rooms[1].players.isEmpty)
+    }
 }

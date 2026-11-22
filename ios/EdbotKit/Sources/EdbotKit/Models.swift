@@ -499,6 +499,7 @@ public enum ErrorCode {
     public static let noFreeSmelter = "no_free_smelter"
     public static let unknownWeapon = "unknown_weapon"
     public static let noWeapon = "no_weapon"
+    public static let spectateUnavailable = "spectate_unavailable"
     public static let notInZone = "not_in_zone"
     public static let alreadyEquipping = "already_equipping"
     public static let alreadyEquipped = "already_equipped"
@@ -518,6 +519,6 @@ public enum ErrorCode {
 
     /// 다시 시도해도 소용없는 오류. 이 오류를 받으면 자동 재접속을 멈춘다.
     public static func isFatal(_ code: String) -> Bool {
-        [roomNotFound, roomFull, gameInProgress, unauthorized].contains(code)
+        [roomNotFound, roomFull, gameInProgress, unauthorized, spectateUnavailable].contains(code)
     }
 }

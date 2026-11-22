@@ -184,6 +184,8 @@ public struct ChessSnapshot: Codable, Equatable, Sendable {
     public let market: [ChessMarketItem]
     /// 입문 모드(쉬운 캐릭터만 나온다). 오래된 서버면 nil.
     public let lite: Bool?
+    /// seat별 체력(관전자도 볼 수 있는 공개 정보). 오래된 서버면 nil.
+    public let hps: [Int]?
     public let me: ChessSelfSnapshot?
     public let opponent: ChessOpponentSnapshot?
     public let combat: ChessCombatSnapshot?
@@ -238,4 +240,52 @@ public struct ChessCatalog: Codable, Equatable, Sendable {
     public let synergies: [ChessSynergyInfo]
     public let materials: [ChessMaterialInfo]
     public let weapons: [ChessWeaponInfo]
+}
+
+// MARK: 게스트 로그인과 관전 목록
+
+/// 게스트 로그인: GL 계정이 없는 사람이 학번과 이름만으로 게스트 방에 들어온다. 전적은 남지 않는다.
+public struct GuestLogin: Equatable, Sendable {
+    public let studentId: String
+    public let name: String
+
+    public init(studentId: String, name: String) {
+        self.studentId = studentId
+        self.name = name
+    }
+
+    /// 학번은 숫자 4~10자리
+    public static func isValidStudentId(_ text: String) -> Bool {
+        (4...10).contains(text.count) && text.allSatisfy { $0.isASCII && $0.isNumber }
+    }
+
+    /// 학번과 이름이 올바르면 만든다. 앞뒤 공백은 뗀다.
+    public static func make(studentId: String, name: String) -> GuestLogin? {
+        let id = studentId.trimmingCharacters(in: .whitespaces)
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isValidStudentId(id), !trimmed.isEmpty else { return nil }
+        return GuestLogin(studentId: id, name: String(trimmed.prefix(16)))
+    }
+}
+
+public struct LiveRoomPlayer: Codable, Equatable, Sendable {
+    public let name: String
+    public let studentId: String?
+    public let connected: Bool
+}
+
+/// 진행 중인 게스트 방 한 곳 (관전 목록). GET /api/live
+public struct LiveRoom: Codable, Equatable, Sendable, Identifiable {
+    public let code: String
+    /// 방을 만든 GL 계정의 닉네임
+    public let host: String
+    public let players: [LiveRoomPlayer]
+    /// lobby | prep | combat | result
+    public let phase: String
+    public let round: Int
+    public let maxRounds: Int
+    public let hps: [Int]?
+    public let updatedAt: Int64
+
+    public var id: String { code }
 }

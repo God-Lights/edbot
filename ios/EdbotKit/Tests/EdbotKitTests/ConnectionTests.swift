@@ -101,6 +101,30 @@ final class ConnectionTests: XCTestCase {
         XCTAssertNil(remaining) // phaseEndsAt이 없다
     }
 
+    func testGuestAndSpectatorQueryAndNoEmptyToken() async {
+        // 게스트: 이름과 학번을 쿼리로 보내고 로그인 헤더는 없다
+        let guestSocket = FakeSocket(script: [welcome(), nil])
+        let guestConn = RoomConnection(factory: FakeFactory([guestSocket]), options: {
+            var o = Self.fast; o.maxReconnectAttempts = 0; return o
+        }(), nowMs: { 4_000 })
+        await guestConn.start(wsBase: URL(string: "wss://x.test")!, roomCode: "ABCD", name: "무시됨", authToken: nil, guest: GuestLogin(studentId: "20211", name: "홍길동"))
+        _ = await collect(guestConn, count: 2)
+        XCTAssertEqual(guestSocket.urls.first?.absoluteString, "wss://x.test/ws/ABCD?name=%ED%99%8D%EA%B8%B8%EB%8F%99&guest=20211")
+        XCTAssertNil(guestSocket.headers.first?["Authorization"])
+
+        // 관전자: spectate=1, 서버가 주는 빈 token은 재접속에 붙이지 않는다
+        let first = FakeSocket(script: [#"{"t":"welcome","playerId":"spectator","token":"","room":\#(room("combat"))}"#, nil])
+        let second = FakeSocket(script: [#"{"t":"welcome","playerId":"spectator","token":"","room":\#(room("combat"))}"#, nil])
+        let specConn = RoomConnection(factory: FakeFactory([first, second]), options: {
+            var o = Self.fast; o.maxReconnectAttempts = 1; return o
+        }(), nowMs: { 4_000 })
+        await specConn.start(wsBase: URL(string: "wss://x.test")!, roomCode: "ABCD", name: "나", authToken: "gtok", spectate: true)
+        _ = await collect(specConn, count: 4)
+        XCTAssertEqual(first.urls.first?.absoluteString, "wss://x.test/ws/ABCD?name=%EB%82%98&spectate=1")
+        XCTAssertEqual(second.urls.first?.absoluteString, "wss://x.test/ws/ABCD?name=%EB%82%98&spectate=1")
+        XCTAssertEqual(first.headers.first?["Authorization"], "Bearer gtok")
+    }
+
     func testReconnectsWithTokenAndReportsReconnected() async {
         let first = FakeSocket(script: [welcome("tok-1"), nil])
         let second = FakeSocket(script: [welcome("tok-1"), state("draft"), nil])

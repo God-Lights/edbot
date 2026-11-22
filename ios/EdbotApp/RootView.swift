@@ -17,6 +17,10 @@ struct RootView: View {
         // 가이드는 로비에서도, 방 안에서도 열 수 있다. (방 안에서 열어 둔 동안에도 게임은 계속된다)
         .sheet(isPresented: $model.showGuide) { GuideView() }
         .sheet(isPresented: $model.showRanking) { RankingView() }
+        .sheet(isPresented: $model.showLive) { LiveView() }
+        .sheet(isPresented: Binding(get: { model.createdGuestRoomCode != nil }, set: { if !$0 { model.createdGuestRoomCode = nil } })) {
+            GuestRoomSheet(code: model.createdGuestRoomCode ?? "")
+        }
     }
 }
 
@@ -46,6 +50,7 @@ struct LobbyView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     accountCard
+                    guestCard
                     roomCard
                     serverCard
                     if let message = model.message {
@@ -96,6 +101,43 @@ struct LobbyView: View {
         .panel()
     }
 
+    /// GL 계정이 없는 사람이 학번과 이름으로 게스트 방에 들어간다.
+    private var guestCard: some View {
+        @Bindable var model = model
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("🎓 게스트로 참가").font(.headline)
+            Text("GL 계정이 없어도 학번과 이름만으로 게스트 방에 들어갈 수 있어요. (전적은 남지 않아요)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                TextField("학번 (예: 20211)", text: $model.guestStudentId)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: model.guestStudentId) { _, value in
+                        let cleaned = String(value.filter { $0.isASCII && $0.isNumber }.prefix(10))
+                        if cleaned != value { model.guestStudentId = cleaned }
+                    }
+                TextField("이름", text: $model.guestName)
+                    .textFieldStyle(.roundedBorder)
+            }
+            HStack(spacing: 10) {
+                TextField("방 코드 4자리", text: $model.guestCodeText)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                    .font(.system(size: 20, weight: .bold, design: .monospaced))
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: model.guestCodeText) { _, value in
+                        let cleaned = String(value.uppercased().prefix(4))
+                        if cleaned != value { model.guestCodeText = cleaned }
+                    }
+                Button("참가") { model.joinAsGuest(code: model.guestCodeText) }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(model.guestCodeText.count != 4)
+            }
+        }
+        .panel()
+    }
+
     private var roomCard: some View {
         @Bindable var model = model
         return VStack(spacing: 14) {
@@ -104,6 +146,20 @@ struct LobbyView: View {
             }
             .buttonStyle(PrimaryButtonStyle())
             .disabled(model.isCreatingRoom)
+
+            if model.user != nil {
+                HStack(spacing: 10) {
+                    Button { model.createGuestRoom() } label: {
+                        Label(model.isCreatingGuestRoom ? "만드는 중..." : "게스트 방 만들기", systemImage: "graduationcap").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                    .disabled(model.isCreatingGuestRoom)
+                    Button { model.showLive = true } label: {
+                        Label("진행 중인 경기 관전", systemImage: "eye").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                }
+            }
 
             HStack(spacing: 10) {
                 Button { model.openRanking() } label: {
@@ -195,12 +251,18 @@ struct RoomView: View {
                 .background(Capsule().fill((player.id == model.myPlayerId ? Theme.mine : Theme.theirs).opacity(0.18)))
             }
             Button { model.openGuide() } label: { Label("가이드", systemImage: "book") }.buttonStyle(SecondaryButtonStyle())
-            Button("나가기") { model.leave() }.buttonStyle(SecondaryButtonStyle())
+            Button(model.isSpectating ? "관전 끝내기" : "나가기") { model.leave() }.buttonStyle(SecondaryButtonStyle())
         }
     }
 
     @ViewBuilder private func content(_ room: RoomSnapshot) -> some View {
         let seat = model.mySeat
+        if model.isSpectating {
+            SpectatorView(room: room)
+        } else { playerContent(room, seat: seat) }
+    }
+
+    @ViewBuilder private func playerContent(_ room: RoomSnapshot, seat: Int?) -> some View {
         switch room.phase {
         case .lobby:
             LobbyRoomView(room: room)

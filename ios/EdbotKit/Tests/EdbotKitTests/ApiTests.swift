@@ -32,6 +32,28 @@ final class ApiTests: XCTestCase {
         XCTAssertEqual(http.last?.value(forHTTPHeaderField: "Authorization"), "Bearer tok")
     }
 
+    func testCreateGuestRoomUsesGuestQuery() async throws {
+        let http = StubHTTP { _ in (#"{"code":"WXYZ"}"#, 201) }
+        let code = try await ApiClient(baseURL: base, authToken: "tok", http: http).createRoom(guest: true)
+        XCTAssertEqual(code, "WXYZ")
+        XCTAssertEqual(http.last?.url?.absoluteString, "https://x.test/api/rooms?guest=1")
+    }
+
+    func testLiveRooms() async throws {
+        let http = StubHTTP { _ in (#"{"rooms":[{"code":"ABCD","host":"h","players":[],"phase":"prep","round":1,"maxRounds":8,"hps":[30,30],"updatedAt":1}]}"#, 200) }
+        let rooms = try await ApiClient(baseURL: base, authToken: "tok", http: http).liveRooms()
+        XCTAssertEqual(rooms.first?.code, "ABCD")
+        XCTAssertEqual(http.last?.url?.path, "/api/live")
+        XCTAssertEqual(http.last?.value(forHTTPHeaderField: "Authorization"), "Bearer tok")
+        let denied = StubHTTP { _ in (#"{"error":"unauthorized"}"#, 401) }
+        do {
+            _ = try await ApiClient(baseURL: base, http: denied).liveRooms()
+            XCTFail("던져야 한다")
+        } catch {
+            XCTAssertEqual(error as? ApiError, .unauthorized)
+        }
+    }
+
     func testCreateRoomUnauthorized() async {
         let http = StubHTTP { _ in (#"{"error":"unauthorized"}"#, 401) }
         do {

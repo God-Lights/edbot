@@ -18,8 +18,9 @@ public struct ApiClient: Sendable {
     private struct CreatedRoom: Decodable { let code: String }
 
     /// 새 방을 만들고 4자리 방 코드를 돌려준다.
-    public func createRoom() async throws -> String {
-        let (data, status) = try await http.send(Http.request(baseURL, "/api/rooms", method: "POST", token: authToken))
+    /// guest가 true면 게스트 방(학번 + 이름으로 들어올 수 있고 전적이 남지 않는 방)을 만든다.
+    public func createRoom(guest: Bool = false) async throws -> String {
+        let (data, status) = try await http.send(Http.request(baseURL, guest ? "/api/rooms?guest=1" : "/api/rooms", method: "POST", token: authToken))
         if status == 401 { throw ApiError.unauthorized }
         guard (200..<300).contains(status) else { throw ApiError.status(status) }
         guard let room = try? JSONDecoder().decode(CreatedRoom.self, from: data), !room.code.isEmpty else {
@@ -63,6 +64,16 @@ public struct ApiClient: Sendable {
         guard (200..<300).contains(status) else { throw ApiError.status(status) }
         guard let body = try? JSONDecoder().decode(Body.self, from: data) else { throw ApiError.badResponse }
         return body.matches
+    }
+
+    /// 진행 중인 게스트 경기 목록 (관전할 곳 고르기). GL 로그인이 필요하다.
+    public func liveRooms() async throws -> [LiveRoom] {
+        struct Body: Decodable { let rooms: [LiveRoom] }
+        let (data, status) = try await http.send(Http.request(baseURL, "/api/live", token: authToken))
+        if status == 401 { throw ApiError.unauthorized }
+        guard (200..<300).contains(status) else { throw ApiError.status(status) }
+        guard let body = try? JSONDecoder().decode(Body.self, from: data) else { throw ApiError.badResponse }
+        return body.rooms
     }
 
     /// 체스판 자동 전투의 캐릭터 20명과 기물 시너지를 가져온다.
