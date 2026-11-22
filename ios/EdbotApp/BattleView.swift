@@ -398,13 +398,14 @@ struct ResultView: View {
     @Environment(AppModel.self) private var model
     let room: RoomSnapshot
     let seat: Int
+    @Environment(\.verticalSizeClass) private var vSize
 
     var body: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: vSize == .compact ? 8 : 18) {
             Spacer()
             if let result = room.result {
                 let outcome = outcome(result)
-                Text(outcome.title).font(.system(size: 64, weight: .heavy, design: .rounded)).foregroundStyle(outcome.color)
+                Text(outcome.title).font(.system(size: vSize == .compact ? 40 : 64, weight: .heavy, design: .rounded)).foregroundStyle(outcome.color)
                 Text(Labels.resultReason(result.reason)).font(.title3).foregroundStyle(.secondary)
                 HStack(spacing: 40) {
                     stat(room.chess != nil ? "남은 체력" : "점수", "\(result.score[safe: seat] ?? 0) : \(result.score[safe: 1 - seat] ?? 0)")

@@ -30,39 +30,40 @@ struct LobbyView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openURL) private var openURL
 
+    @Environment(\.verticalSizeClass) private var vSize
+    private var compact: Bool { vSize == .compact }
+
+    /// 한 화면에 다 들어오게: 왼쪽 로고, 가운데 계정·게스트·서버, 오른쪽 방 메뉴. (스크롤 없음)
     var body: some View {
         @Bindable var model = model
-        HStack(spacing: 40) {
-            // 왼쪽: 로고
-            VStack(spacing: 16) {
+        HStack(alignment: .center, spacing: compact ? 12 : 28) {
+            VStack(spacing: compact ? 6 : 16) {
                 Image("Logo")
                     .resizable()
                     .scaledToFit()
-                    .frame(maxWidth: 420)
+                    .frame(maxWidth: compact ? 170 : 360)
                     .shadow(color: Theme.purple.opacity(0.5), radius: 30)
                     .accessibilityLabel("COMMANDER")
                 Text("2인 실시간 전략 대전")
-                    .font(.title3)
+                    .font(compact ? .caption : .title3)
                     .foregroundStyle(Theme.silver.opacity(0.8))
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: compact ? 190 : .infinity)
 
-            // 오른쪽: 입력
-            ScrollView {
-                VStack(spacing: 16) {
-                    accountCard
-                    guestCard
-                    roomCard
-                    serverCard
-                    if let message = model.message {
-                        Text(message).foregroundStyle(Theme.warn).multilineTextAlignment(.center)
-                    }
+            VStack(spacing: compact ? 6 : 12) {
+                accountCard
+                guestCard
+                serverCard
+                if let message = model.message {
+                    Text(message).font(.caption).foregroundStyle(Theme.warn).multilineTextAlignment(.center)
                 }
-                .padding(4)
             }
-            .frame(maxWidth: 480)
+            .frame(maxWidth: 400, maxHeight: .infinity)
+
+            roomCard
+                .frame(maxWidth: 400, maxHeight: .infinity)
         }
-        .padding(32)
+        .padding(compact ? 10 : 28)
         .onChange(of: model.loginURLToOpen) { _, url in
             guard let url else { return }
             openURL(url)
@@ -99,17 +100,19 @@ struct LobbyView: View {
                     .textFieldStyle(.roundedBorder)
             }
         }
-        .panel()
+        .panel(padding: compact ? 8 : 16)
     }
 
     /// GL 계정이 없는 사람이 학번과 이름으로 게스트 방에 들어간다.
     private var guestCard: some View {
         @Bindable var model = model
-        return VStack(alignment: .leading, spacing: 10) {
-            Text("🎓 게스트로 참가").font(.headline)
-            Text("GL 계정이 없어도 학번과 이름만으로 게스트 방에 들어갈 수 있어요. (전적은 남지 않아요)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        return VStack(alignment: .leading, spacing: compact ? 6 : 10) {
+            Text("🎓 게스트로 참가").font(compact ? .subheadline.bold() : .headline)
+            if !compact {
+                Text("GL 계정이 없어도 학번과 이름만으로 게스트 방에 들어갈 수 있어요. (전적은 남지 않아요)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             HStack(spacing: 10) {
                 TextField("학번 (예: 20211)", text: $model.guestStudentId)
                     .keyboardType(.numberPad)
@@ -136,68 +139,58 @@ struct LobbyView: View {
                     .disabled(model.guestCodeText.count != 4)
             }
         }
-        .panel()
+        .panel(padding: compact ? 8 : 16)
     }
 
     private var roomCard: some View {
         @Bindable var model = model
-        return VStack(spacing: 14) {
+        let cols: [GridItem] = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
+        return VStack(spacing: compact ? 6 : 12) {
             Button { model.createRoomAndJoin() } label: {
                 Text(model.isCreatingRoom ? "방을 만드는 중..." : "방 만들기").frame(maxWidth: .infinity)
             }
             .buttonStyle(PrimaryButtonStyle())
             .disabled(model.isCreatingRoom)
 
-            if model.user != nil {
-                HStack(spacing: 10) {
+            LazyVGrid(columns: cols, spacing: 8) {
+                if model.user != nil {
                     Button { model.createGuestRoom() } label: {
-                        Label(model.isCreatingGuestRoom ? "만드는 중..." : "게스트 방 만들기", systemImage: "graduationcap").frame(maxWidth: .infinity)
+                        Label(model.isCreatingGuestRoom ? "만드는 중..." : "게스트 방", systemImage: "graduationcap").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(SecondaryButtonStyle())
                     .disabled(model.isCreatingGuestRoom)
                     Button { model.showLive = true } label: {
-                        Label("진행 중인 경기 관전", systemImage: "eye").frame(maxWidth: .infinity)
+                        Label("경기 관전", systemImage: "eye").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                    Button { model.showMyRooms = true } label: {
+                        Label("내 방 관리", systemImage: "trash").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(SecondaryButtonStyle())
                 }
-                Button { model.showMyRooms = true } label: {
-                    Label("내 방 관리 (방 지우기)", systemImage: "trash").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(SecondaryButtonStyle())
-            }
-
-            HStack(spacing: 10) {
                 Button { model.openRanking() } label: {
                     Label("랭킹", systemImage: "trophy").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(SecondaryButtonStyle())
                 Button { model.openGuide() } label: {
-                    Label("게임 가이드", systemImage: "book").frame(maxWidth: .infinity)
+                    Label("가이드", systemImage: "book").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(SecondaryButtonStyle())
-            }
-
-            Button { model.joinTestMatch() } label: {
-                Label("연습 대전 (봇과 한 판, 쉬운 캐릭터만)", systemImage: "cpu").frame(maxWidth: .infinity)
-            }
-            .buttonStyle(SecondaryButtonStyle())
-
-            Button { model.join(code: "ADMF") } label: {
-                Label("전체 대전 (봇, 모든 캐릭터와 자원 시스템)", systemImage: "cpu.fill").frame(maxWidth: .infinity)
-            }
-            .buttonStyle(SecondaryButtonStyle())
-
-            HStack {
-                Rectangle().fill(Color.white.opacity(0.15)).frame(height: 1)
-                Text("또는").font(.caption).foregroundStyle(.secondary)
-                Rectangle().fill(Color.white.opacity(0.15)).frame(height: 1)
+                Button { model.joinTestMatch() } label: {
+                    Label("연습 대전", systemImage: "cpu").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                Button { model.join(code: "ADMF") } label: {
+                    Label("전체 대전", systemImage: "cpu.fill").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(SecondaryButtonStyle())
             }
 
             HStack(spacing: 10) {
                 TextField("방 코드 4자리", text: $model.roomCodeText)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
-                    .font(.system(size: 22, weight: .bold, design: .monospaced))
+                    .font(.system(size: compact ? 18 : 22, weight: .bold, design: .monospaced))
                     .textFieldStyle(.roundedBorder)
                     .onChange(of: model.roomCodeText) { _, value in
                         let cleaned = String(value.uppercased().prefix(4))
@@ -208,7 +201,7 @@ struct LobbyView: View {
                     .disabled(model.roomCodeText.count != 4)
             }
         }
-        .panel()
+        .panel(padding: compact ? 8 : 16)
     }
 
     private var serverCard: some View {
@@ -221,7 +214,7 @@ struct LobbyView: View {
                 .keyboardType(.URL)
                 .textFieldStyle(.roundedBorder)
         }
-        .panel(padding: 12)
+        .panel(padding: compact ? 8 : 12)
     }
 }
 
@@ -229,10 +222,11 @@ struct LobbyView: View {
 struct RoomView: View {
     @Environment(AppModel.self) private var model
     @State private var confirmClose = false
+    @Environment(\.verticalSizeClass) private var vSize
 
     var body: some View {
         if let room = model.room {
-            VStack(spacing: 12) {
+            VStack(spacing: vSize == .compact ? 4 : 12) {
                 topBar(room)
                 content(room)
                     .frame(maxHeight: .infinity, alignment: .top)
@@ -242,7 +236,7 @@ struct RoomView: View {
                 if model.status == .reconnecting { Text("다시 연결하는 중...").foregroundStyle(Theme.warn) }
                 if let message = model.message { Text(message).foregroundStyle(Theme.warn) }
             }
-            .padding(20)
+            .padding(vSize == .compact ? 8 : 20)
             .animation(.easeInOut(duration: 0.35), value: room.phase)
             .confirmationDialog("방을 닫을까요?", isPresented: $confirmClose, titleVisibility: .visible) {
                 Button("방 닫기", role: .destructive) { Task { await model.closeRoom(code: room.code) } }
@@ -254,8 +248,8 @@ struct RoomView: View {
     }
 
     private func topBar(_ room: RoomSnapshot) -> some View {
-        HStack(spacing: 14) {
-            Image("Logo").resizable().scaledToFit().frame(height: 40)
+        HStack(spacing: vSize == .compact ? 8 : 14) {
+            Image("Logo").resizable().scaledToFit().frame(height: vSize == .compact ? 26 : 40)
             Text(room.code).font(.system(size: 20, weight: .heavy, design: .monospaced)).foregroundStyle(Theme.silver)
             Spacer()
             ForEach(room.players) { player in
@@ -274,9 +268,9 @@ struct RoomView: View {
                 Image(systemName: model.musicOn ? "music.note" : "music.note.list")
             }
             .buttonStyle(SecondaryButtonStyle())
-            Button { model.openGuide() } label: { Label("가이드", systemImage: "book") }.buttonStyle(SecondaryButtonStyle())
+            Button { model.openGuide() } label: { Image(systemName: "book") }.buttonStyle(SecondaryButtonStyle())
             if room.isHost == true {
-                Button { confirmClose = true } label: { Label("방 닫기", systemImage: "trash") }.buttonStyle(SecondaryButtonStyle())
+                Button { confirmClose = true } label: { Image(systemName: "trash") }.buttonStyle(SecondaryButtonStyle())
             }
             Button(model.isSpectating ? "관전 끝내기" : "나가기") { model.leave() }.buttonStyle(SecondaryButtonStyle())
         }
@@ -323,13 +317,14 @@ struct RoomView: View {
 struct LobbyRoomView: View {
     @Environment(AppModel.self) private var model
     let room: RoomSnapshot
+    @Environment(\.verticalSizeClass) private var vSize
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: vSize == .compact ? 8 : 24) {
             Spacer()
             VStack(spacing: 6) {
                 Text("방 코드").font(.callout).foregroundStyle(.secondary)
-                Text(room.code).font(.system(size: 72, weight: .heavy, design: .monospaced)).foregroundStyle(Theme.silver)
+                Text(room.code).font(.system(size: vSize == .compact ? 44 : 72, weight: .heavy, design: .monospaced)).foregroundStyle(Theme.silver)
             }
             if room.players.count < 2 {
                 Text("상대를 기다리는 중... 방 코드를 알려 주세요.").foregroundStyle(.secondary)
@@ -341,8 +336,8 @@ struct LobbyRoomView: View {
                         Text(player.connected ? (player.ready ? "준비 완료" : "준비 중") : "연결 끊김")
                             .foregroundStyle(player.ready ? Theme.good : Color.secondary)
                     }
-                    .frame(width: 180)
-                    .panel()
+                    .frame(width: vSize == .compact ? 140 : 180)
+                    .panel(padding: vSize == .compact ? 8 : 16)
                 }
             }
             let ready = model.me?.ready ?? false

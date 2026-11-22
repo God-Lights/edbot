@@ -117,6 +117,7 @@ private struct HpPill: View {
     let name: String
     let hp: Int
     let color: Color
+    var width: CGFloat = 170
 
     var body: some View {
         let ratio: Double = min(1, max(0, Double(hp) / Double(chessStartHp)))
@@ -134,7 +135,7 @@ private struct HpPill: View {
             }
             .frame(height: 6)
         }
-        .frame(width: 170)
+        .frame(width: width)
     }
 }
 
@@ -144,14 +145,16 @@ struct ChessHeader: View {
     let room: RoomSnapshot
     let chess: ChessSnapshot
     let seat: Int
+    @Environment(\.verticalSizeClass) private var vSize
     @State private var confirmSurrender = false
 
     var body: some View {
         let mine: String = room.players.first { $0.seat == seat }?.name ?? "나"
         let theirs: String = room.players.first { $0.seat != seat }?.name ?? "상대"
+        let compact: Bool = vSize == .compact
         VStack(spacing: 6) {
-            HStack(spacing: 18) {
-                HpPill(name: mine, hp: chess.me?.hp ?? 0, color: Theme.mine)
+            HStack(spacing: compact ? 10 : 18) {
+                HpPill(name: mine, hp: chess.me?.hp ?? 0, color: Theme.mine, width: compact ? 130 : 170)
                 VStack(spacing: 2) {
                     Text("라운드 \(chess.round) / \(chess.maxRounds)").font(.headline)
                     TimelineView(.periodic(from: .now, by: 0.5)) { context in
@@ -160,17 +163,17 @@ struct ChessHeader: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .frame(minWidth: 130)
-                HpPill(name: theirs, hp: chess.opponent?.hp ?? 0, color: Theme.theirs)
+                .frame(minWidth: compact ? 90 : 130)
+                HpPill(name: theirs, hp: chess.opponent?.hp ?? 0, color: Theme.theirs, width: compact ? 130 : 170)
                 Spacer()
                 Button { confirmSurrender = true } label: { Label("항복", systemImage: "flag") }
                     .buttonStyle(SecondaryButtonStyle())
             }
-            if room.phase == .prep, let last = chess.lastRound {
+            if room.phase == .prep, !compact, let last = chess.lastRound {
                 Text(lastRoundText(last)).font(.caption).foregroundStyle(.secondary)
             }
         }
-        .panel(padding: 10)
+        .panel(padding: compact ? 6 : 10)
         .confirmationDialog("항복할까요?", isPresented: $confirmSurrender, titleVisibility: .visible) {
             Button("항복", role: .destructive) { model.surrender() }
             Button("취소", role: .cancel) {}
@@ -202,24 +205,40 @@ struct ChessPrepView: View {
     @State private var confirmEmptyDone = false
     @State private var lastTick = -1
 
+    @Environment(\.verticalSizeClass) private var vSize
+    private var compact: Bool { vSize == .compact }
+
+    /// 한 화면에 다 들어오도록, 화면 크기에서 칸 크기를 정한다. (스크롤 없음)
     var body: some View {
         if let me = chess.me {
-            VStack(spacing: 10) {
-                ChessHeader(room: room, chess: chess, seat: seat)
-                if !coachDismissed && chess.round == 1 {
-                    coachCard(me)
-                } else if !tipSeen && chess.round == 2 {
-                    tipCard
-                }
-                HStack(alignment: .top, spacing: 14) {
-                    VStack(spacing: 8) {
-                        boardLabels(me)
-                        boardView(me)
-                        benchView(me)
-                        Spacer(minLength: 0)
+            GeometryReader { geo in
+                let sideW: CGFloat = min(340, max(230, geo.size.width * 0.3))
+                let leftW: CGFloat = geo.size.width - sideW - 10
+                let shopH: CGFloat = min(108, max(60, geo.size.height * 0.17))
+                let showStrip: Bool = showCoach || (!tipSeen && chess.round == 2)
+                let stripH: CGFloat = showStrip ? (compact ? 40 : 58) : 0
+                let headH: CGFloat = compact ? 52 : 86
+                let gaps: CGFloat = compact ? 30 : 52
+                let boardAvail: CGFloat = geo.size.height - headH - stripH - shopH - gaps
+                let cell: CGFloat = max(18, min((leftW - 14) / 8, boardAvail / 5.1))
+                VStack(spacing: compact ? 4 : 8) {
+                    ChessHeader(room: room, chess: chess, seat: seat)
+                    if showCoach {
+                        coachCard(me)
+                    } else if !tipSeen && chess.round == 2 {
+                        tipCard
                     }
-                    sidePanel(me)
-                        .frame(width: 340)
+                    HStack(alignment: .top, spacing: 10) {
+                        VStack(spacing: compact ? 3 : 6) {
+                            boardView(me, cell: cell)
+                                .overlay(alignment: .bottomLeading) { selectedOverlay(me) }
+                            benchView(me, cell: cell)
+                            shopRow(me, height: shopH)
+                        }
+                        .frame(width: leftW)
+                        sidePanel(me)
+                            .frame(width: sideW, height: geo.size.height - headH - stripH - (compact ? 8 : 16))
+                    }
                 }
             }
             // 준비 시간이 5초 남으면 1초마다 똑딱 소리
@@ -266,13 +285,13 @@ struct ChessPrepView: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text("처음이시네요! \(step.n) / 4").font(.caption.bold()).foregroundStyle(Theme.warn)
-                Text(step.text).font(.subheadline)
+                Text(step.text).font(compact ? .caption : .subheadline).lineLimit(2).minimumScaleFactor(0.8)
             }
             Spacer()
             Button("가이드") { model.openGuide(.prep) }.buttonStyle(SecondaryButtonStyle())
             Button("건너뛰기") { coachDismissed = true }.buttonStyle(SecondaryButtonStyle())
         }
-        .panel(padding: 10)
+        .panel(padding: compact ? 6 : 10)
     }
 
     /// 첫 전투가 끝난 뒤 2라운드에서 한 번만 보이는 팁.
@@ -281,45 +300,26 @@ struct ChessPrepView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("다음 단계 팁").font(.caption.bold()).foregroundStyle(Theme.warn)
                 Text("① 골드 10마다 이자 +1 (최대 +3)  ② 같은 캐릭터 3장 = ★2, 훨씬 강해져요  ③ 같은 기물(킹·룩·비숍·폰...)을 2명 이상 올리면 시너지 보너스")
-                    .font(.subheadline)
+                    .font(compact ? .caption : .subheadline).lineLimit(2).minimumScaleFactor(0.8)
             }
             Spacer()
             Button("가이드") { model.openGuide(.synergy) }.buttonStyle(SecondaryButtonStyle())
             Button("알겠어요") { tipSeen = true }.buttonStyle(SecondaryButtonStyle())
         }
-        .panel(padding: 10)
+        .panel(padding: compact ? 6 : 10)
     }
 
-    private func boardLabels(_ me: ChessSelfSnapshot) -> some View {
-        HStack {
-            Text("판 \(me.board.count) / \(chess.deployCap)").font(.subheadline.bold())
-            Text("(위쪽이 앞줄, 상대와 가까워요)").font(.caption).foregroundStyle(.secondary)
-            if chess.lite == true { Text("입문 모드").font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 3).background(Capsule().fill(Theme.good.opacity(0.25))) }
-            Spacer()
-            if me.bench.contains(where: { $0 != nil }) && me.board.count < chess.deployCap {
-                Button { model.chessAutoPlace(me, cap: chess.deployCap) } label: { Label("자동 배치", systemImage: "wand.and.stars") }
-                    .buttonStyle(SecondaryButtonStyle())
-                    .disabled(me.done)
-            }
-            if let opponent = chess.opponent {
-                Text("상대 \(opponent.boardCount)기 배치 · \(opponent.done ? "준비 끝" : "준비 중")")
-                    .font(.caption)
-                    .foregroundStyle(opponent.done ? Theme.good : Color.secondary)
-            }
-        }
-    }
-
-    private func boardView(_ me: ChessSelfSnapshot) -> some View {
+    private func boardView(_ me: ChessSelfSnapshot, cell: CGFloat) -> some View {
         VStack(spacing: 2) {
             ForEach(0..<chessDeployRows, id: \.self) { row in
                 HStack(spacing: 2) {
                     ForEach(0..<chessBoardSize, id: \.self) { col in
                         boardCell(me, col: col, row: row)
+                            .frame(width: cell, height: cell)
                     }
                 }
             }
         }
-        .aspectRatio(2, contentMode: .fit)
         .coachHighlight(showCoach && coachStep(me).n == 2)
     }
 
@@ -400,14 +400,25 @@ struct ChessPrepView: View {
         }
     }
 
-    private func benchView(_ me: ChessSelfSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("대기석").font(.caption).foregroundStyle(.secondary)
-            HStack(spacing: 6) {
-                ForEach(me.bench.indices, id: \.self) { slot in
-                    benchSlot(me, slot: slot)
-                }
+    private func benchView(_ me: ChessSelfSnapshot, cell: CGFloat) -> some View {
+        HStack(spacing: 2) {
+            ForEach(me.bench.indices, id: \.self) { slot in
+                benchSlot(me, slot: slot)
+                    .frame(width: cell, height: cell)
             }
+            // 자동 배치: 대기석 옆 칸
+            Button { model.chessAutoPlace(me, cap: chess.deployCap) } label: {
+                VStack(spacing: 0) {
+                    Image(systemName: "wand.and.stars").font(.system(size: max(12, cell * 0.32)))
+                    Text("자동").font(.system(size: max(8, cell * 0.17)))
+                }
+                .foregroundStyle(Theme.silver)
+                .frame(width: cell, height: cell)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.white.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+            }
+            .buttonStyle(.plain)
+            .disabled(me.done || !me.bench.contains(where: { $0 != nil }) || me.board.count >= chess.deployCap)
+            .opacity(me.done || !me.bench.contains(where: { $0 != nil }) || me.board.count >= chess.deployCap ? 0.35 : 1)
         }
     }
 
@@ -463,52 +474,79 @@ struct ChessPrepView: View {
     // MARK: 오른쪽: 골드, 상점, 선택한 기물, 준비 끝
 
     private func sidePanel(_ me: ChessSelfSnapshot) -> some View {
-        ScrollView {
-            VStack(spacing: 10) {
-                statPanel(me)
+        VStack(spacing: compact ? 4 : 8) {
+            statPanel(me)
 
-                VStack(spacing: 6) {
-                    ForEach(me.shop.indices, id: \.self) { slot in
-                        shopCard(me, slot: slot)
-                            .id(me.shop[slot] ?? "sold-\(slot)")
-                            .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
-                    }
-                    Button { model.chessReroll() } label: {
-                        Label("새로고침 (\(me.rerollCost)골드)", systemImage: "arrow.clockwise").frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
-                    .disabled(me.gold < me.rerollCost || me.done)
-                    Text(oddsText).font(.caption2).foregroundStyle(.secondary)
-                }
-                .animation(.easeOut(duration: 0.3), value: me.shop)
-                .coachHighlight(showCoach && coachStep(me).n == 1)
-
-                sellZone(me)
-
-                if !chess.market.isEmpty || !chess.tiles.isEmpty || !me.materials.isEmpty || !me.weapons.isEmpty {
-                    resourcePanel(me)
-                }
-
-                if let uid = model.selectedUid, let unit = findUnit(me, uid: uid) {
-                    selectedPanel(me, unit: unit)
-                }
-
-                Button {
-                    // 판이 비어 있으면 실수일 수 있어서 한 번 물어본다.
-                    if me.board.isEmpty { confirmEmptyDone = true } else { model.chessDone() }
-                } label: {
-                    Text(me.done ? "준비 완료 · 상대를 기다리는 중" : "준비 끝").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(me.done)
-                .coachHighlight(showCoach && coachStep(me).n == 4)
-                .confirmationDialog("판에 기물이 없어요", isPresented: $confirmEmptyDone, titleVisibility: .visible) {
-                    Button("그래도 준비 끝", role: .destructive) { model.chessDone() }
-                    Button("더 놓을게요", role: .cancel) {}
-                } message: {
-                    Text("기물 없이 싸우면 이 라운드는 져요.")
-                }
+            // 자원 패널은 남는 높이 안에서만 보인다. (스크롤 없음)
+            if !chess.market.isEmpty || !chess.tiles.isEmpty || !me.materials.isEmpty || !me.weapons.isEmpty {
+                resourcePanel(me)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .clipped()
+            } else {
+                Spacer(minLength: 0)
             }
+
+            sellZone(me)
+
+            if let opponent = chess.opponent {
+                Text("상대 \(opponent.boardCount)기 배치 · \(opponent.done ? "준비 끝" : "준비 중")")
+                    .font(.caption2)
+                    .foregroundStyle(opponent.done ? Theme.good : Color.secondary)
+            }
+
+            Button {
+                // 판이 비어 있으면 실수일 수 있어서 한 번 물어본다.
+                if me.board.isEmpty { confirmEmptyDone = true } else { model.chessDone() }
+            } label: {
+                Text(me.done ? "준비 완료 · 기다리는 중" : "준비 끝").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(me.done)
+            .coachHighlight(showCoach && coachStep(me).n == 4)
+            .confirmationDialog("판에 기물이 없어요", isPresented: $confirmEmptyDone, titleVisibility: .visible) {
+                Button("그래도 준비 끝", role: .destructive) { model.chessDone() }
+                Button("더 놓을게요", role: .cancel) {}
+            } message: {
+                Text("기물 없이 싸우면 이 라운드는 져요.")
+            }
+        }
+    }
+
+    /// 왼쪽 아래: 상점을 한 줄로. 카드마다 기물 그림, 이름, 값.
+    private func shopRow(_ me: ChessSelfSnapshot, height: CGFloat) -> some View {
+        HStack(spacing: 6) {
+            ForEach(me.shop.indices, id: \.self) { slot in
+                shopCard(me, slot: slot, height: height)
+                    .id(me.shop[slot] ?? "sold-\(slot)")
+                    .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
+            }
+            Button { model.chessReroll() } label: {
+                VStack(spacing: 2) {
+                    Image(systemName: "arrow.clockwise").font(.title3)
+                    Text("새로고침").font(.caption2)
+                    Text("\(me.rerollCost)골드").font(.caption2.bold())
+                }
+                .foregroundStyle(Theme.silver)
+                .frame(width: max(54, height * 0.9), height: height)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.panelStrong))
+            }
+            .buttonStyle(.plain)
+            .disabled(me.gold < me.rerollCost || me.done)
+            .opacity(me.gold < me.rerollCost || me.done ? 0.4 : 1)
+        }
+        .frame(height: height)
+        .animation(.easeOut(duration: 0.3), value: me.shop)
+        .coachHighlight(showCoach && coachStep(me).n == 1)
+    }
+
+    /// 고른 기물의 정보: 판 위에 작게 떠 있다. 바깥을 누르면 닫는다.
+    @ViewBuilder
+    private func selectedOverlay(_ me: ChessSelfSnapshot) -> some View {
+        if let uid = model.selectedUid, let unit = findUnit(me, uid: uid) {
+            selectedPanel(me, unit: unit)
+                .frame(width: 260)
+                .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.85)))
+                .padding(6)
         }
     }
 
@@ -519,7 +557,7 @@ struct ChessPrepView: View {
         Label("여기로 끌어서 팔기", systemImage: "trash")
             .font(.caption)
             .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, minHeight: 36)
+            .frame(maxWidth: .infinity, minHeight: compact ? 26 : 36)
             .background(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.white.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
             .dropDestination(for: String.self) { items, _ in
                 guard let raw = items.first, case let .unit(uid)? = DragItem(raw), !me.done else { return false }
@@ -537,15 +575,15 @@ struct ChessPrepView: View {
         let materialIds: [String] = me.materials.filter { $0.value > 0 }.map { $0.key }.sorted()
         let weaponIds: [String] = me.weapons.filter { $0.value > 0 }.map { $0.key }.sorted()
         let freeSmelter: Bool = me.smelters.contains { $0 == nil }
-        return VStack(alignment: .leading, spacing: 8) {
-            Text("자원").font(.subheadline.bold())
-            if !chess.tiles.isEmpty {
+        return VStack(alignment: .leading, spacing: compact ? 4 : 8) {
+            if !compact { Text("자원").font(.subheadline.bold()) }
+            if !chess.tiles.isEmpty && !compact {
                 let names: [String] = Array(Set(chess.tiles.map { materialName($0.material) })).sorted()
                 Text("이번 라운드 자원 칸(◆): \(names.joined(separator: ", ")). 칸 위에 기물을 놓거나 걸어가면 얻어요.")
                     .font(.caption2).foregroundStyle(.secondary)
             }
             if !chess.market.isEmpty {
-                Text("광물 시장 · 한 라운드에 한 개").font(.caption).foregroundStyle(.secondary)
+                if !compact { Text("광물 시장 · 한 라운드에 한 개").font(.caption).foregroundStyle(.secondary) }
                 ForEach(chess.market.indices, id: \.self) { index in
                     marketRow(me, index: index)
                 }
@@ -554,7 +592,7 @@ struct ChessPrepView: View {
                 combineBar
             }
             if !materialIds.isEmpty {
-                Text("재료 · 누르면 재련, 재련대로 끌어 놓아도 돼요 (다른 재료 위로 끌면 조합)").font(.caption).foregroundStyle(.secondary)
+                if !compact { Text("재료 · 누르면 재련, 재련대로 끌어 놓아도 돼요 (다른 재료 위로 끌면 조합)").font(.caption).foregroundStyle(.secondary) }
                 chipFlow {
                     ForEach(materialIds, id: \.self) { id in
                         let rarity: String = model.chessMaterial(id)?.rarity ?? "common"
@@ -587,7 +625,7 @@ struct ChessPrepView: View {
                         Text(me.smelters[slot].map { "⚒ " + weaponName($0) } ?? "비어 있음")
                             .font(.caption2.bold()).lineLimit(1).minimumScaleFactor(0.6)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .frame(maxWidth: .infinity, minHeight: compact ? 28 : 36)
                     .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(me.smelters[slot] == nil ? 0.07 : 0.14)))
                     .dropDestination(for: String.self) { items, _ in
                         guard let raw = items.first, case let .material(id)? = DragItem(raw) else { return false }
@@ -596,11 +634,11 @@ struct ChessPrepView: View {
                     }
                 }
             }
-            if !me.smelters.allSatisfy({ $0 == nil }) {
+            if !compact, !me.smelters.allSatisfy({ $0 == nil }) {
                 Text("재련 중인 무기는 다음 라운드 시작에 완성돼요.").font(.system(size: 9)).foregroundStyle(.secondary)
             }
             if !weaponIds.isEmpty {
-                Text("무기 · 기물 위로 끌어 놓으면 껴요 (다른 아이템 위로 끌면 조합)").font(.caption).foregroundStyle(.secondary)
+                if !compact { Text("무기 · 기물 위로 끌어 놓으면 껴요 (다른 아이템 위로 끌면 조합)").font(.caption).foregroundStyle(.secondary) }
                 chipFlow {
                     ForEach(weaponIds, id: \.self) { id in
                         let rarity: String = model.chessWeapon(id)?.rarity ?? "common"
@@ -628,7 +666,7 @@ struct ChessPrepView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .panel(padding: 10)
+        .panel(padding: compact ? 6 : 10)
         // 무기를 낀 기물을 이 패널로 끌어다 놓으면 무기를 뺀다.
         .dropDestination(for: String.self) { items, _ in
             guard let raw = items.first, case let .unit(uid)? = DragItem(raw), !me.done else { return false }
@@ -671,10 +709,12 @@ struct ChessPrepView: View {
                 }
                 .buttonStyle(.plain)
             }
-            Text(model.combineFirst.map { "\(model.itemName($0))와(과) 합칠 아이템을 누르세요" }
-                 ?? "아이템을 다른 아이템 위로 끌어다 놓으면 합쳐져요 (재료+재료, 무기+무기, 무기+원재료)")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
+            if !compact || model.combineFirst != nil {
+                Text(model.combineFirst.map { "\(model.itemName($0))와(과) 합칠 아이템을 누르세요" }
+                     ?? "아이템을 다른 아이템 위로 끌어다 놓으면 합쳐져요 (재료+재료, 무기+무기, 무기+원재료)")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -705,7 +745,7 @@ struct ChessPrepView: View {
 
     /// 칩을 줄바꿈하며 늘어놓는다.
     private func chipFlow<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 6, alignment: .leading)], alignment: .leading, spacing: 6) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: compact ? 88 : 110), spacing: 6, alignment: .leading)], alignment: .leading, spacing: 6) {
             content()
         }
     }
@@ -728,11 +768,11 @@ struct ChessPrepView: View {
                 VStack(spacing: 0) {
                     Text("🪙").font(.system(size: 14))
                     Text("\(me.gold)")
-                        .font(.system(size: 24, weight: .bold, design: .rounded).monospacedDigit())
+                        .font(.system(size: compact ? 18 : 24, weight: .bold, design: .rounded).monospacedDigit())
                         .contentTransition(.numericText())
                 }
             }
-            .frame(width: 92, height: 92)
+            .frame(width: compact ? 64 : 92, height: compact ? 64 : 92)
             .animation(.easeOut(duration: 0.5), value: ratio)
             .animation(.spring(response: 0.35, dampingFraction: 0.6), value: me.gold)
             .overlay(alignment: .bottom) {
@@ -741,15 +781,15 @@ struct ChessPrepView: View {
                     .foregroundStyle(ratio >= 1 ? Theme.good : Color.secondary)
                     .offset(y: 14)
             }
-            .padding(.bottom, 12)
+            .padding(.bottom, compact ? 10 : 12)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: compact ? 2 : 4) {
                 Text("시너지 · 다음 라운드 🪙 +\(me.nextIncome)").font(.caption2).foregroundStyle(.secondary)
                 synergyChips(me)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .panel(padding: 10)
+        .panel(padding: compact ? 6 : 10)
     }
 
     /// 판 위의 기물을 기물(킹, 퀸...)별로 센다. 같은 캐릭터는 몇 장이든 한 명이다.
@@ -768,7 +808,7 @@ struct ChessPrepView: View {
         let counts: [Piece: Int] = pieceCounts(me)
         let active: [Piece] = [Piece.king, .queen, .rook, .bishop, .knight, .pawn].filter { (counts[$0] ?? 0) > 0 }
         if active.isEmpty {
-            Text("같은 기물(킹·룩·비숍...)을 2명 이상 올리면 시너지가 켜져요.").font(.caption2).foregroundStyle(.secondary)
+            Text("같은 기물을 2명 이상 올리면 시너지가 켜져요.").font(.caption2).foregroundStyle(.secondary)
         } else {
             ForEach(active, id: \.self) { piece in
                 synergyChip(piece, count: counts[piece] ?? 0)
@@ -791,10 +831,10 @@ struct ChessPrepView: View {
                 .foregroundStyle(color)
             VStack(alignment: .leading, spacing: 0) {
                 Text("\(Labels.pieceName(piece)) \(count)/\(need)").font(.caption.bold())
-                Text(detail).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
+                if !compact { Text(detail).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1) }
             }
         }
-        .padding(.horizontal, 7).padding(.vertical, 3)
+        .padding(.horizontal, 7).padding(.vertical, compact ? 1 : 3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(color.opacity(tier > 0 ? 0.2 : 0.06)))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(color.opacity(tier > 0 ? 0.65 : 0), lineWidth: 1))
@@ -812,7 +852,7 @@ struct ChessPrepView: View {
         return "등장 확률: " + parts.joined(separator: " · ")
     }
 
-    private func shopCard(_ me: ChessSelfSnapshot, slot: Int) -> some View {
+    private func shopCard(_ me: ChessSelfSnapshot, slot: Int, height: CGFloat) -> some View {
         let defId: String? = me.shop[slot]
         let info: ChessUnitInfo? = defId.flatMap { model.chessUnit($0) }
         let cost: Int = info?.cost ?? 0
@@ -820,26 +860,19 @@ struct ChessPrepView: View {
         return Button {
             if defId != nil { model.chessBuy(slot: slot) }
         } label: {
-            HStack(spacing: 8) {
+            VStack(spacing: 1) {
                 if let defId {
-                    ChessToken(defId: defId, star: 1).frame(width: 46, height: 46)
-                    VStack(alignment: .leading, spacing: 1) {
-                        HStack(spacing: 4) {
-                            Text(info?.nameKo ?? defId).font(.subheadline.bold())
-                            if let info { Text(Labels.pieceName(info.piece)).font(.caption2).foregroundStyle(Theme.color(for: info.piece)) }
-                        }
-                        Text(info?.abilityText ?? "").font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(2)
-                    }
-                    Spacer(minLength: 0)
-                    Text("\(cost)").font(.headline.monospacedDigit())
-                        .padding(.horizontal, 8).padding(.vertical, 4)
+                    ChessToken(defId: defId, star: 1).frame(width: max(30, height - 40), height: max(30, height - 40))
+                    Text(info?.nameKo ?? defId).font(.system(size: 12, weight: .bold)).lineLimit(1).minimumScaleFactor(0.6)
+                    Text("🪙\(cost)").font(.system(size: 11, weight: .bold).monospacedDigit())
+                        .padding(.horizontal, 6)
                         .background(Capsule().fill(ChessStyle.costColor(cost).opacity(0.3)))
                 } else {
-                    Text("구매 완료").font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)
+                    Text("구매 완료").font(.caption2).foregroundStyle(.secondary)
                 }
             }
-            .padding(6)
-            .frame(maxWidth: .infinity, minHeight: 58)
+            .padding(3)
+            .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.panel))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(defId == nil ? Color.clear : ChessStyle.costColor(cost).opacity(0.7), lineWidth: 1.5))
@@ -869,7 +902,7 @@ struct ChessPrepView: View {
             if let info {
                 Text("♥ \(Int((Double(info.hp) * factor).rounded()))   ⚔ \(Int((Double(info.atk) * factor).rounded()))")
                     .font(.subheadline.monospacedDigit())
-                Text(info.abilityText).font(.caption).foregroundStyle(.secondary)
+                Text(info.abilityText).font(.caption).foregroundStyle(.secondary).lineLimit(compact ? 2 : 4)
             }
             if let weaponId = unit.weapon {
                 HStack {
@@ -888,10 +921,10 @@ struct ChessPrepView: View {
                 }
                 Button("판매 +\(value)") { model.chessSell(unit.uid) }.buttonStyle(SecondaryButtonStyle())
             }
-            Text("칸을 누르면 거기에 놓아요.").font(.caption2).foregroundStyle(.secondary)
+            if !compact { Text("칸을 누르면 거기에 놓아요.").font(.caption2).foregroundStyle(.secondary) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .panel(padding: 10)
+        .panel(padding: compact ? 6 : 10)
     }
 }
 
@@ -902,16 +935,18 @@ struct ChessCombatView: View {
     let room: RoomSnapshot
     let chess: ChessSnapshot
     let seat: Int
+    @Environment(\.verticalSizeClass) private var vSize
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: vSize == .compact ? 4 : 10) {
             ChessHeader(room: room, chess: chess, seat: seat)
             if let combat = chess.combat {
-                HStack(alignment: .top, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
                     ChessArena(room: room, combat: combat, seat: seat)
                         .aspectRatio(1, contentMode: .fit)
                     sidePanel(combat)
-                        .frame(maxWidth: 300)
+                        .frame(maxWidth: vSize == .compact ? 220 : 300, maxHeight: .infinity, alignment: .top)
+                        .clipped()
                 }
             } else {
                 Spacer()
@@ -922,7 +957,7 @@ struct ChessCombatView: View {
     }
 
     private func sidePanel(_ combat: ChessCombatSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: vSize == .compact ? 4 : 10) {
             teamList(title: "내 기물", color: Theme.mine, placements: combat.boards[safe: seat] ?? [])
             teamList(title: "상대 기물", color: Theme.theirs, placements: combat.boards[safe: 1 - seat] ?? [])
             if let mine = chess.me, !mine.synergies.isEmpty {
