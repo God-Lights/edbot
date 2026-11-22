@@ -12,9 +12,11 @@ import { getLeaderboard, getPlayerStats, getRecentMatches, getReplay } from "./r
 import { approvedPage, donePage, failedPage, homePage } from "./pages";
 import { Room } from "./room";
 import { Matchmaker } from "./matchmaker";
+import { LiveRegistry } from "./registry";
+import { GUEST_HEADER, parseGuest, wsAccess } from "./guest";
 import { CODE_ALPHABET, CODE_LENGTH, generateRoomCode } from "./codes";
 
-export { AuthStore, Matchmaker, Room };
+export { AuthStore, LiveRegistry, Matchmaker, Room };
 
 
 
@@ -144,10 +146,11 @@ export default {
     }
 
     // 방을 만들거나 들어가려면 로그인이 필요하다. (개발할 때는 REQUIRE_AUTH=false)
-    const needsLogin =
-      enabled &&
-      ((request.method === "POST" && url.pathname === "/api/rooms") ||
-        (parts.length === 2 && parts[0] === "ws"));
+    // 게스트(학번 + 이름)는 게스트 방에 GL 로그인 없이 들어올 수 있다. (방이 게스트 방인지는 방에서 다시 확인한다.)
+    const isWs = parts.length === 2 && parts[0] === "ws";
+    const guest = isWs ? parseGuest(url.searchParams.get("guest"), url.searchParams.get("name")) : null;
+    const guestWs = !!guest && url.searchParams.get("spectate") !== "1";
+    const needsLogin = enabled && ((request.method === "POST" && url.pathname === "/api/rooms") || (isWs && !guestWs));
     const user = needsLogin ? await identify(env, request) : null;
     if (needsLogin && !user) {
       return json({ error: "unauthorized", loginUrl: `${origin}/auth/login` }, 401);
@@ -159,11 +162,24 @@ export default {
         const code = generateRoomCode();
         // 기본은 체스판 자동 전투. 옛 레인 타워 게임은 ?mode=lanes
         const mode = url.searchParams.get("mode") === "lanes" ? "lanes" : "chess";
-        if (await roomStub(env, code).init(code, false, mode)) {
+        // 게스트 방(?guest=1): GL 계정으로 로그인한 사람이 만들고, 학번과 이름만으로 들어올 수 있다. 전적은 남기지 않는다.
+        const guestRoom = url.searchParams.get("guest") === "1";
+        if (await roomStub(env, code).init(code, false, mode, false, guestRoom, user?.nickname ?? "")) {
           return json({ code }, 201);
         }
       }
       return json({ error: "could_not_create_room" }, 503);
+    }
+
+    // GET /api/live -> 진행 중인 게스트 방 목록 (관전할 곳 고르기). GL 로그인이 필요하다.
+    if (request.method === "GET" && url.pathname === "/api/live") {
+      const me = await identify(env, request);
+      if (enabled && !me) return json({ error: "unauthorized", loginUrl: `${origin}/auth/login` }, 401);
+      try {
+        return json({ rooms: await env.LIVE.get(env.LIVE.idFromName("global")).list() });
+      } catch {
+        return json({ error: "live_unavailable" }, 503);
+      }
     }
 
     // ---- 빠른 대전 매칭 ----
@@ -286,7 +302,11 @@ export default {
       if (!CODE_PATTERN.test(code)) return json({ error: "room_not_found" }, 404);
       const forwarded = new Request(request);
       forwarded.headers.delete(USER_HEADER);
+      forwarded.headers.delete(GUEST_HEADER);
+      const access = wsAccess({ authRequired: enabled, hasGlUser: !!user, guest, spectate: url.searchParams.get("spectate") === "1" });
+      if (!access.ok) return json({ error: access.error, loginUrl: `${origin}/auth/login` }, 401);
       if (user) forwarded.headers.set(USER_HEADER, JSON.stringify({ id: user.id, nickname: user.nickname }));
+      else if (guest && guestWs) forwarded.headers.set(GUEST_HEADER, JSON.stringify(guest));
       if (code === TEST_ROOM_CODE || code === FULL_TEST_ROOM_CODE) {
         const full = code === FULL_TEST_ROOM_CODE;
         const stub = testRoomStub(env, testOwner(user, request), full);

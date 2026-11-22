@@ -78,7 +78,8 @@ export type ErrorCode =
   | "no_material"
   | "no_free_smelter"
   | "no_weapon"
-  | "spectate_unavailable";
+  | "spectate_unavailable"
+  | "unauthorized";
 
 export interface PublicPlayer {
   id: string;

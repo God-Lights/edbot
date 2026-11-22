@@ -71,6 +71,8 @@ export interface PlayerState {
   userId?: string;
   /** 테스트 대전(ADMN)의 상대 봇. 접속 상태와 로비 유예 시간의 영향을 받지 않는다. */
   bot?: boolean;
+  /** 게스트의 학번. 게스트 방에서 GL 계정 없이 들어온 사람이다. */
+  guestId?: string;
   /** 봇의 난이도 (기본 normal) */
   botLevel?: "easy" | "normal" | "hard";
   /** 어려운 봇이 보너스 골드를 받은 마지막 라운드 */
@@ -112,6 +114,10 @@ export interface RoomState {
   testMatch: boolean;
   /** 입문 모드: 쉬운 캐릭터만 나오고 자원 시스템이 없다. */
   lite: boolean;
+  /** 게스트 방: GL 계정이 없는 사람도 학번과 이름으로 들어올 수 있고, 전적은 남기지 않는다. */
+  guest: boolean;
+  /** 방을 만든 사람의 이름 (관전 목록에 보인다) */
+  hostName: string;
   /** 테스트 대전 봇의 난이도. 로비에서 바꿀 수 있다. */
   botLevel: "easy" | "normal" | "hard";
   /** lanes: 옛 레인 타워 게임, chess: 체스판 자동 전투 */
@@ -122,7 +128,7 @@ export interface RoomState {
 
 type Failure = { ok: false; code: ErrorCode; message: string };
 
-export function createRoom(code: string, now: number, testMatch = false, mode: RoomMode = "lanes", lite = testMatch): RoomState {
+export function createRoom(code: string, now: number, testMatch = false, mode: RoomMode = "lanes", lite = testMatch, guest = false, hostName = ""): RoomState {
   return {
     code,
     phase: "lobby",
@@ -142,6 +148,8 @@ export function createRoom(code: string, now: number, testMatch = false, mode: R
     recorded: false,
     testMatch,
     lite,
+    guest,
+    hostName,
     botLevel: lite ? "easy" : "normal",
     mode,
     createdAt: now,
@@ -195,7 +203,7 @@ export type JoinResult =
  */
 export function joinRoom(
   state: RoomState,
-  request: { name: string; token?: string; userId?: string },
+  request: { name: string; token?: string; userId?: string; guestId?: string },
   now: number,
   newId: () => string,
 ): JoinResult {
@@ -234,6 +242,7 @@ export function joinRoom(
     token: newId(),
     name: sanitizeName(request.name),
     userId: request.userId,
+    guestId: request.guestId,
     seat,
     connected: true,
     ready: false,
@@ -1008,6 +1017,7 @@ export function buildReplay(state: RoomState): string | null {
 export function takeMatchRecord(state: RoomState, now: number): MatchInput | null {
   if (state.recorded || state.phase !== "result" || !state.result || !(state.game || state.chess)) return null;
   state.recorded = true; // 저장이 실패해도 같은 판을 반복해서 시도하지 않는다
+  if (state.guest) return null; // 게스트 방은 전적과 레이팅에 남기지 않는다
   const [a, b] = [0, 1].map((seat) => state.players.find((p) => p.seat === seat));
   if (!a?.userId || !b?.userId || a.userId === b.userId) return null;
   return {

@@ -63,6 +63,20 @@ final class AppModel {
     /// 대장간에서 장착하려고 고른 무기.
     var selectedWeaponId: String?
 
+    // 게스트 로그인(학번 + 이름)과 게스트 방, 관전
+    var guestStudentId = UserDefaults.standard.string(forKey: "guestStudentId") ?? ""
+    var guestName = UserDefaults.standard.string(forKey: "guestName") ?? ""
+    var guestCodeText = ""
+    /// 관전자로 들어와 있다 (플레이어가 아니다)
+    private(set) var isSpectating = false
+    /// 방금 만든 게스트 방의 코드. 값이 있으면 안내 시트를 연다.
+    var createdGuestRoomCode: String?
+    private(set) var isCreatingGuestRoom = false
+    private(set) var liveRooms: [LiveRoom] = []
+    private(set) var liveError: String?
+    private(set) var isLoadingLive = false
+    var showLive = false
+
     // 체스판 자동 전투
     private(set) var chessUnits: [ChessUnitInfo] = []
     private(set) var chessSynergies: [ChessSynergyInfo] = []
@@ -473,12 +487,73 @@ final class AppModel {
         }
     }
 
-    func join(code: String) {
+    /// 게스트 방을 만든다. GL 로그인이 필요하다. 만든 사람은 바로 들어가지 않고, 코드 안내 시트에서 참가나 관전을 고른다.
+    func createGuestRoom() {
+        guard !isCreatingGuestRoom, let url = serverURL else {
+            message = "서버 주소를 확인해 주세요."
+            return
+        }
+        isCreatingGuestRoom = true
+        message = nil
+        Task {
+            defer { isCreatingGuestRoom = false }
+            do {
+                let code = try await ApiClient(baseURL: url, authToken: authToken).createRoom(guest: true)
+                createdGuestRoomCode = code
+            } catch ApiError.unauthorized {
+                clearLogin()
+                message = "게스트 방은 GL 로그인 후에 만들 수 있어요."
+            } catch {
+                message = "방을 만들 수 없어요: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    /// 학번과 이름으로 게스트 방에 들어간다. (GL 로그인 없이)
+    func joinAsGuest(code: String) {
+        guard let guest = GuestLogin.make(studentId: guestStudentId, name: guestName) else {
+            message = GuestLogin.isValidStudentId(guestStudentId.trimmingCharacters(in: .whitespaces))
+                ? "이름을 입력해 주세요."
+                : "학번은 숫자 4~10자리예요. (예: 20211)"
+            return
+        }
+        guard code.trimmingCharacters(in: .whitespaces).count == 4 else {
+            message = "방 코드는 4자리예요."
+            return
+        }
+        UserDefaults.standard.set(guest.studentId, forKey: "guestStudentId")
+        UserDefaults.standard.set(guest.name, forKey: "guestName")
+        join(code: code, guest: guest)
+    }
+
+    /// 진행 중인 게스트 경기 목록을 불러온다. GL 로그인이 필요하다.
+    func refreshLive() async {
+        guard !isLoadingLive, let url = serverURL else { return }
+        isLoadingLive = true
+        defer { isLoadingLive = false }
+        do {
+            liveRooms = try await ApiClient(baseURL: url, authToken: authToken).liveRooms()
+            liveError = nil
+        } catch ApiError.unauthorized {
+            liveError = "GL 로그인이 필요해요."
+        } catch {
+            liveError = "목록을 불러오지 못했어요."
+        }
+    }
+
+    /// 목록에서 고른 경기를 관전한다.
+    func watch(code: String) {
+        showLive = false
+        join(code: code, spectate: true)
+    }
+
+    func join(code: String, spectate: Bool = false, guest: GuestLogin? = nil) {
         guard let url = serverURL else {
             message = "서버 주소를 확인해 주세요."
             return
         }
         leave()
+        isSpectating = spectate
         message = nil
         loadRoster(from: url)
         loadWeapons(from: url)
@@ -493,9 +568,10 @@ final class AppModel {
             }
         }
         // 로그인했다면 서버가 GL 닉네임을 이름으로 쓴다.
-        let name = user?.nickname ?? playerName
-        let token = authToken
-        Task { await connection.start(wsBase: webSocketBase(url), roomCode: code, name: name, authToken: token) }
+        let name = guest?.name ?? user?.nickname ?? playerName
+        // 게스트는 GL 로그인 없이 들어간다. (로그인 토큰을 같이 보내지 않는다)
+        let token = guest == nil ? authToken : nil
+        Task { await connection.start(wsBase: webSocketBase(url), roomCode: code, name: name, authToken: token, guest: guest, spectate: spectate) }
     }
 
     func leave() {
@@ -505,6 +581,7 @@ final class AppModel {
         eventTask = nil
         room = nil
         myPlayerId = nil
+        isSpectating = false
         status = .idle
         clock = ServerClock()
         clearSelections()

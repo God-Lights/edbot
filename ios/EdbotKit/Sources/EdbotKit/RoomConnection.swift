@@ -44,6 +44,8 @@ public actor RoomConnection {
     private var roomCode = ""
     private var name = ""
     private var authToken: String?
+    private var guest: GuestLogin?
+    private var spectate = false
     private var token: String?
     private var fatal = false
     private var attempt = 0
@@ -62,8 +64,11 @@ public actor RoomConnection {
     }
 
     /// 방에 접속한다. 이미 접속 중이면 먼저 끊는다.
-    public func start(wsBase: URL, roomCode: String, name: String, authToken: String?) {
+    /// guest: GL 로그인 없이 게스트 방에 들어올 때(학번 + 이름). spectate: 관전자로 들어온다(GL 로그인 필요).
+    public func start(wsBase: URL, roomCode: String, name: String, authToken: String?, guest: GuestLogin? = nil, spectate: Bool = false) {
         stop()
+        self.guest = guest
+        self.spectate = spectate
         self.wsBase = wsBase
         self.roomCode = roomCode.trimmingCharacters(in: .whitespaces).uppercased()
         self.name = name
@@ -141,9 +146,12 @@ public actor RoomConnection {
     private func buildURL() -> URL? {
         guard let wsBase else { return nil }
         var text = wsBase.absoluteString + "/ws/" + roomCode
-        let query = "?name=" + (name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name)
-        text += query
-        if let token { text += "&token=" + (token.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? token) }
+        let shownName = guest?.name ?? name
+        text += "?name=" + (shownName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? shownName)
+        if let guest { text += "&guest=" + guest.studentId }
+        if spectate { text += "&spectate=1" }
+        // 관전자의 token은 비어 있다. 빈 값은 보내지 않는다.
+        if let token, !token.isEmpty { text += "&token=" + (token.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? token) }
         return URL(string: text)
     }
 

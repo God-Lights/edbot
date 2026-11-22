@@ -18,8 +18,8 @@ export const api = {
     return r.ok ? r.body.user : null;
   },
   /** 새 방을 만들고 코드를 돌려준다. 실패하면 { error } */
-  async createRoom() {
-    const r = await request("/api/rooms", { method: "POST" });
+  async createRoom(guest = false) {
+    const r = await request(`/api/rooms${guest ? "?guest=1" : ""}`, { method: "POST" });
     if (r.status === 201 || r.ok) return { code: r.body.code };
     return { error: r.body?.error ?? "could_not_create_room", status: r.status };
   },
@@ -43,6 +43,11 @@ export const api = {
   async replay(id) {
     const r = await request(`/api/replays/${encodeURIComponent(id)}`);
     return r.ok ? r.body : null;
+  },
+  /** 진행 중인 게스트 방 목록 (GL 로그인 필요). 실패하면 { error } */
+  async live() {
+    const r = await request("/api/live");
+    return r.ok ? r.body.rooms : { error: r.status };
   },
   async chessCatalog() {
     const r = await request("/api/chess");

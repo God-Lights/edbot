@@ -29,14 +29,16 @@ export class Connection {
     this.playerId = null;
     this.level = "";
     this.spectate = false;
+    this.guest = null;
   }
 
-  start(code, name, level = "", spectate = false) {
+  start(code, name, level = "", spectate = false, guest = null) {
     this.stop();
     this.code = code;
     this.name = name;
     this.level = level;
     this.spectate = spectate;
+    this.guest = guest;
     this.stopped = false;
     this.attempt = 0;
     this.open();
@@ -59,6 +61,11 @@ export class Connection {
     if (this.name) params.set("name", this.name);
     if (this.level) params.set("level", this.level);
     if (this.spectate) params.set("spectate", "1");
+    // 게스트(학번 + 이름): GL 로그인 없이 게스트 방에 들어간다.
+    if (this.guest) {
+      params.set("guest", this.guest.studentId);
+      params.set("name", this.guest.name);
+    }
     const token = this.spectate ? null : loadToken(this.code);
     if (token) params.set("token", token);
     const ws = new WebSocket(`${scheme}://${location.host}/ws/${this.code}?${params}`);
