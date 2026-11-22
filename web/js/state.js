@@ -33,6 +33,8 @@ export const S = {
   creating: false,
   /** 빠른 대전 줄서기: null | { ticket, startedAt, waiting } */
   quick: null,
+  /** 직전 화면의 값. 애니메이션(진행 링, 골드, 새 기물)과 효과음이 "무엇이 바뀌었나"를 알아내는 데 쓴다. */
+  fx: { ring: null, gold: null, uids: new Set(), weapons: {}, shop: "", phase: "", tick: -1 },
   /** 게스트 로그인 (학번 + 이름). 기억해 둔다. */
   guest: { studentId: load("edbot.guestId"), name: load("edbot.guestName") },
   guestCode: "",

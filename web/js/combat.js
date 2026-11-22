@@ -123,6 +123,19 @@ export function playArena(combat, seat, getPos) {
     el.classList.add(cls);
   };
 
+  /** 공격하는 기물이 대상 쪽으로 살짝 몸을 내밀었다가 돌아온다. */
+  const lunge = (from, to, j) => {
+    const a = combat.frames[j]?.[from];
+    const b = combat.frames[j]?.[to] ?? combat.frames[j + 1]?.[to];
+    const tok = els[from]?.querySelector(".token");
+    if (!a || !b || !tok || !tok.animate) return;
+    const [ax, ay] = flip(a[0], a[1]);
+    const [bx, by] = flip(b[0], b[1]);
+    const dx = Math.sign(bx - ax) * 22;
+    const dy = Math.sign(by - ay) * 22;
+    tok.animate([{ transform: "translate(0,0)" }, { transform: `translate(${dx}%, ${dy}%)`, offset: 0.4 }, { transform: "translate(0,0)" }], { duration: 260, easing: "ease-out" });
+  };
+
   /** k박자에서 k+1박자로 넘어가는 순간의 연출과 소리: 피해 숫자, 회복, 능력, 쓰러짐, 승급, 채굴 */
   const spawnBeat = (j) => {
     if (j < 0 || j >= combat.beats) return;
@@ -147,6 +160,7 @@ export function playArena(combat, seat, getPos) {
       if (e[0] !== j + 1) continue;
       const a = combat.frames[j]?.[e[2]] ?? combat.frames[j + 1]?.[e[2]];
       const [x, y] = a ? flip(a[0], a[1]) : [0, 0];
+      if (e[1] === "attack" && e[3] >= 0) lunge(e[2], e[3], j);
       if (e[1] === "ability" && a) { ring(x, y, "#b040be"); sfx.play("ability"); }
       else if (e[1] === "death") sfx.play("death");
       else if (e[1] === "promote" && a) { floatText(x, y, "♛ 승급!", "promo"); sfx.play("promote"); }
@@ -183,6 +197,7 @@ export function playArena(combat, seat, getPos) {
       const next = combat.frames[k + 1]?.[i];
       const dying = next && (next[5] & 1) === 0;
       el.style.opacity = dying ? String(Math.max(0, 1 - (pos - k))) : "1";
+      el.firstElementChild.style.scale = dying ? String(0.55 + 0.45 * Math.max(0, 1 - (pos - k))) : "1";
       el.querySelector(".ubar b").style.width = `${u.maxHp > 0 ? Math.min(100, Math.max(0, (f.hp / u.maxHp) * 100)) : 0}%`;
       el.querySelector(".ubar .shield").style.display = f.shield > 0 ? "block" : "none";
     });

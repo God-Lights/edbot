@@ -60,7 +60,61 @@ const SOUNDS = {
   roundLose: () => { tone(392, 0.15, { type: "triangle" }); tone(294, 0.25, { type: "triangle", delay: 0.12 }); },
   win: () => [523, 659, 784, 1047, 1318].forEach((f, i) => tone(f, 0.22, { type: "triangle", delay: i * 0.12 })),
   lose: () => [392, 330, 262, 196].forEach((f, i) => tone(f, 0.3, { type: "sine", delay: i * 0.16 })),
+  pickup: () => tone(700, 0.04, { type: "triangle", vol: 0.04 }),
+  drop: () => tone(260, 0.07, { type: "triangle", vol: 0.06, slide: -60 }),
+  equip: () => { tone(1200, 0.05, { type: "square", vol: 0.04 }); tone(1800, 0.14, { type: "triangle", vol: 0.05, delay: 0.04 }); noise(0.05, 0.03); },
+  smelt: () => { noise(0.35, 0.05); tone(120, 0.35, { type: "sawtooth", vol: 0.04, slide: 160 }); tone(660, 0.12, { type: "triangle", vol: 0.04, delay: 0.3 }); },
+  merge: () => [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.16, { type: "triangle", vol: 0.07, delay: i * 0.06 })),
+  full: () => { tone(880, 0.08, { type: "triangle", vol: 0.06 }); tone(1175, 0.16, { type: "triangle", vol: 0.06, delay: 0.07 }); },
+  roundStart: () => { tone(196, 0.5, { type: "sine", vol: 0.07 }); tone(392, 0.4, { type: "triangle", vol: 0.04, delay: 0.02 }); },
+  combatStart: () => { tone(90, 0.18, { type: "sine", vol: 0.1, slide: -40 }); tone(90, 0.18, { type: "sine", vol: 0.1, slide: -40, delay: 0.2 }); noise(0.1, 0.04, 0.2); },
+  tick: () => tone(1000, 0.03, { type: "square", vol: 0.025 }),
   suddenDeath: () => { tone(110, 0.5, { type: "sawtooth", vol: 0.05 }); tone(116, 0.5, { type: "sawtooth", vol: 0.04 }); },
+};
+
+// ---- 배경 음악: 파일 없이 합성한 잔잔한 아르페지오. 기본은 꺼져 있다. ----
+
+const SCALE = [0, 3, 5, 7, 10, 12, 15]; // 마이너 펜타토닉 계열
+let bgmOn = false;
+try { bgmOn = localStorage.getItem("edbot.bgm") === "1"; } catch { bgmOn = false; }
+let bgmTimer = null;
+let bgmStep = 0;
+
+function bgmTick() {
+  if (muted || !bgmOn) return;
+  const root = [110, 98, 123, 98][Math.floor(bgmStep / 8) % 4];
+  const note = SCALE[[0, 2, 4, 2, 5, 4, 2, 1][bgmStep % 8]];
+  const freq = root * 2 ** (note / 12);
+  tone(freq, 0.7, { type: "sine", vol: 0.035 });
+  if (bgmStep % 8 === 0) tone(root / 2, 1.6, { type: "triangle", vol: 0.03 });
+  bgmStep += 1;
+}
+
+function startBgm() {
+  if (bgmTimer) return;
+  audio();
+  bgmTimer = setInterval(bgmTick, 420);
+}
+
+function stopBgm() {
+  clearInterval(bgmTimer);
+  bgmTimer = null;
+}
+
+if (bgmOn) {
+  // 브라우저는 첫 클릭 전에는 소리를 못 내서, 첫 클릭 때 시작한다.
+  const once = () => { startBgm(); window.removeEventListener("pointerdown", once); };
+  window.addEventListener("pointerdown", once);
+}
+
+export const bgm = {
+  get on() { return bgmOn; },
+  toggle() {
+    bgmOn = !bgmOn;
+    try { localStorage.setItem("edbot.bgm", bgmOn ? "1" : "0"); } catch { /* 무시 */ }
+    if (bgmOn) startBgm(); else stopBgm();
+    return bgmOn;
+  },
 };
 
 export const sfx = {

@@ -7,7 +7,7 @@ import { autoPlace, S, act, conn, join, leave, me, mySeat, setRender, store, toa
 import { hpPill, prepView } from "./prep.js";
 import { openMatchReplay, openReplay, replayAction, replayModal, replayScrub, startReplay } from "./replay.js";
 import { openRanking, rankingModal } from "./ranking.js";
-import { sfx } from "./sfx.js";
+import { bgm, sfx } from "./sfx.js";
 import { PHASE_NAME, REASON_TEXT, countdown, esc } from "./util.js";
 
 const app = document.getElementById("app");
@@ -199,7 +199,10 @@ function resultView(room) {
   const [title, cls] = r.winner == null ? ["무승부", ""] : r.winner === seat ? ["승리!", "good"] : ["패배", "bad"];
   const rating = r.ratings?.[seat];
   const delta = rating ? rating.after - rating.before : 0;
-  return `<div class="result"><div class="rtitle ${cls}">${title}</div><div class="sub big">${esc(REASON_TEXT[r.reason] ?? r.reason)}</div>
+  const confetti = r.winner === seat
+    ? `<div class="confetti">${Array.from({ length: 36 }, (_, i) => `<i style="left:${(i * 37) % 100}%;--d:${(i % 9) * 0.12}s;--c:${["#f2c74d", "#6bd98c", "#6194ff", "#e661d9", "#ff7566"][i % 5]}"></i>`).join("")}</div>`
+    : "";
+  return `${confetti}<div class="result"><div class="rtitle ${cls}">${title}</div><div class="sub big">${esc(REASON_TEXT[r.reason] ?? r.reason)}</div>
     <div class="panel row center"><div class="stat"><small>남은 체력</small><b>${r.score[seat] ?? 0} : ${r.score[1 - seat] ?? 0}</b></div>
       <div class="stat"><small>라운드 승</small><b>${r.kills[seat] ?? 0} : ${r.kills[1 - seat] ?? 0}</b></div></div>
     ${rating ? `<div class="big ${delta >= 0 ? "good" : "bad"}">레이팅 ${rating.before} → ${rating.after} (${delta >= 0 ? "+" : ""}${delta})</div>` : ""}
@@ -253,12 +256,50 @@ function roomShell(room) {
     default: body = `<div class="center-msg">이 웹 버전은 체스판 자동 전투만 지원해요. (${esc(PHASE_NAME[room.phase] ?? room.phase)})</div>`;
   }
   return `<div class="topbar"><img class="mini-logo" src="assets/logo.png" alt=""><b class="mono">${esc(room.code)}</b><span class="grow"></span>${players}
-    <button class="btn sec" data-act="mute" title="효과음">${sfx.muted ? "🔇" : "🔊"}</button><button class="btn sec" data-act="guide" data-tab="flow">📖 가이드</button>
+    <button class="btn sec" data-act="mute" title="효과음">${sfx.muted ? "🔇" : "🔊"}</button><button class="btn sec" data-act="bgm" title="배경 음악">${bgm.on ? "🎵" : "🎶"}</button><button class="btn sec" data-act="guide" data-tab="flow">📖 가이드</button>
     ${room.isHost ? `<button class="btn sec" data-act="room-close" data-code="${esc(room.code)}" data-from="room">🗑 방 닫기</button>` : ""}<button class="btn sec" data-act="leave">나가기</button></div>
     ${S.status === "reconnecting" ? `<div class="warn center">다시 연결하는 중...</div>` : ""}<div class="room">${body}</div>`;
 }
 
 let lastPhaseKey = "";
+
+/**
+ * 직전 화면과 비교해서 효과음을 내고 다음 그림의 기준값을 저장한다.
+ * (새 기물·무기 반짝임, 진행 링, 골드 숫자는 그릴 때 S.fx의 직전 값과 비교한다.)
+ */
+function applyFx(room, inRoom) {
+  const fx = S.fx;
+  const phase = inRoom ? room.phase : "";
+  if (phase !== fx.phase) {
+    if (phase === "prep") sfx.play("roundStart");
+    if (phase === "combat") sfx.play("combatStart");
+    if (inRoom) {
+      app.classList.add("phase-enter");
+      setTimeout(() => app.classList.remove("phase-enter"), 600);
+    }
+  }
+  const mine = phase === "prep" ? room.chess?.me : null;
+  if (mine) {
+    const cap = room.chess.deployCap;
+    const ratio = cap > 0 ? Math.min(1, mine.board.length / cap) : 0;
+    // 새로 합쳐진 ★2, 새로 낀 무기, 판이 가득 찬 순간
+    const all = [...mine.board, ...mine.bench.filter(Boolean)];
+    if (fx.phase === "prep" && all.some((u) => u.star >= 2 && !fx.uids.has(u.uid))) sfx.play("merge");
+    else if (fx.phase === "prep" && all.some((u) => u.weapon && fx.uids.has(u.uid) && fx.weapons[u.uid] !== u.weapon)) sfx.play("equip");
+    else if (fx.phase === "prep" && fx.ring != null && fx.ring < 1 && ratio >= 1) sfx.play("full");
+    fx.ring = ratio;
+    fx.gold = mine.gold;
+    fx.uids = new Set(all.map((u) => u.uid));
+    fx.weapons = Object.fromEntries(all.filter((u) => u.weapon).map((u) => [u.uid, u.weapon]));
+    fx.shop = mine.shop.join("|");
+  } else if (phase !== "prep") {
+    fx.ring = null;
+    fx.gold = null;
+    fx.shop = "";
+    if (phase !== "combat") { fx.uids = new Set(); fx.weapons = {}; }
+  }
+  fx.phase = phase;
+}
 function render() {
   const active = document.activeElement;
   const keepFocus = active && active.id ? { id: active.id, start: active.selectionStart, end: active.selectionEnd } : null;
@@ -283,6 +324,7 @@ function render() {
     }
   }
   const phaseKey = room ? `${room.phase}:${room.chess?.round ?? 0}` : "";
+  applyFx(room, inRoom);
   if (room?.phase === "result" && lastPhaseKey !== phaseKey) {
     const seat = mySeat();
     const winner = room.result?.winner;
@@ -401,6 +443,7 @@ document.addEventListener("click", (event) => {
   switch (d.act) {
     case "create": createRoom(); break;
     case "mute": sfx.toggle(); render(); break;
+    case "bgm": bgm.toggle(); render(); break;
     case "create-guest": createGuestRoom(); break;
     case "live": openLive(); break;
     case "myrooms": openMyRooms(); break;
@@ -520,29 +563,73 @@ document.addEventListener("submit", (event) => {
   if (form.dataset.form === "guest") joinAsGuest();
 });
 
-// 드래그: 기물을 판, 대기석, 판매 칸으로 끌어다 놓는다.
-let dragUid = null;
+// 드래그: 기물은 판·대기석·판매 칸·무기 보관함으로, 무기는 기물 위로, 재료는 재련대로 끌어다 놓는다.
+let drag = null; // { kind: "unit" | "weapon" | "material", id }
+
+/** 끌고 있는 것이 이 칸에 놓일 수 있는가 */
+function accepts(kind, zoneKind) {
+  if (kind === "unit") return ["cell", "bench", "sell", "inventory"].includes(zoneKind);
+  if (kind === "weapon") return ["cell", "bench"].includes(zoneKind);
+  if (kind === "material") return zoneKind === "smelter";
+  return false;
+}
+
+const clearDragOver = () => document.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
+
 document.addEventListener("dragstart", (event) => {
-  const el = event.target.closest?.("[data-uid]");
+  const el = event.target.closest?.("[data-drag]");
   if (!el) return;
-  dragUid = el.dataset.uid;
-  event.dataTransfer.setData("text/plain", dragUid);
+  drag = { kind: el.dataset.drag, id: el.dataset.id ?? el.dataset.uid };
+  event.dataTransfer.setData("text/plain", `${drag.kind}:${drag.id}`);
   event.dataTransfer.effectAllowed = "move";
+  el.classList.add("dragging");
+  sfx.play("pickup");
 });
-document.addEventListener("dragend", () => { dragUid = null; });
+document.addEventListener("dragend", (event) => {
+  drag = null;
+  event.target.classList?.remove("dragging");
+  clearDragOver();
+});
 document.addEventListener("dragover", (event) => {
-  if (dragUid && event.target.closest?.("[data-drop]")) event.preventDefault();
+  if (!drag) return;
+  const zone = event.target.closest?.("[data-drop]");
+  if (zone && accepts(drag.kind, zone.dataset.drop)) event.preventDefault();
+});
+document.addEventListener("dragenter", (event) => {
+  if (!drag) return;
+  const zone = event.target.closest?.("[data-drop]");
+  clearDragOver();
+  if (zone && accepts(drag.kind, zone.dataset.drop)) zone.classList.add("drag-over");
 });
 document.addEventListener("drop", (event) => {
   const zone = event.target.closest?.("[data-drop]");
-  const uid = dragUid ?? event.dataTransfer?.getData("text/plain");
-  dragUid = null;
+  const item = drag;
+  drag = null;
+  clearDragOver();
   const mine = S.room?.chess?.me;
-  if (!zone || !uid || !mine || mine.done) return;
+  if (!zone || !item || !mine || mine.done || !accepts(item.kind, zone.dataset.drop)) return;
   event.preventDefault();
-  if (zone.dataset.drop === "cell") act.deploy(uid, num(zone.dataset.col), num(zone.dataset.row));
-  else if (zone.dataset.drop === "sell") act.sell(uid);
-  else if (zone.dataset.drop === "bench" && mine.board.some((u) => u.uid === uid)) act.bench(uid);
+  const where = zone.dataset.drop;
+  if (item.kind === "unit") {
+    if (where === "cell") { sfx.play("drop"); act.deploy(item.id, num(zone.dataset.col), num(zone.dataset.row)); }
+    else if (where === "sell") act.sell(item.id);
+    else if (where === "bench" && mine.board.some((u) => u.uid === item.id)) { sfx.play("drop"); act.bench(item.id); }
+    else if (where === "inventory") {
+      const unit = mine.board.find((u) => u.uid === item.id) ?? mine.bench.find((u) => u && u.uid === item.id);
+      if (unit?.weapon) act.unequip(unit.uid);
+      else toast("무기가 없는 기물이에요.");
+    }
+  } else if (item.kind === "weapon") {
+    // 칸이나 대기석 위의 기물에 무기를 낀다. (이미 낀 무기가 있으면 서로 바뀐다)
+    const unit = where === "cell"
+      ? mine.board.find((u) => u.col === num(zone.dataset.col) && u.row === num(zone.dataset.row))
+      : mine.bench[num(zone.dataset.slot)];
+    if (unit) act.equip(item.id, unit.uid);
+    else toast("무기는 기물 위에 놓아요.");
+  } else if (item.kind === "material") {
+    sfx.play("smelt");
+    act.smelt(item.id);
+  }
 });
 
 // ---- 시간 표시: 화면을 다시 그리지 않고 글자만 갱신한다 ----
@@ -550,6 +637,12 @@ document.addEventListener("drop", (event) => {
 setInterval(() => {
   for (const el of document.querySelectorAll("[data-quick]")) {
     el.textContent = `${Math.floor((Date.now() - Number(el.dataset.quick)) / 1000)}초 · 대기 중 ${S.quick?.waiting ?? 1}명`;
+  }
+  // 준비 시간이 5초 남으면 1초마다 똑딱 소리
+  if (S.room?.phase === "prep" && S.room.phaseEndsAt) {
+    const left = Math.ceil((conn.remainingMs(S.room.phaseEndsAt) ?? 0) / 1000);
+    if (left > 0 && left <= 5 && left !== S.fx.tick) { S.fx.tick = left; sfx.play("tick"); }
+    if (left > 5) S.fx.tick = -1;
   }
   for (const el of document.querySelectorAll("[data-timer]")) {
     const end = el.dataset.timer ? Number(el.dataset.timer) : null;
