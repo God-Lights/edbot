@@ -87,7 +87,8 @@ jobs:
           bun local-server/scripts/smoke.ts http://localhost:8787 ADMN
           if ($LASTEXITCODE -ne 0) { throw "점검 실패" }
           # 데이터 폴더가 exe 옆에 만들어졌는지
-          if (-not (Test-Path "$dir/commander-data/data/commander.db")) { throw "데이터 폴더가 exe 옆에 없다" }
+          if (-not (Test-Path "$dir/commander-data/data/players.json")) { throw "데이터 폴더(전적 JSON)가 exe 옆에 없다" }
+          if (-not (Test-Path "$dir/commander-data/data/matches.jsonl")) { throw "판 기록(matches.jsonl)이 없다" }
           # 껐다 켜도 방이 남는지
           $room = (Invoke-RestMethod -Method Post "http://localhost:8787/api/rooms?mobius=1").code
           Start-Sleep -Seconds 1   # 저장은 바뀐 뒤 0.15초 안에 디스크에 쓴다. (그 사이에 강제로 끄면 마지막 변경만 잃는다)
