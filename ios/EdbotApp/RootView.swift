@@ -58,7 +58,7 @@ struct LobbyView: View {
                 Image(systemName: local ? "server.rack" : "testtube.2")
                 Text("\(local ? "로컬 서버" : "개발 서버") · \(info.name)").font(.subheadline.bold())
                 if info.edition == "expert" {
-                    Text("엑스퍼트").font(.caption2.bold())
+                    Text(info.packs.isEmpty ? "엑스퍼트" : "엑스퍼트 · 팩 \(info.packs.count)개").font(.caption2.bold())
                         .padding(.horizontal, 8).padding(.vertical, 2)
                         .background(Capsule().fill(Theme.accent.opacity(0.35)))
                 }

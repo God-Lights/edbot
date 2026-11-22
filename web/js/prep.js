@@ -26,8 +26,9 @@ export function token(defId, star, opts = {}) {
     <span class="star">${starText(star)}</span>${opts.armed ? '<span class="armed" title="무기">${ic("shield")}</span>' : ""}</div>`;
 }
 
-export function hpPill(name, hp, color) {
-  const ratio = Math.min(1, Math.max(0, hp / START_HP));
+/** max: 시작 체력(서버가 규칙 값으로 바꿨으면 chess.startHp). 체력 막대의 기준이다. */
+export function hpPill(name, hp, color, max = START_HP) {
+  const ratio = Math.min(1, Math.max(0, hp / (max || START_HP)));
   return `<div class="hp"><div class="hp-top"><b>${esc(name)}</b><span>${ic("heart")} ${Math.max(0, hp)}</span></div>
     <div class="hp-bar"><i style="width:${ratio * 100}%;background:${color}"></i></div></div>`;
 }
@@ -47,11 +48,11 @@ export function gameBar(room, chess) {
     ? `<span class="opp-state ${chess.opponent.done ? "good" : ""}" title="상대 ${chess.opponent.boardCount}기 배치">${chess.opponent.done ? "준비 끝" : "준비 중"}</span>` : "";
   const btn = (act, label, title, extra = "") => `<button class="ibtn" data-act="${act}" title="${title}"${extra}>${label}</button>`;
   return `<header class="gbar">
-    <div class="gb-side"><b class="mono gb-code">${esc(room.code)}</b>${room.mobius ? `<span class="badge mob" title="무한 모드">${ic("infinity")}</span>` : ""}${hpPill(mine, chess.me?.hp ?? 0, "var(--mine)")}</div>
+    <div class="gb-side"><b class="mono gb-code">${esc(room.code)}</b>${room.mobius ? `<span class="badge mob" title="무한 모드">${ic("infinity")}</span>` : ""}${hpPill(mine, chess.me?.hp ?? 0, "var(--mine)", chess.startHp)}</div>
     <div class="gb-center"><b>R${chess.round}/${chess.maxRounds}</b>
       <span class="sub gb-timer" data-timer="${room.phaseEndsAt ?? ""}" data-label="${PHASE_NAME[room.phase]}">${PHASE_NAME[room.phase]} ${countdown(conn.remainingMs(room.phaseEndsAt))}</span>
       ${last ? `<span class="gb-last" title="${esc(last)}">${esc(last)}</span>` : ""}</div>
-    <div class="gb-side gb-right">${hpPill(theirs, chess.opponent?.hp ?? 0, "var(--theirs)")}${opp}
+    <div class="gb-side gb-right">${hpPill(theirs, chess.opponent?.hp ?? 0, "var(--theirs)", chess.startHp)}${opp}
       <div class="gb-btns">${btn("mute", ic(sfx.muted ? "volume-off" : "volume"), "효과음")}${btn("bgm", ic(bgm.on ? "music" : "music-off"), "배경 음악")}${btn("guide", ic("book"), "가이드", ' data-tab="flow"')}
         ${room.isHost ? btn("room-close", ic("trash"), "방 닫기", ` data-code="${esc(room.code)}" data-from="room"`) : ""}${btn("surrender", ic("flag"), "항복")}${btn("leave", ic("log-out"), "나가기")}</div></div>
   </header>`;

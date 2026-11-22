@@ -17,7 +17,8 @@ bun test                                      # 저장소 시험
 ```bash
 bun build.ts                              # 지금 컴퓨터용
 bun build.ts --target bun-windows-x64     # 윈도우용 commander-server.exe (다른 OS에서도 만들 수 있다)
-bun build.ts --edition expert             # 엑스퍼트 이름표(플러그인은 아직 없다)
+bun build.ts --edition expert             # 엑스퍼트: commander-data/plugins/ 의 콘텐츠 팩을 읽는다
+bun build.ts --edition vanilla --target bun-windows-x64   # 바닐라: 플러그인 코드가 아예 없다
 ```
 웹 화면이 실행파일 안에 들어가서, **exe 하나만 있으면** 돈다. 데이터는 exe 옆 `commander-data/`에 만든다.
 (쓸 수 없는 폴더면 `%APPDATA%\CommanderServer`.) `--data 경로`로 바꿀 수 있다.
@@ -55,6 +56,9 @@ commander-data/
 - 서버 엔진 코드는 전적 저장소를 `RankingStore`(`server/src/ranking/store.ts`) 한 겹으로만 쓴다. 운영·개발은 D1, 로컬은 JSON 파일.
 
 ## 지금의 한계 (시제품)
-- 플러그인과 바닐라/엑스퍼트 구분은 이름뿐이다.
+
 - 전적이 남는 순간(판이 끝날 때) 쓰는 파일은 바로 저장하지만, 방 상태(`objects/`)는 바뀐 뒤 0.15초 안에 쓴다. 그 사이에 강제로 끄면 마지막 변경만 잃는다.
 - 서명이 없어서 처음 실행할 때 Windows SmartScreen 경고가 뜬다. ("추가 정보" -> "실행")
+
+## 플러그인 (엑스퍼트만)
+`COMMANDER_EDITION=expert bun run dev` 또는 엑스퍼트 exe로 켜면 `commander-data/plugins/`를 만들고 거기의 `*.json`·`*/pack.json`을 읽는다. 시작 화면에 적용된 팩과 거절된 팩(이유 포함)이 나온다. 형식은 `docs/PLUGINS.md`. 바닐라는 이 폴더를 읽지 않는다.

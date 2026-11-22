@@ -127,6 +127,7 @@ final class AppModel {
         user = nil
         authToken = tokens.load()
         serverInfo = nil
+        clearChessCatalog()
         refreshServerInfo(after: 0.6)
     }
 
@@ -274,6 +275,11 @@ final class AppModel {
         guard let connection else { return }
         play(.combine)
         Task { await connection.sendCombine(a, b) }
+    }
+
+    /// 서버가 바뀌면 그 서버의 말·재료·무기 목록(팩 포함)이 다르다. 비워 두면 다음에 다시 읽는다.
+    private func clearChessCatalog() {
+        chessUnits = []; chessSynergies = []; chessMaterials = []; chessWeapons = []; chessFusions = []
     }
 
     private func loadChess(from url: URL) {

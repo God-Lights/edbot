@@ -25,7 +25,11 @@ function serverBand() {
   const note = local
     ? "이름이 곧 계정이에요. 전적은 이 서버에만 남아요."
     : "시험용 서버예요. 전적은 개발용 데이터예요.";
-  const expert = server.edition === "expert" ? ` <span class="badge mob" title="플러그인으로 규칙이 달라졌을 수 있어요">엑스퍼트</span>` : "";
+  const packs = server.packs ?? [];
+  const packNames = packs.map((p) => `${p.name} ${p.version}`).join(", ");
+  const expert = server.edition === "expert"
+    ? ` <span class="badge mob" title="${esc(packs.length ? `적용된 팩: ${packNames}` : "플러그인으로 규칙이 달라질 수 있어요")}">엑스퍼트${packs.length ? ` · 팩 ${packs.length}개` : ""}</span>`
+    : "";
   return `<div class="srvband ${esc(server.env)}">${ic(local ? "server" : "flask")} <b>${local ? "로컬 서버" : "개발 서버"} · ${esc(server.name)}</b>${expert}<span class="sub tiny">${note}</span></div>`;
 }
 
@@ -244,9 +248,9 @@ function resultView(room) {
 
 function spectatorHeader(room, chess) {
   const names = [0, 1].map((seat) => room.players.find((p) => p.seat === seat)?.name ?? "?");
-  return `<header class="gbar"><div class="gb-side"><b class="mono gb-code">${esc(room.code)}</b>${hpPill(names[0], chess.hps[0], "var(--mine)")}</div>
+  return `<header class="gbar"><div class="gb-side"><b class="mono gb-code">${esc(room.code)}</b>${hpPill(names[0], chess.hps[0], "var(--mine)", chess.startHp)}</div>
     <div class="gb-center"><b>R${chess.round}/${chess.maxRounds}</b><span class="sub gb-timer" data-timer="${room.phaseEndsAt ?? ""}" data-label="${PHASE_NAME[room.phase]}">${PHASE_NAME[room.phase]} ${countdown(conn.remainingMs(room.phaseEndsAt))}</span></div>
-    <div class="gb-side gb-right">${hpPill(names[1], chess.hps[1], "var(--theirs)")}<span class="badge">${ic("eye")} 관전</span>
+    <div class="gb-side gb-right">${hpPill(names[1], chess.hps[1], "var(--theirs)", chess.startHp)}<span class="badge">${ic("eye")} 관전</span>
       <div class="gb-btns"><button class="ibtn" data-act="mute" title="효과음">${ic(sfx.muted ? "volume-off" : "volume")}</button><button class="ibtn" data-act="leave" title="관전 끝내기">${ic("log-out")}</button></div></div></header>`;
 }
 

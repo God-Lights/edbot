@@ -155,6 +155,17 @@ final class ApiTests: XCTestCase {
         XCTAssertFalse(newer.isCompatible)
     }
 
+    func testServerInfoDecodesPacksAndDefaultsToNone() throws {
+        let withPacks = #"{"protocol":1,"name":"x","env":"local","authMode":"open","edition":"expert","ruleset":"custom-ab12cd34","packs":[{"id":"example","name":"예시","version":"1.0.0"}]}"#
+        let a = try JSONDecoder().decode(ServerInfo.self, from: Data(withPacks.utf8))
+        XCTAssertEqual(a.packs, [ServerInfo.Pack(id: "example", name: "예시", version: "1.0.0")])
+        XCTAssertEqual(a.ruleset, "custom-ab12cd34")
+        let old = #"{"protocol":1,"name":"x","env":"production","authMode":"gl"}"#
+        let b = try JSONDecoder().decode(ServerInfo.self, from: Data(old.utf8))
+        XCTAssertTrue(b.packs.isEmpty)
+        XCTAssertEqual(b.ruleset, "official")
+    }
+
     func testServerInfoIsNilForOldServers() async throws {
         let http = StubHTTP { _ in (#"{"error":"not_found"}"#, 404) }
         let info = try await ApiClient(baseURL: base, http: http).serverInfo()
