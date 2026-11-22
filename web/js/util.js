@@ -36,10 +36,11 @@ const ERRORS = {
   no_material: "그 재료가 없어요.",
   no_free_smelter: "빈 재련대가 없어요. 다음 라운드에 무기가 나와요.",
   no_weapon: "그 무기가 없어요.",
+  spectate_unavailable: "이 방은 관전할 수 없어요. (연습·전체 대전 방이거나 없는 방이에요)",
 };
 export const errorText = (code, fallback) => ERRORS[code] ?? fallback ?? code;
 /** 다시 시도해도 소용없는 오류 */
-export const FATAL = new Set(["room_full", "room_not_found", "unauthorized", "game_in_progress"]);
+export const FATAL = new Set(["room_full", "room_not_found", "unauthorized", "game_in_progress", "spectate_unavailable"]);
 
 export const REASON_TEXT = {
   hp: "상대의 체력을 모두 깎았어요",

@@ -1,11 +1,13 @@
 // COMMANDER 웹 클라이언트. 서버(Cloudflare Worker)와 같은 출처에서 열린다.
 
 import { api } from "./api.js";
-import { combatView, startPlayback, stopPlayback } from "./combat.js";
+import { arenaHtml, combatView, startPlayback, stopPlayback, teamPanels } from "./combat.js";
 import { guideModal, openGuide } from "./guide.js";
 import { autoPlace, S, act, conn, join, leave, me, mySeat, setRender, store, toast, update } from "./state.js";
-import { prepView } from "./prep.js";
+import { hpPill, prepView } from "./prep.js";
+import { openMatchReplay, openReplay, replayAction, replayModal, replayScrub, startReplay } from "./replay.js";
 import { openRanking, rankingModal } from "./ranking.js";
+import { sfx } from "./sfx.js";
 import { PHASE_NAME, REASON_TEXT, countdown, esc } from "./util.js";
 
 const app = document.getElementById("app");
@@ -24,15 +26,30 @@ function lobbyView() {
     <div class="menu">
       ${account}
       <div class="panel stack">
-        <button class="btn primary wide" data-act="create"${S.creating ? " disabled" : ""}>${S.creating ? "방을 만드는 중..." : "방 만들기"}</button>
+        <button class="btn primary wide" data-act="quick"${S.quick ? " disabled" : ""}>⚔ 빠른 대전 (비슷한 실력의 상대 찾기)</button>
+        <button class="btn sec wide" data-act="create"${S.creating ? " disabled" : ""}>${S.creating ? "방을 만드는 중..." : "방 만들기"}</button>
         <div class="two"><button class="btn sec" data-act="ranking">🏆 랭킹</button><button class="btn sec" data-act="guide" data-tab="flow">📖 게임 가이드</button></div>
+        <label class="levelrow"><span class="sub">봇 난이도</span>
+          <select id="botlevel" class="input sel">${[["", "기본 (연습 쉬움, 전체 보통)"], ["easy", "쉬움"], ["normal", "보통"], ["hard", "어려움"]]
+            .map(([v, t]) => `<option value="${v}"${S.botLevel === v ? " selected" : ""}>${t}</option>`).join("")}</select></label>
         <button class="btn sec wide" data-act="join-code" data-code="ADMN">🤖 연습 대전 (봇과 한 판, 쉬운 캐릭터만)</button>
         <button class="btn sec wide" data-act="join-code" data-code="ADMF">🤖 전체 대전 (봇, 모든 캐릭터와 자원 시스템)</button>
         <div class="or"><i></i><span>또는</span><i></i></div>
+        <form class="row" data-form="watch"><input id="watch" class="input code" maxlength="4" placeholder="관전할 방 코드" autocapitalize="characters" autocomplete="off" value="${esc(S.watchCode ?? "")}">
+          <button class="btn sec" type="submit">👁 관전</button></form>
         <form class="row" data-form="join"><input id="code" class="input code" maxlength="4" placeholder="방 코드 4자리" autocapitalize="characters" autocomplete="off" value="${esc(S.roomCode)}">
           <button class="btn sec" type="submit">입장</button></form>
       </div>
     </div></div>`;
+}
+
+function quickView() {
+  const waited = Math.floor((Date.now() - S.quick.startedAt) / 1000);
+  return `<div class="center-msg"><div class="spinner"></div><h2>상대를 찾는 중...</h2>
+    <div class="sub" data-quick="${S.quick.startedAt}">${waited}초 · 대기 중 ${S.quick.waiting ?? 1}명</div>
+    <div class="sub">오래 기다릴수록 더 넓은 실력의 상대와 붙어요.</div>
+    ${waited >= 20 ? `<div class="sub warn">상대가 없나요? 연습 대전으로 먼저 연습해 보세요.</div>` : ""}
+    <button class="btn sec" data-act="quick-cancel">취소</button></div>`;
 }
 
 function roomLobbyView(room) {
@@ -41,7 +58,8 @@ function roomLobbyView(room) {
   return `<div class="roomlobby"><div class="sub">방 코드</div><div class="code-big">${esc(room.code)}</div>
     ${room.players.length < 2 ? `<div class="sub">상대를 기다리는 중... 방 코드를 알려 주세요.</div>` : ""}
     <div class="row center">${cards}</div>
-    <button class="btn primary" data-act="ready">${ready ? "준비 취소" : "준비"}</button></div>`;
+    <button class="btn primary" data-act="ready">${ready ? "준비 취소" : "준비"}</button>
+    ${["ADMN", "ADMF"].includes(room.code) ? "" : `<button class="btn sec" data-act="copy-watch" data-code="${esc(room.code)}">👁 관전 링크 복사</button>`}</div>`;
 }
 
 function resultView(room) {
@@ -56,10 +74,45 @@ function resultView(room) {
       <div class="stat"><small>라운드 승</small><b>${r.kills[seat] ?? 0} : ${r.kills[1 - seat] ?? 0}</b></div></div>
     ${rating ? `<div class="big ${delta >= 0 ? "good" : "bad"}">레이팅 ${rating.before} → ${rating.after} (${delta >= 0 ? "+" : ""}${delta})</div>` : ""}
     <div class="sub" data-timer="${room.phaseEndsAt ?? ""}" data-suffix=" 뒤 로비로 돌아가요">${countdown(conn.remainingMs(room.phaseEndsAt))} 뒤 로비로 돌아가요</div>
-    <button class="btn sec" data-act="ranking">🏆 랭킹 보기</button></div>`;
+    <div class="row center">${Object.keys(S.sessionRounds).length ? `<button class="btn sec" data-act="rewatch-all">▶ 전투 다시 보기 (${Object.keys(S.sessionRounds).length}라운드)</button>` : ""}
+    <button class="btn sec" data-act="ranking">🏆 랭킹 보기</button></div></div>`;
+}
+
+function spectatorHeader(room, chess) {
+  const names = [0, 1].map((seat) => room.players.find((p) => p.seat === seat)?.name ?? "?");
+  return `<div class="panel header"><div class="hrow">${hpPill(names[0], chess.hps[0], "var(--mine)")}
+    <div class="center"><b>라운드 ${chess.round} / ${chess.maxRounds}</b><span class="sub" data-timer="${room.phaseEndsAt ?? ""}" data-label="${PHASE_NAME[room.phase]}">${PHASE_NAME[room.phase]} ${countdown(conn.remainingMs(room.phaseEndsAt))}</span></div>
+    ${hpPill(names[1], chess.hps[1], "var(--theirs)")}<span class="grow"></span><span class="badge">👁 관전 중</span></div></div>`;
+}
+
+function spectatorBody(room) {
+  const chess = room.chess;
+  const names = [0, 1].map((seat) => room.players.find((p) => p.seat === seat)?.name ?? "?");
+  if (room.phase === "lobby" || !chess) {
+    return `<div class="roomlobby"><div class="sub">방 코드</div><div class="code-big">${esc(room.code)}</div>
+      <div class="sub">${esc(names.join(" vs "))} · 경기가 시작되기를 기다리는 중... (관전 화면은 전투부터 보여요)</div></div>`;
+  }
+  if (room.phase === "prep") {
+    return `${spectatorHeader(room, chess)}<div class="center-msg"><div class="spinner"></div><b>플레이어들이 준비하는 중...</b><div class="sub">준비 단계의 상점과 배치는 보이지 않아요. 전투가 시작되면 함께 볼 수 있어요.</div></div>`;
+  }
+  if (room.phase === "combat" && chess.combat) {
+    return `${spectatorHeader(room, chess)}<div class="combat">${arenaHtml(chess.combat, 0)}<div class="side">${teamPanels(chess.combat, 0)}</div></div>`;
+  }
+  if (room.phase === "result" && room.result) {
+    const r = room.result;
+    const title = r.winner == null ? "무승부" : `${esc(names[r.winner])} 승리!`;
+    return `<div class="result"><div class="rtitle">${title}</div><div class="sub big">${esc(REASON_TEXT[r.reason] ?? r.reason)}</div>
+      <div class="panel row center"><div class="stat"><small>남은 체력</small><b>${r.score[0]} : ${r.score[1]}</b></div><div class="stat"><small>라운드 승</small><b>${r.kills[0]} : ${r.kills[1]}</b></div></div></div>`;
+  }
+  return `<div class="center-msg">불러오는 중...</div>`;
 }
 
 function roomShell(room) {
+  if (S.spectating) {
+    return `<div class="topbar"><img class="mini-logo" src="assets/logo.png" alt=""><b class="mono">${esc(room.code)}</b><span class="grow"></span>
+      <button class="btn sec" data-act="mute">${sfx.muted ? "🔇" : "🔊"}</button><button class="btn sec" data-act="leave">관전 끝내기</button></div>
+      ${S.status === "reconnecting" ? `<div class="warn center">다시 연결하는 중...</div>` : ""}<div class="room">${spectatorBody(room)}</div>`;
+  }
   const players = room.players.map((p) => `<span class="pchip ${p.id === S.myId ? "me" : "them"}"><i class="dot ${p.connected ? "on" : ""}"></i>${esc(p.name)}${p.id === S.myId ? " (나)" : ""}</span>`).join("");
   let body = "";
   switch (room.phase) {
@@ -70,7 +123,7 @@ function roomShell(room) {
     default: body = `<div class="center-msg">이 웹 버전은 체스판 자동 전투만 지원해요. (${esc(PHASE_NAME[room.phase] ?? room.phase)})</div>`;
   }
   return `<div class="topbar"><img class="mini-logo" src="assets/logo.png" alt=""><b class="mono">${esc(room.code)}</b><span class="grow"></span>${players}
-    <button class="btn sec" data-act="guide" data-tab="flow">📖 가이드</button><button class="btn sec" data-act="leave">나가기</button></div>
+    <button class="btn sec" data-act="mute" title="효과음">${sfx.muted ? "🔇" : "🔊"}</button><button class="btn sec" data-act="guide" data-tab="flow">📖 가이드</button><button class="btn sec" data-act="leave">나가기</button></div>
     ${S.status === "reconnecting" ? `<div class="warn center">다시 연결하는 중...</div>` : ""}<div class="room">${body}</div>`;
 }
 
@@ -80,14 +133,17 @@ function render() {
   const keepFocus = active && active.id ? { id: active.id, start: active.selectionStart, end: active.selectionEnd } : null;
   const room = S.room;
   const inRoom = !!room && S.status !== "idle";
+  // 전투가 시작되면 열려 있던 다시 보기는 닫는다. (판이 두 개 겹치지 않게)
+  if (S.modal === "replay" && room?.phase === "combat") S.modal = null;
   // 전투 재생은 화면을 다시 그릴 때만 다시 시작한다.
   stopPlayback();
   const modalScroll = document.querySelector(".modal-body")?.scrollTop ?? 0;
-  app.innerHTML = (inRoom ? roomShell(room) : S.status === "connecting" ? `<div class="center-msg">접속하는 중...</div>` : lobbyView())
-    + (S.modal === "guide" ? guideModal() : S.modal === "ranking" ? rankingModal() : "");
+  app.innerHTML = (inRoom ? roomShell(room) : S.quick ? quickView() : S.status === "connecting" ? `<div class="center-msg">접속하는 중...</div>` : lobbyView())
+    + (S.modal === "guide" ? guideModal() : S.modal === "ranking" ? rankingModal() : S.modal === "replay" && S.replay ? replayModal() : "");
   const modalBody = document.querySelector(".modal-body");
   if (modalBody) modalBody.scrollTop = modalScroll;
-  if (inRoom && room.phase === "combat") startPlayback(room);
+  if (S.modal === "replay") startReplay();
+  else if (inRoom && room.phase === "combat") startPlayback(room);
   if (keepFocus) {
     const el = document.getElementById(keepFocus.id);
     if (el) {
@@ -95,7 +151,16 @@ function render() {
       try { el.setSelectionRange(keepFocus.start, keepFocus.end); } catch { /* 입력칸이 아니면 무시 */ }
     }
   }
-  lastPhaseKey = room ? `${room.phase}:${room.chess?.round ?? 0}` : "";
+  const phaseKey = room ? `${room.phase}:${room.chess?.round ?? 0}` : "";
+  if (room?.phase === "result" && lastPhaseKey !== phaseKey) {
+    const seat = mySeat();
+    const winner = room.result?.winner;
+    sfx.play(winner == null ? "click" : winner === seat ? "win" : "lose");
+  }
+  lastPhaseKey = phaseKey;
+  // 빠른 대전으로 들어온 방은 로비에서 자동으로 준비한다.
+  if (inRoom && S.autoReady && room.phase === "lobby" && me() && !me().ready) act.ready(true);
+  if (inRoom && room.phase !== "lobby") S.autoReady = false;
   if (S.message) {
     toastEl.textContent = S.message;
     toastEl.hidden = false;
@@ -142,6 +207,50 @@ function benchClick(slot) {
   else if (mine.board.some((u) => u.uid === S.selUid)) act.bench(S.selUid); // 판 위의 기물을 빈 대기석으로
 }
 
+// ---- 빠른 대전 ----
+
+let quickTimer = null;
+
+async function quickMatch() {
+  if (S.quick) return;
+  update({ message: "" });
+  const joined = await api.matchJoin(S.user?.nickname ?? S.name);
+  if (joined.error) {
+    toast(joined.status === 401 ? "로그인이 필요해요. 로그인하기를 눌러 주세요." : "매칭을 시작할 수 없어요.");
+    return;
+  }
+  if (joined.code) return startQuickRoom(joined.code);
+  update({ quick: { ticket: joined.ticket, startedAt: Date.now(), waiting: joined.waiting } });
+  clearInterval(quickTimer);
+  quickTimer = setInterval(async () => {
+    if (!S.quick) return clearInterval(quickTimer);
+    const status = await api.matchPoll(S.quick.ticket);
+    if (status.error) {
+      clearInterval(quickTimer);
+      update({ quick: null });
+      toast("매칭이 끊겼어요. 다시 시도해 주세요.");
+    } else if (status.code) {
+      clearInterval(quickTimer);
+      startQuickRoom(status.code);
+    } else {
+      S.quick.waiting = status.waiting;
+    }
+  }, 1500);
+}
+
+function startQuickRoom(code) {
+  update({ quick: null });
+  join(code);
+  S.autoReady = true; // join()이 먼저 비우므로 그 뒤에 켠다
+}
+
+async function cancelQuick() {
+  clearInterval(quickTimer);
+  const ticket = S.quick?.ticket;
+  update({ quick: null });
+  if (ticket) await api.matchCancel(ticket);
+}
+
 async function createRoom() {
   update({ creating: true, message: "" });
   const result = await api.createRoom();
@@ -155,9 +264,29 @@ document.addEventListener("click", (event) => {
   const el = event.target.closest("[data-act]");
   if (!el || el.disabled) return;
   const d = el.dataset;
+  if (d.act.startsWith("replay-") && d.act !== "replay-match") { replayAction(d.act, d); return; }
+  const SFX = { buy: "buy", market: "buy", smelt: "buy", sell: "sell", "sell-sel": "sell", cell: "place", auto: "place", done: "ready", ready: "ready", reroll: "click", "pick-weapon": "click", "bench-slot": "click" };
+  if (SFX[d.act]) sfx.play(SFX[d.act]);
   switch (d.act) {
     case "create": createRoom(); break;
-    case "join-code": join(d.code); break;
+    case "mute": sfx.toggle(); render(); break;
+    case "watch": join(S.watchCode ?? "", "", true); break;
+    case "copy-watch": copyWatchLink(d.code); break;
+    case "rewatch": {
+      const keys = Object.keys(S.sessionRounds).map(Number).sort((a, b) => a - b);
+      if (keys.length) openReplay([S.sessionRounds[keys[keys.length - 1]]], mySeat() ?? 0, "지난 전투 다시 보기");
+      break;
+    }
+    case "rewatch-all": {
+      const rounds = Object.keys(S.sessionRounds).map(Number).sort((a, b) => a - b).map((k) => S.sessionRounds[k]);
+      openReplay(rounds, mySeat() ?? 0, "이번 판 전투 다시 보기");
+      S.replay && (S.replay.idx = 0);
+      break;
+    }
+    case "replay-match": openMatchReplay(d.id); break;
+    case "quick": quickMatch(); break;
+    case "quick-cancel": cancelQuick(); break;
+    case "join-code": join(d.code, S.botLevel); break;
     case "ranking": openRanking(); break;
     case "guide": openGuide(d.tab); break;
     case "guide-tab": update({ guideTab: d.tab }); break;
@@ -198,7 +327,30 @@ document.addEventListener("click", (event) => {
   if (event.target.classList?.contains("modal")) update({ modal: null });
 });
 
+document.addEventListener("change", (event) => {
+  if (event.target.id === "botlevel") {
+    S.botLevel = event.target.value;
+    store("edbot.botLevel", S.botLevel);
+  }
+});
+
+async function copyWatchLink(code) {
+  const link = `${location.origin}/?watch=${code}`;
+  try {
+    await navigator.clipboard.writeText(link);
+    toast("관전 링크를 복사했어요. 보내 주세요!");
+  } catch {
+    toast(link);
+  }
+}
+
 document.addEventListener("input", (event) => {
+  if (event.target.id === "scrub") replayScrub(event.target.value);
+  if (event.target.id === "watch") {
+    const cleaned = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+    if (cleaned !== event.target.value) event.target.value = cleaned;
+    S.watchCode = cleaned;
+  }
   if (event.target.id === "name") S.name = event.target.value;
   if (event.target.id === "code") {
     const cleaned = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
@@ -212,6 +364,7 @@ document.addEventListener("submit", (event) => {
   if (!form) return;
   event.preventDefault();
   if (form.dataset.form === "join") join(S.roomCode);
+  if (form.dataset.form === "watch") join(S.watchCode ?? "", "", true);
 });
 
 // 드래그: 기물을 판, 대기석, 판매 칸으로 끌어다 놓는다.
@@ -242,6 +395,9 @@ document.addEventListener("drop", (event) => {
 // ---- 시간 표시: 화면을 다시 그리지 않고 글자만 갱신한다 ----
 
 setInterval(() => {
+  for (const el of document.querySelectorAll("[data-quick]")) {
+    el.textContent = `${Math.floor((Date.now() - Number(el.dataset.quick)) / 1000)}초 · 대기 중 ${S.quick?.waiting ?? 1}명`;
+  }
   for (const el of document.querySelectorAll("[data-timer]")) {
     const end = el.dataset.timer ? Number(el.dataset.timer) : null;
     const text = countdown(conn.remainingMs(end));
@@ -274,7 +430,8 @@ window.addEventListener("keydown", (event) => {
     if (catalog) update({ catalog });
   } catch { /* 가이드를 열 때 다시 시도하지 않아도 게임은 된다 */ }
   // 주소의 ?room=ABCD 로 바로 들어갈 수 있다.
-  const code = new URLSearchParams(location.search).get("room");
-  if (code) join(code);
+  const params = new URLSearchParams(location.search);
+  if (params.get("watch")) join(params.get("watch"), "", true);
+  else if (params.get("room")) join(params.get("room"));
 })();
 

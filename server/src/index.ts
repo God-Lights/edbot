@@ -8,17 +8,16 @@ import type { AuthEnv } from "./auth";
 import { loadSourceJson } from "./sidestore";
 import { SYNERGIES } from "./synergy";
 import { WEAPONS } from "./forge/weapons";
-import { getLeaderboard, getPlayerStats, getRecentMatches } from "./ranking/store";
+import { getLeaderboard, getPlayerStats, getRecentMatches, getReplay } from "./ranking/store";
 import { approvedPage, donePage, failedPage, homePage } from "./pages";
 import { Room } from "./room";
+import { Matchmaker } from "./matchmaker";
+import { CODE_ALPHABET, CODE_LENGTH, generateRoomCode } from "./codes";
 
-export { AuthStore, Room };
+export { AuthStore, Matchmaker, Room };
 
 
 
-// 헷갈리는 글자(0/O, 1/I/L)를 뺀 알파벳. 4자리면 약 80만 가지.
-const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-const CODE_LENGTH = 4;
 const CODE_PATTERN = new RegExp(`^[${CODE_ALPHABET}]{${CODE_LENGTH}}$`);
 const MAX_CREATE_ATTEMPTS = 8;
 
@@ -26,14 +25,6 @@ const MAX_CREATE_ATTEMPTS = 8;
 const TEST_ROOM_CODE = "ADMN";
 /** 전체 캐릭터와 자원 시스템까지 켜진 봇 대전 (연습을 넘어선 판). */
 const FULL_TEST_ROOM_CODE = "ADMF";
-
-function generateRoomCode(): string {
-  for (;;) {
-    const bytes = crypto.getRandomValues(new Uint8Array(CODE_LENGTH));
-    const code = Array.from(bytes, (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
-    if (code !== TEST_ROOM_CODE && code !== FULL_TEST_ROOM_CODE) return code; // 일반 방이 테스트 코드와 겹치지 않게
-  }
-}
 
 const CORS_HEADERS = {
   "access-control-allow-origin": "*",
@@ -175,9 +166,49 @@ export default {
       return json({ error: "could_not_create_room" }, 503);
     }
 
+    // ---- 빠른 대전 매칭 ----
+    // POST /api/match/join -> 줄을 선다. 비슷한 레이팅의 상대가 있으면 바로 방 코드를 돌려준다.
+    // GET /api/match/poll?ticket= -> 기다리는 중이면 waiting, 짝이 지어지면 방 코드. POST /api/match/cancel?ticket= -> 줄에서 나온다.
+    if (parts.length === 3 && parts[0] === "api" && parts[1] === "match") {
+      const me = await identify(env, request);
+      if (enabled && !me) return json({ error: "unauthorized", loginUrl: `${origin}/auth/login` }, 401);
+      const matchmaker = env.MATCH.get(env.MATCH.idFromName("global"));
+      if (request.method === "POST" && parts[2] === "join") {
+        const name = (me?.nickname ?? url.searchParams.get("name") ?? "Player").slice(0, 16);
+        const userId = me?.id ?? `anon:${name}`;
+        let rating = 1000;
+        if (me) {
+          try {
+            rating = (await getPlayerStats(env.DB, me.id))?.rating ?? 1000;
+          } catch {
+            rating = 1000; // 랭킹 DB가 준비되지 않아도 매칭은 된다
+          }
+        }
+        return json(await matchmaker.join({ userId, name, rating }));
+      }
+      if (request.method === "GET" && parts[2] === "poll") {
+        const status = await matchmaker.poll(url.searchParams.get("ticket") ?? "");
+        return status ? json(status) : json({ error: "ticket_expired" }, 404);
+      }
+      if (request.method === "POST" && parts[2] === "cancel") {
+        return json({ ok: await matchmaker.cancel(url.searchParams.get("ticket") ?? "") });
+      }
+    }
+
     // GET /api/characters -> 캐릭터 12명의 데이터 (이름, 기물, 능력치).
     if (request.method === "GET" && parts.length === 2 && parts[0] === "api" && parts[1] === "characters") {
       return json({ characters: CHARACTERS });
+    }
+
+    // GET /api/replays/:id -> 끝난 판의 다시 보기 데이터 (id는 내 전적 목록의 id).
+    if (request.method === "GET" && parts.length === 3 && parts[0] === "api" && parts[1] === "replays") {
+      try {
+        const data = await getReplay(env.DB, decodeURIComponent(parts[2] ?? ""));
+        if (!data) return json({ error: "replay_not_found" }, 404);
+        return new Response(data, { headers: { "content-type": "application/json", ...CORS_HEADERS } });
+      } catch {
+        return json({ error: "replay_unavailable" }, 503);
+      }
     }
 
     // GET /api/leaderboard?limit=20 -> 레이팅 순위. 로그인했다면 내 줄에 isMe가 붙는다.

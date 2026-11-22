@@ -77,7 +77,8 @@ export type ErrorCode =
   | "market_sold"
   | "no_material"
   | "no_free_smelter"
-  | "no_weapon";
+  | "no_weapon"
+  | "spectate_unavailable";
 
 export interface PublicPlayer {
   id: string;
@@ -328,6 +329,8 @@ export interface ChessSnapshot {
   shopOdds: [number, number, number, number];
   /** 입문 모드(쉬운 캐릭터만 나온다) */
   lite: boolean;
+  /** seat별 체력. 관전자도 볼 수 있는 공개 정보 */
+  hps: [number, number];
   me: ChessSelfSnapshot | null;
   opponent: ChessOpponentSnapshot | null;
   /** 자원 시스템을 쓰는 판이면 이번 라운드의 자원 칸과 광물 시장 */

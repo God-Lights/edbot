@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { runChessBot } from "../src/bot";
 import {
-  addBotIfNeeded, advancePhase, createRoom, joinRoom, nextDeadline, playerChess, playerSurrender, setReady, takeMatchRecord, toSnapshot,
+  addBotIfNeeded, advancePhase, createRoom, joinRoom, nextDeadline, playerChess, playerSurrender, setBotLevel, setReady, takeMatchRecord, toSnapshot,
 } from "../src/room-state";
 import type { RoomState } from "../src/room-state";
 import { MAX_ROUNDS } from "../src/chess/game";
@@ -168,5 +168,77 @@ describe("체스 방: 전체 게임", () => {
     expect(rec!.users.map((u) => u.userId)).toEqual(["u1", "u2"]);
     expect(rec!.picks).toHaveLength(2);
     expect(takeMatchRecord(state, now)).toBeNull(); // 한 번만
+  });
+});
+
+describe("봇 난이도", () => {
+  const rngFor = (seed: number) => seeded(seed);
+
+  function playBots(levels: Array<"easy" | "normal" | "hard">, lite: boolean, seed: number) {
+    let n = 0;
+    const state = createRoom("SIM", 0, false, "chess", lite);
+    const rng = rngFor(seed);
+    const ids: string[] = [];
+    for (const name of ["가", "나"]) {
+      const r = joinRoom(state, { name }, 0, () => `id${++n}`);
+      if (!r.ok) throw new Error("join");
+      r.player.bot = true;
+      ids.push(r.player.id);
+    }
+    state.players.forEach((p, i) => { p.botLevel = levels[i]; });
+    for (const id of ids) setReady(state, id, true, 0, 1, rng);
+    let now = 0, guard = 0;
+    while (state.phase !== "result" && guard++ < 300) {
+      for (const id of ids) runChessBot(state, id, now, 1, rng);
+      now = Math.max(now + 1000, (state.phaseEndsAt ?? now) + 1);
+      advancePhase(state, now, 1, rng);
+    }
+    return state;
+  }
+
+  it("세 난이도 모두 끝까지 플레이하고 결과가 나온다 (입문·전체 모드)", () => {
+    for (const lite of [true, false]) {
+      for (const level of ["easy", "normal", "hard"] as const) {
+        const state = playBots([level, level], lite, 5);
+        expect(state.phase).toBe("result");
+        expect(state.result).not.toBeNull();
+      }
+    }
+  });
+
+  it("쉬운 봇은 자원 시스템을 쓰지 않는다", () => {
+    const state = playBots(["easy", "easy"], false, 3);
+    for (const p of state.chess!.players) {
+      expect(Object.keys(p.weapons)).toHaveLength(0);
+      expect(p.board.every((u) => !u.weapon)).toBe(true);
+    }
+  });
+
+  it("보통 봇이 쉬운 봇보다 훨씬 자주 이긴다", () => {
+    let normalWins = 0;
+    const games = 16;
+    for (let i = 0; i < games; i++) {
+      const swap = i % 2 === 1;
+      const state = playBots(swap ? ["easy", "normal"] : ["normal", "easy"], true, 100 + i);
+      const normalSeat = swap ? 1 : 0;
+      if (state.result?.winner === normalSeat) normalWins++;
+    }
+    expect(normalWins).toBeGreaterThanOrEqual(12);
+  });
+
+  it("봇 난이도는 로비에서만 바꿀 수 있고, 테스트 대전 방에서만 된다", () => {
+    let n = 0;
+    const test = createRoom("ADMN", 0, true, "chess");
+    joinRoom(test, { name: "에드" }, 0, () => `id${++n}`);
+    expect(test.botLevel).toBe("easy"); // 연습 대전의 기본
+    expect(setBotLevel(test, "hard")).toBe(true);
+    expect(setBotLevel(test, "엉터리")).toBe(false);
+    addBotIfNeeded(test);
+    expect(test.players.find((p) => p.bot)?.botLevel).toBe("hard");
+    expect(setBotLevel(test, "normal")).toBe(true);
+    expect(test.players.find((p) => p.bot)?.botLevel).toBe("normal");
+    const normalRoom = createRoom("ABCD", 0, false, "chess");
+    expect(setBotLevel(normalRoom, "hard")).toBe(false);
+    expect(createRoom("ADMF", 0, true, "chess", false).botLevel).toBe("normal"); // 전체 대전의 기본
   });
 });

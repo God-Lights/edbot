@@ -25,9 +25,21 @@ export const S = {
   modal: null, // null | "guide" | "ranking"
   guideTab: "flow",
   ranking: null,
+  /** 봇 난이도: "" (기본: 연습 쉬움, 전체 보통) | easy | normal | hard */
+  botLevel: load("edbot.botLevel"),
   coachDismissed: load("edbot.coachDismissed") === "1",
   tipSeen: load("edbot.tipSeen") === "1",
   creating: false,
+  /** 빠른 대전 줄서기: null | { ticket, startedAt, waiting } */
+  quick: null,
+  /** 관전 중이다 (플레이어가 아니다) */
+  spectating: false,
+  /** 이번 판에서 본 전투 기록 (라운드 번호 -> 전투). 다시 보기에 쓴다. */
+  sessionRounds: {},
+  /** 다시 보기 모달 상태 */
+  replay: null,
+  /** 빠른 대전으로 들어온 방이면 로비에서 자동으로 준비한다 */
+  autoReady: false,
 };
 
 let renderFn = () => {};
@@ -83,6 +95,10 @@ export const conn = new Connection((event) => {
 
 function observe(room) {
   const prev = S.room;
+  if (prev?.phase === "lobby" && room.phase === "prep") S.sessionRounds = {};
+  if (room.phase === "combat" && room.chess?.combat) {
+    S.sessionRounds[room.chess.round] = { round: room.chess.round, ...room.chess.combat };
+  }
   if (prev?.phase !== room.phase || prev?.chess?.round !== room.chess?.round) {
     S.selUid = null;
     S.selWeapon = null;
@@ -90,14 +106,16 @@ function observe(room) {
   S.room = room;
 }
 
-export function join(code) {
+export function join(code, level = "", spectate = false) {
   code = code.trim().toUpperCase();
   if (code.length !== 4) return toast("방 코드는 4자리예요.");
   leave();
   S.status = "connecting";
   S.message = "";
   store("edbot.name", S.name);
-  conn.start(code, S.user?.nickname ?? S.name);
+  S.spectating = spectate;
+  S.sessionRounds = {};
+  conn.start(code, S.user?.nickname ?? S.name, level, spectate);
   renderFn();
 }
 
@@ -108,6 +126,8 @@ export function leave(message = "") {
   S.status = "idle";
   S.selUid = null;
   S.selWeapon = null;
+  S.autoReady = false;
+  S.spectating = false;
   S.message = message;
   renderFn();
 }

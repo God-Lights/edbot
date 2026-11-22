@@ -153,7 +153,10 @@ const BOT_COLS = [3, 4, 2, 5, 1, 6, 0, 7];
 
 const unitValue = (defId: string, star: number): number => (unitDef(defId)?.cost ?? 1) * (star === 2 ? 3 : 1);
 
-/** 한 번 부르면 준비 단계에서 할 수 있는 것을 하고 준비를 끝낸다. 무언가 했으면 true. */
+export type BotLevel = "easy" | "normal" | "hard";
+export const BOT_LEVELS: readonly BotLevel[] = ["easy", "normal", "hard"];
+
+/** 한 번 부르면 준비 단계에서 할 수 있는 것을 하고 준비를 끝낸다. 무언가 했으면 true. 난이도는 봇 플레이어의 botLevel(기본 normal). */
 export function runChessBot(state: RoomState, botId: string, now: number, scale: number, rng: () => number): boolean {
   const player = state.players.find((p) => p.id === botId);
   const chess = state.chess;
@@ -167,16 +170,25 @@ export function runChessBot(state: RoomState, botId: string, now: number, scale:
   if (!chess || state.phase !== "prep") return false;
   const me = chess.players[player.seat];
   if (me.done) return false;
+  const level: BotLevel = player.botLevel ?? "normal";
+  // 어려운 봇은 라운드마다 골드 +1(자원 시스템이 있는 판은 +2) (AI가 사람 고수만큼 약아지기는 어려워서 주는 이점)
+  if (level === "hard" && player.botBonusRound !== chess.round) {
+    player.botBonusRound = chess.round;
+    me.gold += chess.resources ? 2 : 1;
+  }
 
   const cmd = (command: Parameters<typeof playerChess>[2]) => playerChess(state, botId, command, now, scale, rng).ok;
+  const cap = deployCap(chess.round);
+  const units = () => [...me.board, ...me.bench.filter((u): u is NonNullable<typeof u> => u !== null)];
 
-  // 0) 자원: 광물 시장에서 재료를 사고, 재료를 재련대에 넣는다. (자원 시스템이 있는 판만)
+  // 0) 자원: 광물 시장에서 재료를 사고, 재료를 재련대에 넣는다. (자원 시스템이 있는 판, 쉬운 봇은 쓰지 않는다)
   const rarityRank = (id: string): number => ["common", "uncommon", "rare", "legendary"].indexOf(materialDef(id)?.rarity ?? "common");
-  if (chess.resources) {
+  if (chess.resources && level !== "easy") {
     if (!me.marketBought && chess.round >= 2) {
+      const margin = level === "hard" ? 2 : 4;
       const options = chess.market
         .map((id, slot) => ({ slot, price: MARKET_PRICE[materialDef(id)?.rarity ?? "common"] ?? 99, rank: rarityRank(id) }))
-        .filter((o) => o.price + 4 <= me.gold)
+        .filter((o) => o.price + margin <= me.gold)
         .sort((a, b) => b.rank - a.rank || a.slot - b.slot);
       if (options[0]) cmd({ t: "market", slot: options[0].slot });
     }
@@ -188,34 +200,80 @@ export function runChessBot(state: RoomState, botId: string, now: number, scale:
     }
   }
 
-  // 1) 사기: 이미 가진 캐릭터(합치려고) > 비싼 캐릭터 순. 이자(10골드마다 +1)를 위해 10골드 단위는 조금 남긴다.
-  for (let i = 0; i < 12; i++) {
-    const owned = (defId: string) =>
-      [...me.board, ...me.bench.filter((u): u is NonNullable<typeof u> => u !== null)].filter((u) => u.defId === defId && u.star === 1).length;
-    const reserve = 0;
-    const options = me.shop
-      .map((defId, slot) => ({ defId, slot }))
-      .filter((o): o is { defId: string; slot: number } => o.defId !== null && unitDef(o.defId)!.cost <= me.gold - reserve)
-      .sort((a, b) => owned(b.defId) - owned(a.defId) || unitDef(b.defId)!.cost - unitDef(a.defId)!.cost || a.slot - b.slot);
-    const pick = options[0];
-    if (!pick || !cmd({ t: "buy", slot: pick.slot })) break;
+  // 1) 사기. 쉬운 봇: 되는 대로 5개까지. 보통: 이미 가진 캐릭터(합치려고) > 비싼 캐릭터. 어려운 봇: 보통 + 이자를 챙기고 새로고침으로 합칠 캐릭터를 찾는다.
+  const owned = (defId: string) => units().filter((u) => u.defId === defId && u.star === 1).length;
+  /** 기물별로 서로 다른 캐릭터가 몇 명인지 (시너지 계산) */
+  const pieceCounts = (): Map<string, number> => {
+    const seen = new Set<string>();
+    const counts = new Map<string, number>();
+    for (const u of me.board) {
+      if (seen.has(u.defId)) continue;
+      seen.add(u.defId);
+      const piece = unitDef(u.defId)?.piece;
+      if (piece) counts.set(piece, (counts.get(piece) ?? 0) + 1);
+    }
+    return counts;
+  };
+  /** 어려운 봇이 상점 칸을 고르는 점수: 합쳐질수록, 비쌀수록, 시너지가 새로 켜질수록 높다. */
+  const score = (defId: string): number => {
+    const def = unitDef(defId)!;
+    const have = owned(defId);
+    let value = have * 8 + (have >= 2 ? 20 : 0) + def.cost * 4;
+    const thresholds = def.piece === "pawn" ? [2, 4] : [2, 3];
+    const onBoard = me.board.some((u) => u.defId === defId);
+    const count = pieceCounts().get(def.piece) ?? 0;
+    if (!onBoard && thresholds.includes(count + 1)) value += 6;
+    return value;
+  };
+  const buyRound = (maxBuys: number): void => {
+    for (let i = 0; i < maxBuys; i++) {
+      let options = me.shop
+        .map((defId, slot) => ({ defId, slot }))
+        .filter((o): o is { defId: string; slot: number } => o.defId !== null && unitDef(o.defId)!.cost <= me.gold);
+      if (level === "easy") options = options.sort(() => rng() - 0.5);
+      else if (level === "hard") options = options.sort((a, b) => score(b.defId) - score(a.defId) || a.slot - b.slot);
+      else options = options.sort((a, b) => owned(b.defId) - owned(a.defId) || unitDef(b.defId)!.cost - unitDef(a.defId)!.cost || a.slot - b.slot);
+      const pick = options[0];
+      if (!pick || !cmd({ t: "buy", slot: pick.slot })) break;
+    }
+  };
+  if (level === "easy") {
+    buyRound(5);
+  } else if (level === "normal") {
+    buyRound(12);
+  } else {
+    // 어려움: 합칠 캐릭터와 시너지를 보고 사고, 남는 골드로는 새로고침해서 더 찾는다.
+    buyRound(12);
+    for (let r = 0; r < 3 && chess.round >= 2 && me.gold >= 4; r++) {
+      if (!cmd({ t: "reroll" })) break;
+      buyRound(6);
+    }
   }
 
-  // 2) 놓기: 가치가 높은 기물을 판 위로. 판이 가득 차면 더 약한 기물과 자리를 바꾼다.
-  const cap = deployCap(chess.round);
+  // 2) 놓기: 가치가 높은 기물을 판 위로. 판이 가득 차면 더 약한 기물과 자리를 바꾼다. (쉬운 봇은 줄을 아무렇게나 고르고, 자리를 바꾸지 않는다)
+  const limit = cap;
   const cellFree = (col: number, row: number) => !me.board.some((u) => u.col === col && u.row === row);
+  /** 내 쪽(앞 두 줄)에 있는 자원 칸을 내 시점 좌표로 */
+  const myTiles = chess.tiles
+    .map((t) => (player.seat === 0 ? { col: t.x, row: t.y - 4 } : { col: 7 - t.x, row: 3 - t.y }))
+    .filter((c) => c.row >= 0 && c.row <= 3);
   const bestCell = (defId: string): { col: number; row: number } | undefined => {
-    const base = BOT_ROW[unitDef(defId)!.role];
+    // 어려운 봇: 앞줄~가운데 역할은 자원 칸 위에 서서 재료를 캔다.
+    if (level === "hard" && BOT_ROW[unitDef(defId)!.role] <= 1) {
+      const tile = myTiles.find((c) => cellFree(c.col, c.row));
+      if (tile) return tile;
+    }
+    const base = level === "easy" ? Math.floor(rng() * 4) : BOT_ROW[unitDef(defId)!.role];
     for (let row = base; row < 4; row++) for (const col of BOT_COLS) if (cellFree(col, row)) return { col, row };
     for (let row = 0; row < base; row++) for (const col of BOT_COLS) if (cellFree(col, row)) return { col, row };
     return undefined;
   };
   const benchUnits = me.bench.filter((u): u is NonNullable<typeof u> => u !== null).sort((a, b) => unitValue(b.defId, b.star) - unitValue(a.defId, a.star));
   for (const unit of benchUnits) {
-    if (me.board.length < cap) {
+    if (me.board.length < limit) {
       const cell = bestCell(unit.defId);
       if (cell) cmd({ t: "deploy", uid: unit.uid, col: cell.col, row: cell.row });
-    } else {
+    } else if (level !== "easy") {
       const weakest = [...me.board].sort((a, b) => unitValue(a.defId, a.star) - unitValue(b.defId, b.star))[0];
       if (weakest && unitValue(weakest.defId, weakest.star) < unitValue(unit.defId, unit.star)) {
         cmd({ t: "deploy", uid: unit.uid, col: weakest.col, row: weakest.row });
@@ -223,8 +281,8 @@ export function runChessBot(state: RoomState, botId: string, now: number, scale:
     }
   }
 
-  // 3) 무기: 가진 무기를 판 위의 가치 높은 기물부터 낀다.
-  if (chess.resources) {
+  // 3) 무기: 가진 무기를 판 위의 가치 높은 기물부터 낀다. (쉬운 봇은 무기를 안 쓴다)
+  if (chess.resources && level !== "easy") {
     for (const [weaponId, count] of Object.entries(me.weapons)) {
       for (let i = 0; i < count; i++) {
         const target = me.board.filter((u) => !u.weapon).sort((a, b) => unitValue(b.defId, b.star) - unitValue(a.defId, a.star))[0];

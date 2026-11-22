@@ -39,7 +39,7 @@ async function loadPlayer(db: D1Database, userId: string): Promise<PlayerRow | n
  * 이미 저장되어 있으면 null을 돌려준다.
  */
 export async function recordMatch(db: D1Database, input: MatchInput): Promise<[RatingChange, RatingChange] | null> {
-  const id = `${input.roomCode}:${input.startedAt}`;
+  const id = matchIdOf(input.roomCode, input.startedAt);
   const existing = await db.prepare("SELECT 1 AS found FROM matches WHERE id = ?").bind(id).first();
   if (existing) return null;
 
@@ -159,6 +159,8 @@ export async function getPlayerStats(db: D1Database, userId: string): Promise<Pl
 }
 
 export interface MatchSummary {
+  /** 다시 보기를 불러올 때 쓰는 판 id */
+  id: string;
   endedAt: number;
   opponent: string;
   /** win | loss | draw */
@@ -173,6 +175,7 @@ export interface MatchSummary {
 }
 
 interface MatchRow {
+  id: string;
   ended_at: number;
   user0: string;
   user1: string;
@@ -207,6 +210,7 @@ export async function getRecentMatches(db: D1Database, userId: string, limit: nu
     const mine = <T>(a: T, b: T): T => (seat === 0 ? a : b);
     const theirs = <T>(a: T, b: T): T => (seat === 0 ? b : a);
     return {
+      id: m.id,
       endedAt: m.ended_at,
       opponent: m.opponent_nickname ?? "?",
       result: m.winner_seat === null ? "draw" : m.winner_seat === seat ? "win" : "loss",
@@ -220,3 +224,17 @@ export async function getRecentMatches(db: D1Database, userId: string, limit: nu
     };
   });
 }
+
+/** 한 판의 다시 보기 데이터(JSON 문자열)를 저장한다. 이미 있으면 그대로 둔다. */
+export async function saveReplay(db: D1Database, id: string, data: string, now = Date.now()): Promise<void> {
+  await db.prepare("INSERT OR IGNORE INTO replays (id, created_at, data) VALUES (?1, ?2, ?3)").bind(id, now, data).run();
+}
+
+/** 다시 보기 데이터(JSON 문자열). 없으면 null. */
+export async function getReplay(db: D1Database, id: string): Promise<string | null> {
+  const row = await db.prepare("SELECT data FROM replays WHERE id = ?").bind(id).first<{ data: string }>();
+  return row?.data ?? null;
+}
+
+/** 방 코드와 시작 시각으로 만든 판 id (recordMatch와 같은 규칙) */
+export const matchIdOf = (roomCode: string, startedAt: number): string => `${roomCode}:${startedAt}`;

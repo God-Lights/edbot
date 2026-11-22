@@ -17,7 +17,7 @@ export function token(defId, star, opts = {}) {
     <span class="star">${starText(star)}</span>${opts.armed ? '<span class="armed" title="무기">🛡</span>' : ""}</div>`;
 }
 
-function hpPill(name, hp, color) {
+export function hpPill(name, hp, color) {
   const ratio = Math.min(1, Math.max(0, hp / START_HP));
   return `<div class="hp"><div class="hp-top"><b>${esc(name)}</b><span>♥ ${Math.max(0, hp)}</span></div>
     <div class="hp-bar"><i style="width:${ratio * 100}%;background:${color}"></i></div></div>`;
@@ -209,6 +209,7 @@ export function prepView(room) {
       <div class="left">
         <div class="boardbar"><b>판 ${me.board.length} / ${chess.deployCap}</b><span class="sub">(위쪽이 앞줄, 상대와 가까워요)</span>
           ${chess.lite ? `<span class="badge">입문 모드</span>` : ""}<span class="grow"></span>
+          ${Object.keys(S.sessionRounds).length ? `<button class="btn sec" data-act="rewatch">↺ 지난 전투</button>` : ""}
           ${opp ? `<span class="sub ${opp.done ? "good" : ""}">상대 ${opp.boardCount}기 배치 · ${opp.done ? "준비 끝" : "준비 중"}</span>` : ""}
           ${canAuto ? `<button class="btn sec" data-act="auto">✨ 자동 배치</button>` : ""}</div>
         <div class="${step === 2 ? "hl" : ""}">${boardHtml(chess, me, seat)}</div>

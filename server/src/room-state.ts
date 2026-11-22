@@ -71,6 +71,10 @@ export interface PlayerState {
   userId?: string;
   /** 테스트 대전(ADMN)의 상대 봇. 접속 상태와 로비 유예 시간의 영향을 받지 않는다. */
   bot?: boolean;
+  /** 봇의 난이도 (기본 normal) */
+  botLevel?: "easy" | "normal" | "hard";
+  /** 어려운 봇이 보너스 골드를 받은 마지막 라운드 */
+  botBonusRound?: number;
   seat: Seat;
   connected: boolean;
   ready: boolean;
@@ -108,6 +112,8 @@ export interface RoomState {
   testMatch: boolean;
   /** 입문 모드: 쉬운 캐릭터만 나오고 자원 시스템이 없다. */
   lite: boolean;
+  /** 테스트 대전 봇의 난이도. 로비에서 바꿀 수 있다. */
+  botLevel: "easy" | "normal" | "hard";
   /** lanes: 옛 레인 타워 게임, chess: 체스판 자동 전투 */
   mode: RoomMode;
   createdAt: number;
@@ -136,6 +142,7 @@ export function createRoom(code: string, now: number, testMatch = false, mode: R
     recorded: false,
     testMatch,
     lite,
+    botLevel: lite ? "easy" : "normal",
     mode,
     createdAt: now,
     lastActiveAt: now,
@@ -146,6 +153,14 @@ export const BOT_ID = "bot";
 export const BOT_NAME = "테스트 봇";
 
 /** 테스트 대전 방에 사람이 혼자면 비어 있는 자리에 봇을 앉힌다. 이미 있으면 아무것도 하지 않는다. */
+/** 테스트 대전의 봇 난이도를 바꾼다. 게임이 시작되기 전(로비)에만 된다. */
+export function setBotLevel(state: RoomState, level: string): boolean {
+  if (!state.testMatch || state.phase !== "lobby" || !["easy", "normal", "hard"].includes(level)) return false;
+  state.botLevel = level as RoomState["botLevel"];
+  for (const p of state.players) if (p.bot) p.botLevel = state.botLevel;
+  return true;
+}
+
 export function addBotIfNeeded(state: RoomState): boolean {
   if (!state.testMatch || state.players.some((p) => p.bot) || state.players.length !== 1) return false;
   const taken = new Set(state.players.map((p) => p.seat));
@@ -158,6 +173,7 @@ export function addBotIfNeeded(state: RoomState): boolean {
     ready: false,
     disconnectedAt: null,
     bot: true,
+    botLevel: state.botLevel,
   });
   state.players.sort((a, b) => a.seat - b.seat);
   return true;
@@ -973,6 +989,17 @@ export function playerMoveLane(
 }
 
 // ---- 전적 ----
+
+/** 끝난 체스 판의 다시 보기 데이터. 라운드별 전투 기록과 이름, 결과를 담는다. */
+export function buildReplay(state: RoomState): string | null {
+  if (!state.chess || !state.result) return null;
+  return JSON.stringify({
+    version: 1,
+    players: [0, 1].map((seat) => ({ name: state.players.find((p) => p.seat === seat)?.name ?? "?" })),
+    rounds: state.chess.history,
+    result: { winner: state.result.winner, reason: state.result.reason, score: state.result.score, kills: state.result.kills },
+  });
+}
 
 /**
  * 끝난 판을 전적으로 남길 수 있으면 저장할 내용을 만든다.
