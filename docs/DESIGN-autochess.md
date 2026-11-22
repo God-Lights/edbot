@@ -258,3 +258,10 @@
 - **웹**: `web/js/icons.js`의 인라인 SVG(`ic("ghost")`, 가이드 문구 안에서는 `{icon:ghost}`). 선 아이콘이고 `currentColor`와 `1em` 크기를 따른다. 코인·하트·방패·유령은 CSS로 색을 입힌다.
 - **iPad/iPhone**: SF Symbols(`Image(systemName:)`, 글자 안에서는 `Text("\(Image(systemName: ...))")`). SF Symbols에 없는 유령은 `Theme.swift`의 `GhostGlyph`(직접 그린 도형). 기물 글자(♚♛♜…) 대신 기물 이미지, 순위 메달은 `medal.fill`.
 - 남은 글자 기호는 별(★), 체크(✓), 닫기(✕), 마름모(◆)처럼 이모지가 아닌 것뿐이다.
+
+## 24. 로컬 서버 (Cloudflare 없이, 실행파일 하나)
+- **목표**: 인터넷 없이 같은 와이파이에서 돌아가는, 설치가 필요 없는 서버. 발표회와 연습용.
+- **방식**: 기존 서버 엔진(TypeScript)을 그대로 두고, Cloudflare가 주던 기능(Durable Object, WebSocket 연결, 알람, D1)을 Bun 위에서 흉내 내는 얇은 층(`local-server/src/runtime/`)만 새로 만들었다. 엔진 코드(`server/src`)는 한 줄도 고치지 않았다. Bun의 단일 실행파일 기능으로 웹 화면과 마이그레이션까지 담아 `commander-server.exe` 하나로 만든다(약 125MB). 리눅스에서 윈도우용을 만들 수 있다.
+- **시제품에서 확인한 것**(리눅스): 소스 실행과 단일 실행파일 모두 웹 화면, 도감 API, 방 만들기(무한 모드 옵션 포함), 봇과 한 판(준비 → 전투 → 다음 라운드, WebSocket)이 통과한다. 서버를 껐다 켜도 방과 진행 중인 알람이 이어진다. 웹 화면(Playwright)도 이 서버에서 준비 → 전투까지 된다.
+- **윈도우**: .exe 는 CI(`local-server.yml`)의 윈도우 머신에서 실행해서 같은 점검을 한다. (이 개발 환경에는 윈도우가 없다.)
+- **다음 단계**: ① 저장소 한 겹(`ranking/`의 6개 함수)을 만들고 로컬은 JSON 파일(`players.json`, `matches.jsonl`, `replays/`)로 ② `/api/server`(이름·환경·로그인 방식·프로토콜 버전)와 서버별 로그인 방식(`gl`/`hybrid`/`open`) ③ 데이터 기반 콘텐츠와 플러그인, 바닐라/엑스퍼트 빌드 ④ 앱·웹의 서버 띠와 서버 주소별 토큰, QR.
