@@ -22,7 +22,9 @@ bun build.ts --edition expert             # 엑스퍼트 이름표(플러그인�
 웹 화면이 실행파일 안에 들어가서, **exe 하나만 있으면** 돈다. 데이터는 exe 옆 `commander-data/`에 만든다.
 (쓸 수 없는 폴더면 `%APPDATA%\CommanderServer`.) `--data 경로`로 바꿀 수 있다.
 
-옵션: `--port`, `--data`, `--host`, `--phase-scale`, `--web <폴더>`(exe 안의 화면 대신 그 폴더를 쓴다).
+옵션: `--port`, `--data`, `--name <서버 이름>`(앱·웹 로비에 보인다), `--host`, `--phase-scale`, `--web <폴더>`(exe 안의 화면 대신 그 폴더를 쓴다).
+
+`GET /api/server`가 이 서버의 이름·환경(`local`)·로그인 방식(`open`)·에디션·프로토콜 버전을 알려 준다. 앱과 웹은 이걸 보고 로비를 맞춘다(로그인 버튼 대신 이름 입력, "로컬 서버" 띠).
 
 ## 데이터 (JSON 파일)
 ```

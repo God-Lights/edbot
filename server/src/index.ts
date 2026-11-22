@@ -4,7 +4,8 @@ import { HYBRID_POWER, MATERIAL_FUSIONS, STAR_POWER } from "./chess/crafting";
 import { ALL_SYNERGIES } from "./chess/synergy";
 import { CHARACTERS } from "./characters";
 import { AuthStore } from "./auth-store";
-import { USER_HEADER, authRequired, authStore, bearerToken, identify, loginRedirectUrl } from "./auth";
+import { USER_HEADER, authMode, authRequired, authStore, bearerToken, identify, loginRedirectUrl } from "./auth";
+import { serverInfo } from "./server-info";
 import type { AuthEnv } from "./auth";
 import { loadSourceJson } from "./sidestore";
 import { SYNERGIES } from "./synergy";
@@ -99,6 +100,9 @@ export default {
 
     // ---- GL Account 로그인 ----
 
+    // GET /api/server -> 이 서버의 이름·환경·로그인 방식·에디션·프로토콜 버전. 클라이언트가 로비를 맞추는 데 쓴다.
+    if (request.method === "GET" && url.pathname === "/api/server") return json(serverInfo(env));
+
     // GET / -> 현재 로그인 상태. 자동으로 로그인 화면으로 보내지 않고, 버튼을 눌러야 간다.
     if (request.method === "GET" && url.pathname === "/") {
       return homePage(await identify(env, request), enabled, origin);
@@ -157,7 +161,9 @@ export default {
     const guest = isWs ? parseGuest(url.searchParams.get("guest"), url.searchParams.get("name")) : null;
     const guestWs = !!guest && url.searchParams.get("spectate") !== "1";
     const needsLogin = enabled && ((request.method === "POST" && url.pathname === "/api/rooms") || (isWs && !guestWs));
-    const user = needsLogin ? await identify(env, request) : null;
+    // hybrid(개발 서버): 로그인은 필요 없지만, 로그인한 사람이면 그 계정으로 방에 들어가고 전적이 남는다.
+    const mayLogin = authMode(env) === "hybrid" && ((request.method === "POST" && url.pathname === "/api/rooms") || isWs);
+    const user = needsLogin || mayLogin ? await identify(env, request) : null;
     if (needsLogin && !user) {
       return json({ error: "unauthorized", loginUrl: `${origin}/auth/login` }, 401);
     }

@@ -5,6 +5,8 @@ export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&a
 export const BOARD = 8;
 export const DEPLOY_ROWS = 4;
 export const START_HP = 30;
+/** 이 클라이언트가 아는 메시지 형식 버전. 서버(/api/server)가 더 높으면 업데이트를 안내한다. */
+export const PROTOCOL_VERSION = 1;
 /** 밑면에서 이만큼 박자를 보내면 웜홀이 열린다. (서버 sim.ts의 WORMHOLE_BEATS와 같게) */
 export const WORMHOLE_BEATS = 4;
 /** 돌발 사망이 시작되는 박자 (서버 sim.ts와 같게) */

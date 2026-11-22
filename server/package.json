@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "deploy:dev": "wrangler deploy --env dev",
+    "db:migrate:dev": "wrangler d1 migrations apply DB --env dev --remote",
     "types": "wrangler types",
     "typecheck": "wrangler types && tsc --noEmit",
     "test": "vitest run",

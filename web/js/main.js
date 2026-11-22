@@ -10,24 +10,37 @@ import { openMatchReplay, openReplay, replayAction, replayModal, replayScrub, st
 import { openRanking, rankingModal } from "./ranking.js";
 import { combineItems, itemName } from "./crafting.js";
 import { bgm, sfx } from "./sfx.js";
-import { PHASE_NAME, REASON_TEXT, countdown, esc } from "./util.js";
+import { PHASE_NAME, PROTOCOL_VERSION, REASON_TEXT, countdown, esc } from "./util.js";
 
 const app = document.getElementById("app");
 const toastEl = document.getElementById("toast");
 
 // ---- 화면 ----
 
+/** 운영이 아닌 서버(개발·로컬)에서 로비 맨 위에 띄우는 안내 띠 */
+function serverBand() {
+  const server = S.server;
+  if (!server || server.env === "production") return "";
+  const local = server.env === "local";
+  const note = local
+    ? "이름이 곧 계정이에요. 전적은 이 서버에만 남아요."
+    : "시험용 서버예요. 전적은 개발용 데이터예요.";
+  const expert = server.edition === "expert" ? ` <span class="badge mob" title="플러그인으로 규칙이 달라졌을 수 있어요">엑스퍼트</span>` : "";
+  return `<div class="srvband ${esc(server.env)}">${ic(local ? "server" : "flask")} <b>${local ? "로컬 서버" : "개발 서버"} · ${esc(server.name)}</b>${expert}<span class="sub tiny">${note}</span></div>`;
+}
+
 function lobbyView() {
   const loggedIn = !!S.user;
+  // 서버가 알려 주는 로그인 방식: gl(GL 로그인) | hybrid(GL 로그인 또는 이름) | open(이름만). 모르는 서버는 예전처럼 둘 다 보여 준다.
+  const mode = S.server?.authMode ?? "hybrid";
+  const guestRooms = S.server ? S.server.guestRooms !== false : true;
+  const loginButton = mode !== "open" ? `<a class="btn primary wide" href="/auth/login">${ic("key")} 로그인하기</a>` : "";
+  const nameHint = mode === "open" ? "이름 (이 서버에서 쓸 이름)" : mode === "hybrid" ? "이름 (로그인하지 않으면 이 이름으로 놀아요)" : "이름 (로그인하지 않은 개발 서버용)";
+  const nameInput = mode !== "gl" ? `<input id="name" class="input" maxlength="16" placeholder="${nameHint}" value="${esc(S.name)}">` : "";
   const account = loggedIn
     ? `<div class="panel"><div class="row tight"><div><div class="sub">로그인됨</div><b class="big">${esc(S.user.nickname)}</b></div><span class="grow"></span><button class="btn sec" data-act="logout">새로고침</button></div></div>`
-    : `<div class="panel stack tight"><a class="btn primary wide" href="/auth/login">${ic("key")} 로그인하기</a>
-        <input id="name" class="input" maxlength="16" placeholder="이름 (로그인하지 않은 개발 서버용)" value="${esc(S.name)}"></div>`;
-  return `<div class="lobby">
-    <div class="hero"><img class="logo" src="assets/logo.png" alt="COMMANDER"><div class="sub herotext">체스판 자동 전투 · 2인 실시간 대전</div></div>
-    <div class="menu">
-      <div class="mgroup">
-        ${account}
+    : `<div class="panel stack tight">${loginButton}${nameInput}</div>`;
+  const guestCard = guestRooms ? `
         <div class="panel stack tight">
           <b>${ic("cap")} 게스트로 참가</b><div class="sub tiny">GL 계정 없이 학번과 이름으로 게스트 방에 들어가요. (전적은 안 남아요)</div>
           <form class="stack tight" data-form="guest">
@@ -36,7 +49,13 @@ function lobbyView() {
             <div class="row tight"><input id="gcode" class="input code" maxlength="4" placeholder="방 코드" autocapitalize="characters" autocomplete="off" value="${esc(S.guestCode)}">
               <button class="btn primary" type="submit">참가</button></div>
           </form>
-        </div>
+        </div>` : "";
+  return `${serverBand()}<div class="lobby">
+    <div class="hero"><img class="logo" src="assets/logo.png" alt="COMMANDER"><div class="sub herotext">체스판 자동 전투 · 2인 실시간 대전</div></div>
+    <div class="menu">
+      <div class="mgroup">
+        ${account}
+        ${guestCard}
       </div>
       <div class="mgroup">
         <div class="panel stack tight">
@@ -740,8 +759,19 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && S.modal) update({ modal: null });
 });
 
+async function refreshServer() {
+  try {
+    S.server = await api.server();
+  } catch {
+    S.server = null;
+  }
+  if (S.server && S.server.protocol > PROTOCOL_VERSION) toast("서버가 더 새로운 버전이에요. 페이지를 새로고침해 주세요.");
+  document.title = S.server && S.server.env !== "production" ? `${S.server.name} · COMMANDER` : document.title;
+}
+
 (async function start() {
   render();
+  await refreshServer();
   await refreshUser();
   try {
     const catalog = await api.chessCatalog();

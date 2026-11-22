@@ -30,11 +30,28 @@ export interface PublicUser {
 
 export interface AuthEnv {
   GL_ACCOUNT_KEY?: string;
+  /** 예전 방식: "false"면 로그인 검사를 끈다(open). AUTH_MODE가 있으면 그쪽이 먼저다. */
   REQUIRE_AUTH?: string;
+  /** 이 서버의 로그인 방식: gl | hybrid | open */
+  AUTH_MODE?: string;
 }
 
+/**
+ * 서버마다 다른 로그인 방식.
+ * - gl: GL 계정 로그인이 필요하다. 게스트는 GL 계정으로 만든 게스트 방에만 들어온다. 전적은 GL 계정 둘이 한 판일 때 남는다. (운영)
+ * - hybrid: GL 계정으로 로그인하면 그 계정으로, 안 하면 이름만으로 논다. 전적은 GL 계정 둘일 때만 남는다. (개발)
+ * - open: 로그인 없이 이름만 쓴다. GL 계정을 확인하지 않는다. (로컬 서버, 인터넷이 없어도 된다)
+ */
+export type AuthMode = "gl" | "hybrid" | "open";
+
+export function authMode(env: AuthEnv): AuthMode {
+  if (env.AUTH_MODE === "gl" || env.AUTH_MODE === "hybrid" || env.AUTH_MODE === "open") return env.AUTH_MODE;
+  return env.REQUIRE_AUTH === "false" ? "open" : "gl";
+}
+
+/** GL 로그인이 꼭 필요한가 (gl 방식일 때만) */
 export function authRequired(env: AuthEnv): boolean {
-  return env.REQUIRE_AUTH !== "false";
+  return authMode(env) === "gl";
 }
 
 export function toPublicUser(user: GlUser | PublicUser): PublicUser {

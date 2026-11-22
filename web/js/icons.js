@@ -33,6 +33,7 @@ const P = {
   "hammer": ['<path d="m13 11-8.4 8.4a2.1 2.1 0 0 1-3-3L10 8"/>', '<path d="m14 5 3-3 5 5-3 3z"/>', '<path d="m11 8 5 5"/>'],
   "flask": ['<path d="M10 2v7.5L4.6 18.4a2 2 0 0 0 1.7 3.1h11.4a2 2 0 0 0 1.7-3.1L14 9.5V2"/>', '<path d="M8.5 2h7"/>', '<path d="M7 16h10"/>'],
   "list": ['<path d="M8 6h13"/>', '<path d="M8 12h13"/>', '<path d="M8 18h13"/>', '<path d="M3 6h.01"/>', '<path d="M3 12h.01"/>', '<path d="M3 18h.01"/>'],
+  "server": ['<rect x="3" y="3" width="18" height="7" rx="2"/>', '<rect x="3" y="14" width="18" height="7" rx="2"/>', '<path d="M7 6.5h.01"/>', '<path d="M7 17.5h.01"/>'],
   "arrow-up": ['<path d="M12 19V5"/>', '<path d="m5 12 7-7 7 7"/>'],
 };
 

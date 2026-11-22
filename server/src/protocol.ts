@@ -386,6 +386,12 @@ export interface RoomSnapshot {
   result: ResultSnapshot | null;
 }
 
+/**
+ * 클라이언트와 서버가 주고받는 메시지 형식의 버전. 형식이 호환되지 않게 바뀔 때만 올린다.
+ * /api/server 가 알려 주고, 클라이언트는 자기가 아는 것보다 높으면 "앱·웹을 업데이트해 주세요"를 보여 준다.
+ */
+export const PROTOCOL_VERSION = 1;
+
 // ---- 클라이언트 -> 서버 ----
 
 export type ClientMessage =

@@ -12,6 +12,7 @@ import { JsonRankingStore, acquireLock } from "./runtime/json-store";
 import { ObjectNamespace } from "./runtime/objects";
 import { installWebSocketGlobals, upgradeTarget } from "./runtime/websocket";
 import type { ServerSocket } from "./runtime/websocket";
+import packageInfo from "../package.json" with { type: "json" };
 
 installWebSocketGlobals();
 
@@ -122,10 +123,15 @@ if (subcommand === "export" || subcommand === "import") {
 
 // ---- Cloudflare가 주던 것들 ----
 
+const serverName = option("name", "내 컴퓨터 서버");
 const env: Record<string, unknown> = {
   STORE: store,
   PHASE_SCALE: phaseScale,
-  REQUIRE_AUTH: "false", // 로컬 서버는 이름만 쓴다. (GL 계정 검증은 인터넷이 필요하다)
+  AUTH_MODE: "open", // 로컬 서버는 이름만 쓴다. (GL 계정 검증은 인터넷이 필요하다)
+  SERVER_ENV: "local",
+  SERVER_NAME: serverName,
+  EDITION: edition === "expert" ? "expert" : "vanilla",
+  SERVER_VERSION: packageInfo.version,
   RECORD_ANONYMOUS: "true", // GL 계정이 없으니 이름으로 전적을 남긴다. (봇과 한 판은 남기지 않는다)
 };
 const envOf = () => env;
@@ -213,7 +219,7 @@ function lanAddresses(): string[] {
   return out;
 }
 
-console.log(`COMMANDER 로컬 서버 (${edition}, 시제품)  |  데이터: ${dataDir}`);
+console.log(`${serverName} (COMMANDER 로컬 서버 ${packageInfo.version}, ${edition})  |  데이터: ${dataDir}`);
 console.log(`  이 컴퓨터:        http://localhost:${server.port}`);
 for (const ip of lanAddresses()) console.log(`  같은 와이파이:    http://${ip}:${server.port}`);
 if (woken > 0) console.log(`  이어서 진행하는 방: ${woken}개`);

@@ -28,6 +28,11 @@ check("방 만들기(POST /api/rooms)", typeof created?.code === "string" && cre
 const made = created?.code ? ((await fetch(`${base}/api/rooms/${created.code}`).then((r) => r.json()).catch(() => null)) as { mobius?: boolean } | null) : null;
 check("만든 방이 무한 모드로 저장됨", made?.mobius === true);
 
+// ---- 서버 정보(/api/server) ----
+const meta = (await fetch(`${base}/api/server`).then((r) => r.json()).catch(() => null)) as { protocol?: number; name?: string; env?: string; authMode?: string; edition?: string; ranking?: boolean } | null;
+check("/api/server", typeof meta?.protocol === "number" && !!meta.name, JSON.stringify(meta));
+check("로컬 서버는 open 방식·local 환경·이름으로 전적", meta?.authMode === "open" && meta?.env === "local" && meta?.ranking === true);
+
 // ---- WebSocket: 봇과 한 판 ----
 type Unit = { uid: string };
 type Room = { phase: string; players: Array<{ id: string; seat: number | null; ready?: boolean }>; chess?: { round: number; me?: { shop: Array<string | null>; bench: Array<Unit | null>; board: unknown[] } | null } | null };
