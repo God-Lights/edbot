@@ -1,0 +1,36 @@
+name: iOS server engine
+
+# ios-server/engine: 서버 엔진을 웹뷰에서 돌릴 한 파일로 묶고, 웹뷰와 비슷한 환경(Node 전역 없음)에서 한 판까지 돌려 본다.
+on:
+  pull_request:
+    paths:
+      - "ios-server/**"
+      - "server/src/**"
+      - "server/packs/**"
+      - "local-server/src/**"
+      - ".github/workflows/ios-server-engine.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-server-engine-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: 엔진 묶기와 시험
+        working-directory: ios-server/engine
+        run: bun run test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-server-engine
+          path: ios-server/engine/dist/engine.js
+          retention-days: 14

@@ -1,8 +1,9 @@
 // Cloudflare Durable Object를 흉내 낸다: 이름으로 찾는 객체, 저장소(JSON 파일), 알람, WebSocket 연결 목록.
 // 서버 코드(room.ts, auth-store.ts, matchmaker.ts, registry.ts)가 쓰는 기능만 구현한다.
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { joinPath as join, writeAtomic } from "./fs";
+import type { Fs } from "./fs";
+import { nodeFs } from "./node-fs";
 import { ServerSocket } from "./websocket";
 import type { SocketOwner } from "./websocket";
 
@@ -33,13 +34,6 @@ function decode(text: string): unknown {
 
 const clone = <T>(value: T): T => (value === undefined ? value : (decode(encode(value)) as T));
 
-/** 파일을 임시 파일에 쓰고 이름을 바꿔서, 중간에 꺼져도 깨진 파일이 남지 않게 한다. */
-function writeAtomic(path: string, text: string): void {
-  const tmp = `${path}.tmp`;
-  writeFileSync(tmp, text);
-  renameSync(tmp, path);
-}
-
 interface StoredObject {
   entries: Record<string, string>;
   alarm: number | null;
@@ -53,10 +47,10 @@ class ObjectStorage {
   private dirty = false;
   onAlarm: () => void = () => {};
 
-  constructor(private readonly file: string) {
-    if (existsSync(file)) {
+  constructor(private readonly file: string, private readonly fs: Fs) {
+    if (fs.exists(file)) {
       try {
-        const saved = JSON.parse(readFileSync(file, "utf8")) as StoredObject;
+        const saved = JSON.parse(fs.read(file)) as StoredObject;
         for (const [key, text] of Object.entries(saved.entries ?? {})) this.entries.set(key, decode(text));
         this.alarmAt = typeof saved.alarm === "number" ? saved.alarm : null;
       } catch (error) {
@@ -96,7 +90,7 @@ class ObjectStorage {
     this.dirty = false;
     if (this.flushTimer) clearTimeout(this.flushTimer);
     this.flushTimer = null;
-    rmSync(this.file, { force: true });
+    this.fs.rm(this.file);
   }
 
   async list<T = unknown>(options: { prefix?: string; limit?: number; reverse?: boolean } = {}): Promise<Map<string, T>> {
@@ -156,12 +150,12 @@ class ObjectStorage {
     if (!this.dirty) return;
     this.dirty = false;
     if (this.entries.size === 0 && this.alarmAt === null) {
-      rmSync(this.file, { force: true });
+      this.fs.rm(this.file);
       return;
     }
     const saved: StoredObject = { entries: {}, alarm: this.alarmAt };
     for (const [key, value] of this.entries) saved.entries[key] = encode(value);
-    writeAtomic(this.file, JSON.stringify(saved));
+    writeAtomic(this.fs, this.file, JSON.stringify(saved));
   }
 
   hasAlarm(): boolean {
@@ -179,9 +173,9 @@ export class ObjectState {
   owner: (SocketOwner & { alarm?: () => void | Promise<void> }) | null = null;
   private sockets = new Set<ServerSocket>();
 
-  constructor(name: string, file: string) {
+  constructor(name: string, file: string, fs: Fs = nodeFs) {
     this.id = { name, toString: () => name };
-    this.storage = new ObjectStorage(file);
+    this.storage = new ObjectStorage(file, fs);
     this.storage.onAlarm = () => {
       void this.ready
         .then(() => this.owner?.alarm?.())
@@ -248,9 +242,10 @@ export class ObjectNamespace {
     private readonly Ctor: ObjectClass,
     private readonly env: () => unknown,
     dataDir: string,
+    private readonly fs: Fs = nodeFs,
   ) {
     this.dir = join(dataDir, "objects", className);
-    mkdirSync(this.dir, { recursive: true });
+    fs.mkdir(this.dir);
   }
 
   idFromName(name: string): { name: string; toString(): string } {
@@ -260,7 +255,7 @@ export class ObjectNamespace {
   private instance(name: string) {
     let inst = this.instances.get(name);
     if (!inst) {
-      const ctx = new ObjectState(name, join(this.dir, `${encodeURIComponent(name)}.json`));
+      const ctx = new ObjectState(name, join(this.dir, `${encodeURIComponent(name)}.json`), this.fs);
       const obj = new this.Ctor(ctx, this.env());
       ctx.owner = obj as unknown as ObjectState["owner"];
       inst = { obj, ctx };
@@ -273,10 +268,10 @@ export class ObjectNamespace {
   /** 서버를 켤 때: 알람이 걸려 있던 객체(진행 중인 방 등)를 다시 깨운다. */
   wakeAll(): number {
     let woken = 0;
-    for (const file of readdirSync(this.dir)) {
+    for (const file of this.fs.readdir(this.dir)) {
       if (!file.endsWith(".json")) continue;
       try {
-        const saved = JSON.parse(readFileSync(join(this.dir, file), "utf8")) as StoredObject;
+        const saved = JSON.parse(this.fs.read(join(this.dir, file))) as StoredObject;
         if (typeof saved.alarm === "number") {
           this.instance(decodeURIComponent(file.slice(0, -5)));
           woken += 1;

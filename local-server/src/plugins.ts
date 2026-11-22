@@ -1,8 +1,9 @@
 // 로컬 서버(엑스퍼트)의 플러그인 읽기: plugins/ 폴더의 콘텐츠 팩(JSON)을 읽어서 적용한다. 형식: docs/PLUGINS.md
 // 바닐라 실행파일에는 이 파일이 들어가지 않는다. (build.ts, main.ts 의 에디션 분기)
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { joinPath as join } from "./runtime/fs";
+import type { Fs } from "./runtime/fs";
+import { nodeFs } from "./runtime/node-fs";
 import { setActiveContent } from "../../server/src/chess/content";
 import { buildContent } from "../../server/src/chess/content-build";
 import { useExternalContent } from "../../server/src/content-load";
@@ -34,22 +35,23 @@ export interface LoadedPlugins {
 }
 
 /** plugins/ 폴더를 만들고(처음이면 안내문과 예시를 넣고) 팩을 읽어 적용한다. */
-export function loadPlugins(dataDir: string): LoadedPlugins {
+export function loadPlugins(dataDir: string, fs: Fs = nodeFs): LoadedPlugins {
   useExternalContent(); // 배포에 담긴 팩(개발 서버용)은 읽지 않는다
   const dir = join(dataDir, "plugins");
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "README.txt"), README);
-    writeFileSync(join(dir, "example-pack.json.sample"), JSON.stringify(samplePack, null, 2));
+  if (!fs.exists(dir)) {
+    fs.mkdir(dir);
+    fs.write(join(dir, "README.txt"), README);
+    fs.write(join(dir, "example-pack.json.sample"), JSON.stringify(samplePack, null, 2));
   }
   const raws: unknown[] = [];
   const notes: string[] = [];
-  for (const name of readdirSync(dir).sort()) {
+  for (const name of fs.readdir(dir).sort()) {
     const path = join(dir, name);
-    const file = statSync(path).isDirectory() ? join(path, "pack.json") : name.endsWith(".json") ? path : null;
-    if (!file || !existsSync(file)) continue;
+    // 폴더 안의 pack.json, 또는 *.json 파일
+    const file = name.endsWith(".json") ? path : fs.exists(join(path, "pack.json")) ? join(path, "pack.json") : null;
+    if (!file || !fs.exists(file)) continue;
     try {
-      raws.push(JSON.parse(readFileSync(file, "utf8")));
+      raws.push(JSON.parse(fs.read(file)));
     } catch (error) {
       notes.push(`${name}: JSON을 읽지 못했다 (${error instanceof Error ? error.message : error})`);
     }
