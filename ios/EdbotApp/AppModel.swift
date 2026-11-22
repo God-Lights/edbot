@@ -63,6 +63,10 @@ final class AppModel {
     /// 대장간에서 장착하려고 고른 무기.
     var selectedWeaponId: String?
 
+    // 소리: 효과음 끄기, 배경 음악 켜기 (Sfx가 저장한다)
+    private(set) var soundMuted = Sfx.shared.muted
+    private(set) var musicOn = Sfx.shared.musicOn
+
     // 게스트 로그인(학번 + 이름)과 게스트 방, 관전
     var guestStudentId = UserDefaults.standard.string(forKey: "guestStudentId") ?? ""
     var guestName = UserDefaults.standard.string(forKey: "guestName") ?? ""
@@ -96,6 +100,7 @@ final class AppModel {
 
     init(tokens: TokenStore = KeychainTokenStore()) {
         self.tokens = tokens
+        Sfx.shared.resumeMusicIfNeeded()
         authToken = tokens.load()
         if authToken != nil { Task { await restoreLogin() } }
     }
@@ -220,11 +225,13 @@ final class AppModel {
 
     func chessBuy(slot: Int) {
         guard let connection else { return }
+        play(.buy)
         Task { await connection.sendBuy(slot: slot) }
     }
 
     func chessSell(_ uid: String) {
         guard let connection else { return }
+        play(.sell)
         selectedUid = nil
         Task { await connection.sendSell(uid) }
     }
@@ -233,16 +240,19 @@ final class AppModel {
 
     func chessBuyMaterial(slot: Int) {
         guard let connection else { return }
+        play(.buy)
         Task { await connection.sendMarket(slot: slot) }
     }
 
     func chessSmelt(_ material: String) {
         guard let connection else { return }
+        play(.smelt)
         Task { await connection.sendSmelt(material) }
     }
 
     func chessEquip(_ weaponId: String, uid: String) {
         guard let connection else { return }
+        play(.equip)
         selectedWeaponId = nil
         Task { await connection.sendEquip(weaponId, uid: uid) }
     }
@@ -254,17 +264,20 @@ final class AppModel {
 
     func chessReroll() {
         guard let connection else { return }
+        play(.click)
         Task { await connection.sendReroll() }
     }
 
     func chessDeploy(_ uid: String, col: Int, row: Int) {
         guard let connection else { return }
+        play(.place)
         selectedUid = nil
         Task { await connection.sendDeploy(uid, col: col, row: row) }
     }
 
     func chessBench(_ uid: String) {
         guard let connection else { return }
+        play(.place)
         selectedUid = nil
         Task { await connection.sendBench(uid) }
     }
@@ -313,6 +326,7 @@ final class AppModel {
 
     func chessDone() {
         guard let connection else { return }
+        play(.ready)
         selectedUid = nil
         Task { await connection.sendDone() }
     }
@@ -642,6 +656,7 @@ final class AppModel {
 
     func setReady(_ ready: Bool) {
         guard let connection else { return }
+        play(.ready)
         Task { await connection.sendReady(ready) }
     }
 
@@ -670,6 +685,49 @@ final class AppModel {
         }
     }
 
+    func toggleSound() {
+        soundMuted.toggle()
+        Sfx.shared.setMuted(soundMuted)
+        if !soundMuted { Sfx.shared.play(.click) }
+    }
+
+    func toggleMusic() {
+        musicOn.toggle()
+        Sfx.shared.setMusic(musicOn)
+    }
+
+    func play(_ sound: Sfx.Sound) { Sfx.shared.play(sound) }
+
+    /// 직전 화면과 비교해서 알맞은 효과음을 낸다: 라운드 시작, 전투 시작, 판이 가득 참, ★2 합성, 무기 장착, 결과.
+    private func playChangeSounds(from previous: RoomSnapshot?, to room: RoomSnapshot) {
+        if previous?.phase != room.phase {
+            switch room.phase {
+            case .prep: play(.roundStart)
+            case .combat: play(.combatStart)
+            case .result:
+                if let winner = room.result?.winner {
+                    play(winner == mySeat ? .win : .lose)
+                } else {
+                    play(.click)
+                }
+            default: break
+            }
+            return
+        }
+        guard room.phase == .prep, let before = previous?.chess?.me, let after = room.chess?.me, previous?.chess?.round == room.chess?.round else { return }
+        let oldUnits: [ChessUnitView] = before.board + before.bench.compactMap { $0 }
+        let newUnits: [ChessUnitView] = after.board + after.bench.compactMap { $0 }
+        let oldIds = Set(oldUnits.map { $0.uid })
+        let oldWeapons: [String: String] = Dictionary(uniqueKeysWithValues: oldUnits.compactMap { unit in unit.weapon.map { (unit.uid, $0) } })
+        if newUnits.contains(where: { $0.star >= 2 && !oldIds.contains($0.uid) }) {
+            play(.merge)
+        } else if newUnits.contains(where: { unit in unit.weapon != nil && oldIds.contains(unit.uid) && oldWeapons[unit.uid] != unit.weapon }) {
+            play(.equip)
+        } else if let cap = room.chess?.deployCap, before.board.count < cap, after.board.count >= cap {
+            play(.full)
+        }
+    }
+
     private func observe(_ room: RoomSnapshot) {
         clock.observe(serverTime: room.serverTime, localNowMs: currentTimeMs())
         let previous = self.room
@@ -687,6 +745,7 @@ final class AppModel {
         } else if previous?.battle != nil {
             interpolator.reset()
         }
+        playChangeSounds(from: previous, to: room)
         self.room = room
     }
 }
