@@ -105,7 +105,7 @@ struct SynergyChips: View {
                 ForEach(ids, id: \.self) { id in
                     Button { model.openGuide(.synergy) } label: {
                         HStack(spacing: 4) {
-                            Text("🔗").font(.caption2)
+                            Image(systemName: "link").font(.caption2)
                             VStack(alignment: .leading, spacing: 0) {
                                 Text(model.synergy(id)?.nameKo ?? id).font(.caption.bold())
                                 if let description = model.synergy(id)?.description {
@@ -121,5 +121,41 @@ struct SynergyChips: View {
                 }
             }
         }
+    }
+}
+
+
+/// 유령 아이콘(SF Symbols에 없어서 직접 그린다). 글자 색(foregroundStyle)을 따라간다. 무한 모드에서 쓴다.
+struct GhostShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let s = min(rect.width, rect.height) / 24
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + x * s, y: rect.minY + y * s) }
+        var path = Path()
+        path.move(to: p(4, 22))
+        path.addLine(to: p(4, 10))
+        path.addCurve(to: p(12, 2), control1: p(4, 5.6), control2: p(7.6, 2))
+        path.addCurve(to: p(20, 10), control1: p(16.4, 2), control2: p(20, 5.6))
+        path.addLine(to: p(20, 22))
+        path.addLine(to: p(17, 19))
+        path.addLine(to: p(14.5, 21.5))
+        path.addLine(to: p(12, 19))
+        path.addLine(to: p(9.5, 21.5))
+        path.addLine(to: p(7, 19))
+        path.closeSubpath()
+        return path
+    }
+}
+
+struct GhostGlyph: View {
+    var body: some View {
+        GeometryReader { geo in
+            let s = min(geo.size.width, geo.size.height)
+            ZStack {
+                GhostShape().stroke(style: StrokeStyle(lineWidth: max(1.2, s / 12), lineJoin: .round))
+                Circle().frame(width: s * 0.11, height: s * 0.11).position(x: s * 9 / 24, y: s * 10 / 24)
+                Circle().frame(width: s * 0.11, height: s * 0.11).position(x: s * 15 / 24, y: s * 10 / 24)
+            }
+        }
+        .aspectRatio(1, contentMode: .fit)
     }
 }

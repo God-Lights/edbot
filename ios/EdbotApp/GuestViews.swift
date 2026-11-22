@@ -102,7 +102,7 @@ struct LiveView: View {
             : room.players.map { ($0.studentId.map { "\($0) " } ?? "") + $0.name + ($0.connected ? "" : " (끊김)") }.joined(separator: "  vs  ")
         var detail: String = phaseText(room.phase)
         if room.round > 0 { detail += " · 라운드 \(room.round)/\(room.maxRounds)" }
-        if let hps = room.hps, hps.count == 2 { detail += " · ♥ \(max(0, hps[0])) : \(max(0, hps[1]))" }
+        if let hps = room.hps, hps.count == 2 { detail += " · 체력 \(max(0, hps[0])) : \(max(0, hps[1]))" }
         detail += " · 방 \(room.code)"
         if !room.host.isEmpty { detail += " · 만든 사람 \(room.host)" }
         return HStack {
@@ -242,7 +242,7 @@ struct SpectatorView: View {
             HStack {
                 Text(name).font(.caption.bold()).lineLimit(1)
                 Spacer()
-                Text("♥ \(max(0, hp))").font(.caption.monospacedDigit().bold())
+                Text("\(Image(systemName: "heart.fill")) \(max(0, hp))").font(.caption.monospacedDigit().bold())
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {

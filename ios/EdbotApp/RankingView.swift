@@ -108,11 +108,11 @@ struct RankingView: View {
                     .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 HStack(spacing: 2) {
                     ForEach(match.picks, id: \.self) { id in
-                        if let piece = (model.character(id)?.piece ?? model.chessUnit(id)?.piece) { Text(Labels.pieceGlyph(piece)).font(.caption).foregroundStyle(Theme.mine) }
+                        if let piece = (model.character(id)?.piece ?? model.chessUnit(id)?.piece) { Image(Labels.pieceImageName(piece)).resizable().renderingMode(.template).scaledToFit().frame(width: 14, height: 14).foregroundStyle(Theme.mine) }
                     }
                     Text("vs").font(.system(size: 9)).foregroundStyle(.secondary)
                     ForEach(match.opponentPicks, id: \.self) { id in
-                        if let piece = (model.character(id)?.piece ?? model.chessUnit(id)?.piece) { Text(Labels.pieceGlyph(piece)).font(.caption).foregroundStyle(Theme.theirs) }
+                        if let piece = (model.character(id)?.piece ?? model.chessUnit(id)?.piece) { Image(Labels.pieceImageName(piece)).resizable().renderingMode(.template).scaledToFit().frame(width: 14, height: 14).foregroundStyle(Theme.theirs) }
                     }
                 }
             }
@@ -144,7 +144,7 @@ struct RankingView: View {
 
     private func row(_ entry: LeaderboardEntry) -> some View {
         HStack(spacing: 12) {
-            Text(medal(entry.rank)).font(.title3).frame(width: 40)
+            medal(entry.rank).frame(width: 40)
             Text(entry.nickname + (entry.isMe ? " (나)" : "")).font(.subheadline.bold()).lineLimit(1)
             Spacer()
             Text("\(entry.wins)승 \(entry.losses)패").font(.caption).foregroundStyle(.secondary)
@@ -155,12 +155,14 @@ struct RankingView: View {
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(entry.isMe ? Theme.accent : Color.clear, lineWidth: 2))
     }
 
-    private func medal(_ rank: Int) -> String {
+    /// 1~3등은 메달 아이콘(금·은·동), 나머지는 숫자
+    @ViewBuilder
+    private func medal(_ rank: Int) -> some View {
         switch rank {
-        case 1: return "🥇"
-        case 2: return "🥈"
-        case 3: return "🥉"
-        default: return "\(rank)"
+        case 1: Image(systemName: "medal.fill").font(.title3).foregroundStyle(Color(red: 0.95, green: 0.78, blue: 0.3))
+        case 2: Image(systemName: "medal.fill").font(.title3).foregroundStyle(Color(red: 0.8, green: 0.82, blue: 0.86))
+        case 3: Image(systemName: "medal.fill").font(.title3).foregroundStyle(Color(red: 0.82, green: 0.55, blue: 0.32))
+        default: Text("\(rank)").font(.title3)
         }
     }
 }

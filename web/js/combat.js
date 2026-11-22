@@ -1,5 +1,6 @@
 // 전투 단계: 서버가 기록한 전투를 8x8 판에서 재생한다. 내 쪽이 항상 아래에 보인다.
 
+import { ic } from "./icons.js";
 import { gameBar, token } from "./prep.js";
 import { sfx } from "./sfx.js";
 import { S, conn, materialInfo, mySeat, synergyInfo } from "./state.js";
@@ -50,7 +51,7 @@ export function arenaHtml(combat, seat) {
   }
   const units = combat.units
     .map((u, i) => `<div class="au" data-i="${i}" style="display:none">${token(u.defId, u.star, { tint: u.seat === seat ? MINE : THEIRS, armed: !!u.weapon })}
-      <i class="whring"></i><i class="gbadge">👻</i>
+      <i class="whring"></i><i class="gbadge">${ic("ghost")}</i>
       <div class="ubar"><i class="shield"></i><div><b style="background:${u.seat === seat ? MINE : THEIRS}"></b></div></div></div>`)
     .join("");
   const tiles = combat.tiles
@@ -73,7 +74,7 @@ export function combatView(room) {
   const combat = chess?.combat;
   const seat = mySeat();
   if (!chess || !combat || seat == null) return `<div class="game"><div class="center-msg">전투를 불러오는 중...</div></div>`;
-  const synergies = chess.me?.synergies?.length ? `<div class="sub csyn">${chess.me.synergies.map((id) => `🔗 ${esc(synergyInfo(id)?.nameKo ?? id)}`).join(" ")}</div>` : "";
+  const synergies = chess.me?.synergies?.length ? `<div class="sub csyn">${chess.me.synergies.map((id) => `${ic("link")} ${esc(synergyInfo(id)?.nameKo ?? id)}`).join(" ")}</div>` : "";
   return `<div class="game combatgame">${gameBar(room, chess)}
     <main class="cmain"><div class="carena">${arenaHtml(combat, seat)}</div>
       <div class="cside">
@@ -108,7 +109,7 @@ export function playArena(combat, seat, getPos) {
   const floatText = (cx, cy, text, cls) => {
     const el = document.createElement("div");
     el.className = `float ${cls}`;
-    el.textContent = text;
+    el.innerHTML = text;
     el.style.left = `${(cx + 0.5) * 12.5}%`;
     el.style.top = `${(cy + 0.15) * 12.5}%`;
     fxlayer.appendChild(el);
@@ -171,16 +172,16 @@ export function playArena(combat, seat, getPos) {
       if (e[1] === "attack" && e[3] >= 0) lunge(e[2], e[3], j);
       if (e[1] === "ability" && a) { ring(x, y, "#b040be"); sfx.play("ability"); }
       else if (e[1] === "death") sfx.play("death");
-      else if (e[1] === "ghost" && a) { floatText(x, y, "👻", "ghost"); sfx.play("ghost"); }
-      else if (e[1] === "surface" && a) { ring(x, y, "#59ccbf"); floatText(x, y, "↑ 웜홀", "wormhole"); sfx.play("surface"); }
+      else if (e[1] === "ghost" && a) { floatText(x, y, ic("ghost"), "ghost"); sfx.play("ghost"); }
+      else if (e[1] === "surface" && a) { ring(x, y, "#59ccbf"); floatText(x, y, `${ic("arrow-up")} 웜홀`, "wormhole"); sfx.play("surface"); }
       else if (e[1] === "clone" && a) floatText(x, y, "분신!", "promo");
-      else if (e[1] === "stone" && a) floatText(x, y, "🗿 석화", "stone");
-      else if (e[1] === "promote" && a) { floatText(x, y, "♛ 승급!", "promo"); sfx.play("promote"); }
+      else if (e[1] === "stone" && a) floatText(x, y, `${ic("mountain")} 석화`, "stone");
+      else if (e[1] === "promote" && a) { floatText(x, y, `${ic("crown")} 승급!`, "promo"); sfx.play("promote"); }
       else if (e[1] === "mine") {
         const tile = combat.tiles[e[3]];
         if (tile) {
           const [tx, ty] = flip(tile.x, tile.y);
-          floatText(tx, ty, `+${materialInfo(e[4])?.nameKo ?? "재료"}`, "mine-get");
+          floatText(tx, ty, `+${esc(materialInfo(e[4])?.nameKo ?? "재료")}`, "mine-get");
           sfx.play("mine");
         }
       }

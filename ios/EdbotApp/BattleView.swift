@@ -19,7 +19,7 @@ struct BattleView: View {
                 HStack(spacing: 8) {
                     Text("우리 시너지").font(.caption).foregroundStyle(.secondary)
                     ForEach(mine, id: \.self) { id in
-                        Text("🔗 " + (model.synergy(id)?.nameKo ?? id)).font(.caption.bold())
+                        Text("\(Image(systemName: "link")) \(model.synergy(id)?.nameKo ?? id)").font(.caption.bold())
                             .padding(.horizontal, 8).padding(.vertical, 3)
                             .background(Capsule().fill(Theme.accent.opacity(0.22)))
                     }
@@ -344,7 +344,7 @@ struct LaneCanvas: View {
         let box = CGRect(x: c.x - radius, y: c.y - radius, width: radius * 2, height: radius * 2)
         context.fill(Path(roundedRect: box, cornerRadius: tower.isMain ? 7 : 12), with: .color(color.opacity(tower.alive ? 0.9 : 1)))
         context.stroke(Path(roundedRect: box, cornerRadius: tower.isMain ? 7 : 12), with: .color(Color.white.opacity(0.5)), lineWidth: 2)
-        context.draw(Text(tower.isMain ? "♜" : "▲").font(.system(size: tower.isMain ? 24 : 14)).foregroundColor(.white.opacity(tower.alive ? 0.95 : 0.4)), at: pt(c), anchor: .center)
+        context.draw(Text(tower.isMain ? "\(Image(systemName: "building.columns.fill"))" : "\(Image(systemName: "triangle.fill"))").font(.system(size: tower.isMain ? 22 : 12)).foregroundColor(.white.opacity(tower.alive ? 0.95 : 0.4)), at: pt(c), anchor: .center)
 
         if tower.alive {
             let ratio = CGFloat(tower.maxHp > 0 ? Double(tower.hp) / Double(tower.maxHp) : 0)
@@ -373,13 +373,13 @@ struct LaneCanvas: View {
             context.stroke(Path(ellipseIn: circle.insetBy(dx: -4, dy: -4)), with: .color(Theme.silver), lineWidth: 2)
         }
         if let piece, !unit.summon {
-            context.draw(Text(Labels.pieceGlyph(piece)).font(.system(size: 20)).foregroundColor(.white), at: c, anchor: .center)
+            context.draw(Image(Labels.pieceImageName(piece)).renderingMode(.template), in: CGRect(x: c.x - 10, y: c.y - 10, width: 20, height: 20))
         }
         if unit.effects.contains("stun") {
             context.draw(Text("✦").font(.system(size: 14)).foregroundColor(Theme.warn), at: CGPoint(x: c.x, y: c.y - radius - 14), anchor: .center)
         }
         if unit.weapon != nil {
-            context.draw(Text("⚔").font(.system(size: 10)).foregroundColor(.white), at: CGPoint(x: c.x + radius, y: c.y - radius), anchor: .center)
+            context.draw(Text("\(Image(systemName: "bolt.fill"))").font(.system(size: 10)).foregroundColor(.white), at: CGPoint(x: c.x + radius, y: c.y - radius), anchor: .center)
         }
 
         let ratio = CGFloat(unit.maxHp > 0 ? Double(unit.hp) / Double(unit.maxHp) : 0)

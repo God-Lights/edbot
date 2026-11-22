@@ -251,3 +251,9 @@
 
 ### 21.6 iPad / iPhone 표시
 웹과 같은 구성이다. `ChessFrameUnit`(`ghost`, `gauge`, `fade`)과 `ChessCombatSnapshot.interpolated`가 flags를 읽고 이음매를 넘는 박자는 사라졌다 나타나게 잇는다. `ChessArena`가 유령(반투명·점선·👻·보랏빛 그림자, 앞면 기물과 같은 칸이면 왼쪽 위 뒤로 비켜 섬), 웜홀 고리, 분신 점선, 이음매 가장자리, `👻`·`↑ 웜홀`·`분신!`·`🗿 석화` 글자와 소리를 그린다. 로비에 "🌀 무한 모드로 만들기" 스위치(기억함)와 "🌀 무한 대전"(`ADMX`), 방 대기·게임 헤더에 🌀 표시, 가이드 "무한 모드" 탭. `ApiClient.createRoom(guest:mobius:)`.
+
+## 23. 아이콘 (이모지를 쓰지 않는다)
+- 화면 글자에 이모지를 쓰지 않고 아이콘을 쓴다. 이모지는 기기마다 모양이 다르고 글자 색·크기를 따르지 않는다.
+- **웹**: `web/js/icons.js`의 인라인 SVG(`ic("ghost")`, 가이드 문구 안에서는 `{icon:ghost}`). 선 아이콘이고 `currentColor`와 `1em` 크기를 따른다. 코인·하트·방패·유령은 CSS로 색을 입힌다.
+- **iPad/iPhone**: SF Symbols(`Image(systemName:)`, 글자 안에서는 `Text("\(Image(systemName: ...))")`). SF Symbols에 없는 유령은 `Theme.swift`의 `GhostGlyph`(직접 그린 도형). 기물 글자(♚♛♜…) 대신 기물 이미지, 순위 메달은 `medal.fill`.
+- 남은 글자 기호는 별(★), 체크(✓), 닫기(✕), 마름모(◆)처럼 이모지가 아닌 것뿐이다.

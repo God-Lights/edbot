@@ -107,7 +107,7 @@ struct LobbyView: View {
     private var guestCard: some View {
         @Bindable var model = model
         return VStack(alignment: .leading, spacing: compact ? 6 : 10) {
-            Text("🎓 게스트로 참가").font(compact ? .subheadline.bold() : .headline)
+            Label("게스트로 참가", systemImage: "graduationcap.fill").font(compact ? .subheadline.bold() : .headline)
             if !compact {
                 Text("GL 계정이 없어도 학번과 이름만으로 게스트 방에 들어갈 수 있어요. (전적은 남지 않아요)")
                     .font(.caption)
@@ -146,7 +146,7 @@ struct LobbyView: View {
         @Bindable var model = model
         let cols: [GridItem] = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
         return VStack(spacing: compact ? 6 : 12) {
-            Toggle("🌀 무한 모드로 만들기", isOn: $model.createMobius)
+            Toggle(isOn: $model.createMobius) { Label("무한 모드로 만들기", systemImage: "infinity") }
                 .font(.subheadline)
                 .tint(Theme.accent)
             Button { model.createRoomAndJoin() } label: {
@@ -188,7 +188,7 @@ struct LobbyView: View {
                 }
                 .buttonStyle(SecondaryButtonStyle())
                 Button { model.join(code: "ADMX") } label: {
-                    Label("🌀 무한 대전", systemImage: "cpu").frame(maxWidth: .infinity)
+                    Label("무한 대전", systemImage: "infinity").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(SecondaryButtonStyle())
             }
@@ -333,7 +333,7 @@ struct LobbyRoomView: View {
                 Text("방 코드").font(.callout).foregroundStyle(.secondary)
                 Text(room.code).font(.system(size: vSize == .compact ? 44 : 72, weight: .heavy, design: .monospaced)).foregroundStyle(Theme.silver)
                 if room.mobius == true {
-                    Text("🌀 무한 모드").font(.caption.bold())
+                    Label("무한 모드", systemImage: "infinity").font(.caption.bold())
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(Capsule().fill(Theme.accent.opacity(0.3)))
                 }

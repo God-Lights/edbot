@@ -125,7 +125,7 @@ private struct HpPill: View {
             HStack {
                 Text(name).font(.caption.bold()).lineLimit(1)
                 Spacer()
-                Text("♥ \(max(0, hp))").font(.caption.monospacedDigit().bold())
+                Text("\(Image(systemName: "heart.fill")) \(max(0, hp))").font(.caption.monospacedDigit().bold())
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -156,7 +156,9 @@ struct ChessHeader: View {
             HStack(spacing: compact ? 10 : 18) {
                 HpPill(name: mine, hp: chess.me?.hp ?? 0, color: Theme.mine, width: compact ? 130 : 170)
                 VStack(spacing: 2) {
-                    Text("라운드 \(chess.round) / \(chess.maxRounds)\(room.mobius == true ? " 🌀" : "")").font(.headline)
+                    (room.mobius == true
+                         ? Text("라운드 \(chess.round) / \(chess.maxRounds) \(Image(systemName: "infinity"))")
+                         : Text("라운드 \(chess.round) / \(chess.maxRounds)")).font(.headline)
                     TimelineView(.periodic(from: .now, by: 0.5)) { context in
                         Text("\(Labels.phaseName(room.phase)) \(Labels.countdown(model.remainingMs(now: context.date)))")
                             .font(.subheadline.monospacedDigit())
@@ -633,7 +635,7 @@ struct ChessPrepView: View {
                 ForEach(me.smelters.indices, id: \.self) { slot in
                     VStack(spacing: 1) {
                         Text("재련대 \(slot + 1)").font(.system(size: 9)).foregroundStyle(.secondary)
-                        Text(me.smelters[slot].map { "⚒ " + weaponName($0) } ?? "비어 있음")
+                        Text(me.smelters[slot].map { "\(Image(systemName: "hammer.fill")) \(weaponName($0))" } ?? "비어 있음")
                             .font(.caption2.bold()).lineLimit(1).minimumScaleFactor(0.6)
                     }
                     .frame(maxWidth: .infinity, minHeight: compact ? 28 : 36)
@@ -777,7 +779,7 @@ struct ChessPrepView: View {
                     .rotationEffect(.degrees(-90))
                     .shadow(color: ringColor.opacity(0.6), radius: 4)
                 VStack(spacing: 0) {
-                    Text("🪙").font(.system(size: 14))
+                    Image(systemName: "dollarsign.circle.fill").font(.system(size: 14)).foregroundStyle(Color(red: 0.95, green: 0.78, blue: 0.3))
                     Text("\(me.gold)")
                         .font(.system(size: compact ? 18 : 24, weight: .bold, design: .rounded).monospacedDigit())
                         .contentTransition(.numericText())
@@ -795,7 +797,7 @@ struct ChessPrepView: View {
             .padding(.bottom, compact ? 10 : 12)
 
             VStack(alignment: .leading, spacing: compact ? 2 : 4) {
-                Text("시너지 · 다음 라운드 🪙 +\(me.nextIncome)").font(.caption2).foregroundStyle(.secondary)
+                Text("시너지 · 다음 라운드 \(Image(systemName: "dollarsign.circle.fill")) +\(me.nextIncome)").font(.caption2).foregroundStyle(.secondary)
                 synergyChips(me)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -875,7 +877,7 @@ struct ChessPrepView: View {
                 if let defId {
                     ChessToken(defId: defId, star: 1).frame(width: max(30, height - 40), height: max(30, height - 40))
                     Text(info?.nameKo ?? defId).font(.system(size: 12, weight: .bold)).lineLimit(1).minimumScaleFactor(0.6)
-                    Text("🪙\(cost)").font(.system(size: 11, weight: .bold).monospacedDigit())
+                    Text("\(Image(systemName: "dollarsign.circle.fill"))\(cost)").font(.system(size: 11, weight: .bold).monospacedDigit())
                         .padding(.horizontal, 6)
                         .background(Capsule().fill(ChessStyle.costColor(cost).opacity(0.3)))
                 } else {
@@ -911,7 +913,7 @@ struct ChessPrepView: View {
                 if let info { Text("\(Labels.pieceName(info.piece)) · \(info.faction) · \(info.role)").font(.caption).foregroundStyle(.secondary) }
             }
             if let info {
-                Text("♥ \(Int((Double(info.hp) * factor).rounded()))   ⚔ \(Int((Double(info.atk) * factor).rounded()))")
+                Text("\(Image(systemName: "heart.fill")) \(Int((Double(info.hp) * factor).rounded()))   \(Image(systemName: "flame.fill")) \(Int((Double(info.atk) * factor).rounded()))")
                     .font(.subheadline.monospacedDigit())
                 Text(info.abilityText).font(.caption).foregroundStyle(.secondary).lineLimit(compact ? 2 : 4)
             }
@@ -974,7 +976,7 @@ struct ChessCombatView: View {
             if let mine = chess.me, !mine.synergies.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(mine.synergies, id: \.self) { id in
-                        Text("🔗 \(model.chessSynergy(id)?.nameKo ?? id)").font(.caption)
+                        Text("\(Image(systemName: "link")) \(model.chessSynergy(id)?.nameKo ?? id)").font(.caption)
                     }
                 }
             }
@@ -1091,15 +1093,23 @@ struct ChessArena: View {
         }
     }
 
-    /// 무한 모드의 일: 이음매 이동(👻), 웜홀 상승, 분신 생김, 석화를 그 기물 위에 글자로 띄운다.
+    /// 무한 모드의 일: 이음매 이동(유령), 웜홀 상승, 분신 생김, 석화를 그 기물 위에 글자로 띄운다.
     @ViewBuilder
     private func seamFloat(_ event: ChessEvent, position: Double, cell: CGFloat) -> some View {
         let age: Double = position - Double(event.beat - 1)
-        let label: String? = ["ghost": "👻", "surface": "↑ 웜홀", "clone": "분신!", "stone": "🗿 석화"][event.kind]
-        if let label, age >= 0, age < 1, let unit = combat.frameUnit(beat: event.beat - 1, index: event.unit) ?? combat.frameUnit(beat: event.beat, index: event.unit) {
+        let known: Bool = ["ghost", "surface", "clone", "stone"].contains(event.kind)
+        if known, age >= 0, age < 1, let unit = combat.frameUnit(beat: event.beat - 1, index: event.unit) ?? combat.frameUnit(beat: event.beat, index: event.unit) {
             let point = display(x: unit.x, y: unit.y)
-            Text(label)
-                .font(.system(size: max(11, cell * 0.24), weight: .heavy))
+            let size: CGFloat = max(11, cell * 0.24)
+            HStack(spacing: 2) {
+                switch event.kind {
+                case "ghost": GhostGlyph().frame(width: size, height: size)
+                case "surface": Image(systemName: "arrow.up"); Text("웜홀")
+                case "stone": Image(systemName: "mountain.2.fill"); Text("석화")
+                default: Text("분신!")
+                }
+            }
+                .font(.system(size: size, weight: .heavy))
                 .foregroundStyle(event.kind == "surface" ? Color(red: 0.35, green: 0.8, blue: 0.75) : Color(red: 0.9, green: 0.75, blue: 0.95))
                 .shadow(color: .black, radius: 2)
                 .opacity(1 - age)
@@ -1315,7 +1325,10 @@ struct ChessArena: View {
                         .opacity(open ? 0.6 + 0.4 * abs(sin(position * 4)) : 1)
                         .frame(width: side, height: side)
                         .frame(maxHeight: .infinity, alignment: .center)
-                    Text("👻").font(.system(size: max(9, cell * 0.26)))
+                    GhostGlyph()
+                        .frame(width: max(9, cell * 0.26), height: max(9, cell * 0.26))
+                        .foregroundStyle(Color(red: 0.95, green: 0.82, blue: 0.97))
+                        .shadow(color: .black, radius: 1)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
                 VStack(spacing: 1) {

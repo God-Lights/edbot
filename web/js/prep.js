@@ -1,5 +1,6 @@
 // 준비 단계 화면: 판, 대기석, 상점, 자원 패널. HTML 문자열을 만들고, 클릭/드래그는 main.js가 한꺼번에 처리한다.
 
+import { ic } from "./icons.js";
 import { itemName } from "./crafting.js";
 import { S, conn, materialInfo, mySeat, synergyInfo, unitInfo, weaponInfo } from "./state.js";
 import { bgm, sfx } from "./sfx.js";
@@ -22,12 +23,12 @@ export function token(defId, star, opts = {}) {
   return `<div class="token${opts.selected ? " sel" : ""}${fx}" style="--pc:${PIECE_COLOR[piece]};--bc:${border}"${drag}>
     <span class="icon" style="--img:url(assets/pieces/${piece}.png)"></span>
     <span class="nm">${esc(info?.nameKo ?? defId)}</span>
-    <span class="star">${starText(star)}</span>${opts.armed ? '<span class="armed" title="무기">🛡</span>' : ""}</div>`;
+    <span class="star">${starText(star)}</span>${opts.armed ? '<span class="armed" title="무기">${ic("shield")}</span>' : ""}</div>`;
 }
 
 export function hpPill(name, hp, color) {
   const ratio = Math.min(1, Math.max(0, hp / START_HP));
-  return `<div class="hp"><div class="hp-top"><b>${esc(name)}</b><span>♥ ${Math.max(0, hp)}</span></div>
+  return `<div class="hp"><div class="hp-top"><b>${esc(name)}</b><span>${ic("heart")} ${Math.max(0, hp)}</span></div>
     <div class="hp-bar"><i style="width:${ratio * 100}%;background:${color}"></i></div></div>`;
 }
 
@@ -46,13 +47,13 @@ export function gameBar(room, chess) {
     ? `<span class="opp-state ${chess.opponent.done ? "good" : ""}" title="상대 ${chess.opponent.boardCount}기 배치">${chess.opponent.done ? "준비 끝" : "준비 중"}</span>` : "";
   const btn = (act, label, title, extra = "") => `<button class="ibtn" data-act="${act}" title="${title}"${extra}>${label}</button>`;
   return `<header class="gbar">
-    <div class="gb-side"><b class="mono gb-code">${esc(room.code)}</b>${room.mobius ? `<span class="badge mob" title="무한 모드">🌀</span>` : ""}${hpPill(mine, chess.me?.hp ?? 0, "var(--mine)")}</div>
+    <div class="gb-side"><b class="mono gb-code">${esc(room.code)}</b>${room.mobius ? `<span class="badge mob" title="무한 모드">${ic("infinity")}</span>` : ""}${hpPill(mine, chess.me?.hp ?? 0, "var(--mine)")}</div>
     <div class="gb-center"><b>R${chess.round}/${chess.maxRounds}</b>
       <span class="sub gb-timer" data-timer="${room.phaseEndsAt ?? ""}" data-label="${PHASE_NAME[room.phase]}">${PHASE_NAME[room.phase]} ${countdown(conn.remainingMs(room.phaseEndsAt))}</span>
       ${last ? `<span class="gb-last" title="${esc(last)}">${esc(last)}</span>` : ""}</div>
     <div class="gb-side gb-right">${hpPill(theirs, chess.opponent?.hp ?? 0, "var(--theirs)")}${opp}
-      <div class="gb-btns">${btn("mute", sfx.muted ? "🔇" : "🔊", "효과음")}${btn("bgm", bgm.on ? "🎵" : "🎶", "배경 음악")}${btn("guide", "📖", "가이드", ' data-tab="flow"')}
-        ${room.isHost ? btn("room-close", "🗑", "방 닫기", ` data-code="${esc(room.code)}" data-from="room"`) : ""}${btn("surrender", "🏳", "항복")}${btn("leave", "⎋", "나가기")}</div></div>
+      <div class="gb-btns">${btn("mute", ic(sfx.muted ? "volume-off" : "volume"), "효과음")}${btn("bgm", ic(bgm.on ? "music" : "music-off"), "배경 음악")}${btn("guide", ic("book"), "가이드", ' data-tab="flow"')}
+        ${room.isHost ? btn("room-close", ic("trash"), "방 닫기", ` data-code="${esc(room.code)}" data-from="room"`) : ""}${btn("surrender", ic("flag"), "항복")}${btn("leave", ic("log-out"), "나가기")}</div></div>
   </header>`;
 }
 export const header = gameBar;
@@ -92,8 +93,8 @@ function benchHtml(me, canAuto) {
     .join("");
   const hasRewatch = Object.keys(S.sessionRounds).length > 0;
   return `<div class="bench">${slots}
-    <button class="slot act${canAuto ? "" : " off"}" data-act="auto" title="대기석의 기물을 알아서 판에 놓아요"${canAuto ? "" : " disabled"}><span>✨</span><small>자동</small></button>
-    <button class="slot act${hasRewatch ? "" : " off"}" data-act="rewatch" title="지난 전투 다시 보기"${hasRewatch ? "" : " disabled"}><span>↺</span><small>지난 전투</small></button></div>`;
+    <button class="slot act${canAuto ? "" : " off"}" data-act="auto" title="대기석의 기물을 알아서 판에 놓아요"${canAuto ? "" : " disabled"}><span>${ic("sparkles")}</span><small>자동</small></button>
+    <button class="slot act${hasRewatch ? "" : " off"}" data-act="rewatch" title="지난 전투 다시 보기"${hasRewatch ? "" : " disabled"}><span>${ic("rotate-ccw")}</span><small>지난 전투</small></button></div>`;
 }
 
 // ---- 오른쪽 패널 ----
@@ -111,13 +112,13 @@ function shopHtml(chess, me) {
       return `<button class="shopcard${off}${deal}" data-act="buy" data-slot="${slot}" style="--bc:${COST_COLOR[cost]};--i:${slot}" title="${esc((info?.nameKo ?? id) + " · " + (info?.abilityText ?? ""))}">
         ${token(id, 1)}
         <span class="si"><b>${esc(info?.nameKo ?? id)}</b><small>${esc(info?.abilityText ?? "")}</small></span>
-        <span class="cost" style="background:${COST_COLOR[cost]}55">🪙${cost}</span></button>`;
+        <span class="cost" style="background:${COST_COLOR[cost]}55">${ic("coin")}${cost}</span></button>`;
     })
     .join("");
   const names = ["1골드", "2골드", "3골드", "4골드"];
   const odds = chess.shopOdds.map((p, i) => (p > 0 ? `${names[i]} ${p}%` : "")).filter(Boolean).join(" · ");
   return `<div class="shop${coachStep(chess, me)?.n === 1 && showCoach(chess) ? " hl" : ""}">${cards}
-    <button class="shopcard reroll" data-act="reroll"${me.gold < me.rerollCost ? " disabled" : ""} title="새로고침 · 등장 확률: ${esc(odds)}"><span class="rr">⟳</span><small>새로고침</small><b>🪙${me.rerollCost}</b></button></div>`;
+    <button class="shopcard reroll" data-act="reroll"${me.gold < me.rerollCost ? " disabled" : ""} title="새로고침 · 등장 확률: ${esc(odds)}"><span class="rr">${ic("refresh")}</span><small>새로고침</small><b>${ic("coin")}${me.rerollCost}</b></button></div>`;
 }
 
 const itemLabel = (item) => itemName(item, S.catalog);
@@ -134,12 +135,12 @@ function resourceHtml(chess, me) {
   let html = `<div class="res">`;
   if (chess.tiles.length) html += `<div class="rrow rtile" title="칸 위에 기물을 놓거나 걸어가면 재료를 얻어요">◆ 이번 라운드 자원 칸: ${esc(tileNames.join(", "))}</div>`;
   if (chess.market.length) {
-    html += `<div class="rrow"><span class="rlabel" title="광물 시장 · 한 라운드에 한 개">🏪</span>${chess.market
+    html += `<div class="rrow"><span class="rlabel" title="광물 시장 · 한 라운드에 한 개">${ic("store")}</span>${chess.market
       .map((item, i) => {
         const info = materialInfo(item.material);
         const rarity = info?.rarity ?? "common";
         const on = !me.marketBought && me.gold >= item.price;
-        return `<button class="mchip${on ? "" : " dim"}" data-act="market" data-slot="${i}"${on ? "" : " disabled"} style="--rc:${RARITY_COLOR[rarity]}" title="${RARITY_NAME[rarity]} → ${esc(weaponInfo(info?.weaponId)?.nameKo ?? "")}"><i>◆</i>${esc(info?.nameKo ?? item.material)} <b>${me.marketBought ? "✓" : "🪙" + item.price}</b></button>`;
+        return `<button class="mchip${on ? "" : " dim"}" data-act="market" data-slot="${i}"${on ? "" : " disabled"} style="--rc:${RARITY_COLOR[rarity]}" title="${RARITY_NAME[rarity]} → ${esc(weaponInfo(info?.weaponId)?.nameKo ?? "")}"><i>◆</i>${esc(info?.nameKo ?? item.material)} <b>${me.marketBought ? "✓" : ic("coin") + item.price}</b></button>`;
       })
       .join("")}</div>`;
   }
@@ -152,12 +153,12 @@ function resourceHtml(chess, me) {
       })
       .join("")}</div>`;
   }
-  html += `<div class="rrow smelters"><span class="rlabel" title="재련대 · 재련 중인 무기는 다음 라운드 시작에 완성돼요">⚒</span>${me.smelters
+  html += `<div class="rrow smelters"><span class="rlabel" title="재련대 · 재련 중인 무기는 다음 라운드 시작에 완성돼요">${ic("hammer")}</span>${me.smelters
     .map((w, i) => `<div class="smelter${w ? " busy" : ""}" data-drop="smelter" title="재련대 ${i + 1}">${w ? esc(weaponInfo(w)?.nameKo ?? w) : "비어 있음"}</div>`)
     .join("")}</div>`;
-  if (!weapons.length && me.board.some((u) => u.weapon)) html += `<div class="rrow emptybox" data-drop="inventory">🛡 무기를 뺄 기물을 여기로</div>`;
+  if (!weapons.length && me.board.some((u) => u.weapon)) html += `<div class="rrow emptybox" data-drop="inventory">${ic("shield")} 무기를 뺄 기물을 여기로</div>`;
   if (weapons.length) {
-    html += `<div class="rrow chips" data-drop="inventory"><span class="rlabel" title="무기 · 기물 위로 끌어 놓으면 껴요 (누른 뒤 기물을 눌러도 돼요)">🛡</span>${weapons
+    html += `<div class="rrow chips" data-drop="inventory"><span class="rlabel" title="무기 · 기물 위로 끌어 놓으면 껴요 (누른 뒤 기물을 눌러도 돼요)">${ic("shield")}</span>${weapons
       .map(([id, n]) => {
         const r = weaponInfo(id)?.rarity ?? "common";
         return `<button class="${chipClass("weapon", id, S.selWeapon === id ? " on" : "")}" style="--rc:${RARITY_COLOR[r]}" data-act="pick-weapon" data-id="${esc(id)}" data-kind="weapon" data-drag="weapon" data-drop="combine" draggable="true" title="${esc(weaponInfo(id)?.text ?? "")}">${esc(weaponInfo(id)?.nameKo ?? id)} ×${n}</button>`;
@@ -165,8 +166,8 @@ function resourceHtml(chess, me) {
       .join("")}</div>`;
   }
   if (materials.length + weapons.length) {
-    html += `<div class="rrow tools"><button class="mini${S.combineMode ? " on" : ""}" data-act="combine-mode" title="아이템 둘을 차례로 눌러 합쳐요 (끌어다 놓아도 돼요)">⚗ 조합${S.combineMode ? " 중" : ""}</button>
-      <button class="mini" data-act="guide" data-tab="recipes">📜 도감</button>
+    html += `<div class="rrow tools"><button class="mini${S.combineMode ? " on" : ""}" data-act="combine-mode" title="아이템 둘을 차례로 눌러 합쳐요 (끌어다 놓아도 돼요)">${ic("flask")} 조합${S.combineMode ? " 중" : ""}</button>
+      <button class="mini" data-act="guide" data-tab="recipes">${ic("list")} 도감</button>
       <span class="combine-hint" id="combine-hint">${S.combineFirst ? `<b>${esc(itemLabel(S.combineFirst))}</b>와(과) 합칠 아이템을 누르세요` : "다른 아이템 위로 끌면 합쳐져요"}</span></div>`;
   }
   return html + "</div>";
@@ -183,7 +184,7 @@ function ringHtml(count, cap, gold) {
   return `<div class="ringbox${count >= cap ? " full" : ""}" title="판에 올린 기물 ${count} / ${cap}">
     <svg viewBox="0 0 100 100"><circle class="trk" cx="50" cy="50" r="${RING_R}"/>
       <circle class="prg" cx="50" cy="50" r="${RING_R}" stroke-dasharray="${RING_C.toFixed(2)}" style="--from:${(RING_C * (1 - prev)).toFixed(2)};--to:${(RING_C * (1 - ratio)).toFixed(2)}"/></svg>
-    <div class="mid${bump}"><span class="coin">🪙</span><b>${gold}</b></div>
+    <div class="mid${bump}"><span class="coin">${ic("coin")}</span><b>${gold}</b></div>
     <div class="cap">판 ${count}/${cap}</div></div>`;
 }
 
@@ -226,8 +227,8 @@ function selectedHtml(me) {
   const w = unit.weapon ? weaponInfo(unit.weapon) : null;
   return `<div class="selpop panel"><div class="selhead"><b>${esc(info?.nameKo ?? unit.defId)} ${starText(unit.star)}</b>
     <span class="sub">${PIECE_NAME[info?.piece] ?? ""} · ${esc(info?.role ?? "")}</span><span class="grow"></span><button class="ibtn" data-act="sel-close" title="닫기">✕</button></div>
-    ${info ? `<div>♥ ${Math.round(info.hp * f)} &nbsp; ⚔ ${Math.round(info.atk * f)}</div><div class="sub">${esc(info.abilityText)}</div>` : ""}
-    ${w ? `<div class="wline">🛡 <b>${esc(w.nameKo)}</b> <button class="mini" data-act="unequip-sel">무기 빼기</button></div>` : ""}
+    ${info ? `<div>${ic("heart")} ${Math.round(info.hp * f)} &nbsp; ${ic("sword")} ${Math.round(info.atk * f)}</div><div class="sub">${esc(info.abilityText)}</div>` : ""}
+    ${w ? `<div class="wline">${ic("shield")} <b>${esc(w.nameKo)}</b> <button class="mini" data-act="unequip-sel">무기 빼기</button></div>` : ""}
     <div class="btnrow">${onBoard ? `<button class="mini" data-act="bench-sel">대기석으로</button>` : ""}
     <button class="mini" data-act="sell-sel">판매 +${sellValue(info?.cost ?? 1, unit.star)}</button></div></div>`;
 }
@@ -279,8 +280,8 @@ export function prepView(room) {
       </section>
       <aside class="gside">
         <div class="gstat">${ringHtml(me.board.length, chess.deployCap, me.gold)}
-          <div class="synbox"><div class="sub gnext">다음 라운드 🪙+${me.nextIncome}${chess.lite ? ' · <span class="badge">입문</span>' : ""}</div>${synergyHtml(me)}</div></div>
-        <div class="gres">${res}<div class="sellzone" data-drop="sell" title="기물을 여기로 끌어다 놓으면 팔아요">🗑 끌어서 팔기</div></div>
+          <div class="synbox"><div class="sub gnext">다음 라운드 ${ic("coin")}+${me.nextIncome}${chess.lite ? ' · <span class="badge">입문</span>' : ""}</div>${synergyHtml(me)}</div></div>
+        <div class="gres">${res}<div class="sellzone" data-drop="sell" title="기물을 여기로 끌어다 놓으면 팔아요">${ic("trash")} 끌어서 팔기</div></div>
         <button class="btn primary gdone${step === 4 ? " hl" : ""}" data-act="done"${me.done ? " disabled" : ""}>${me.done ? "준비 완료 · 상대를 기다리는 중" : "준비 끝"}</button>
       </aside>
       ${selectedHtml(me)}

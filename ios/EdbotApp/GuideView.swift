@@ -271,7 +271,7 @@ private struct CharacterGuide: View {
                     Text("\(Labels.pieceName(info.piece)) · \(info.faction) · \(info.role)")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                Text("♥ \(info.hp)   ⚔ \(info.atk)").font(.caption.monospacedDigit())
+                Text("\(Image(systemName: "heart.fill")) \(info.hp)   \(Image(systemName: "flame.fill")) \(info.atk)").font(.caption.monospacedDigit())
                 Text((info.passive ? "패시브: " : "능력: ") + info.abilityText)
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
@@ -405,12 +405,12 @@ private struct MobiusGuide: View {
     var body: some View {
         VStack(spacing: 14) {
             GuideCard(title: "무한 모드란?") {
-                guideLine("판의 **왼쪽 끝과 오른쪽 끝이 이어져 있는** 특별한 규칙이에요. (뫼비우스의 띠) 방을 만들 때 **🌀 무한 모드**를 켜거나, 로비의 **무한 대전**으로 봇과 해 볼 수 있어요.")
+                guideLine("판의 **왼쪽 끝과 오른쪽 끝이 이어져 있는** 특별한 규칙이에요. (뫼비우스의 띠) 방을 만들 때 **\(Image(systemName: "infinity")) 무한 모드**를 켜거나, 로비의 **무한 대전**으로 봇과 해 볼 수 있어요.")
                 guideLine("준비 단계(상점·배치)는 똑같아요. 달라지는 건 **전투**뿐이에요.")
             }
             GuideCard(title: "이음매와 유령") {
                 guideLine("판 왼쪽·오른쪽 가장자리를 넘어가면 반대편 가장자리로 나오고, **위아래가 뒤집혀요.** 판 가장자리의 보랏빛이 이음매예요. 위·아래 끝은 이어지지 않아요.")
-                guideLine("이음매를 넘으면 기물이 **유령**이 돼요. 반투명하고 👻가 붙어요. 유령은 같은 칸에 앞면 기물이 있어도 겹쳐서 있을 수 있어요.")
+                guideLine("이음매를 넘으면 기물이 **유령**이 돼요. 반투명한 모습에 점선 테두리가 붙어요. 유령은 같은 칸에 앞면 기물이 있어도 겹쳐서 있을 수 있어요.")
                 guideLine("**앞면 기물과 유령은 서로 닿지 않아요.** 막지도, 때리지도, 능력에 맞지도 않아요. 유령으로 적진 한가운데를 지나갈 수도 있어요. 유령끼리는 서로 싸워요.")
                 guideLine("이음매 **너머 칸을 향한 공격**은 건너편에 있는 기물에게 닿아요.")
             }

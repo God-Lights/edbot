@@ -1,14 +1,15 @@
 // 게임 가이드: 규칙 설명(고정 문구) + 캐릭터·시너지·재료·무기(서버 데이터).
 
+import { ic, withIcons } from "./icons.js";
 import { S, update } from "./state.js";
-import { PIECE_COLOR, PIECE_NAME, RARITY_COLOR, RARITY_NAME, esc } from "./util.js";
+import { PIECE_COLOR, PIECE_NAME, RARITY_COLOR, RARITY_NAME, WORMHOLE_BEATS, esc } from "./util.js";
 
 export const TABS = [
   ["flow", "게임 흐름"], ["prep", "상점과 배치"], ["combat", "전투 규칙"], ["characters", "캐릭터"],
   ["synergy", "시너지"], ["resources", "자원과 무기"], ["recipes", "조합 도감"], ["mobius", "무한 모드"], ["controls", "조작"],
 ];
 
-const li = (text) => `<li>${text.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")}</li>`;
+const li = (text) => `<li>${withIcons(text).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")}</li>`;
 const card = (title, lines) => `<div class="panel gcard"><h4>${title}</h4><ul>${lines.map(li).join("")}</ul></div>`;
 
 const MOVES = [
@@ -81,7 +82,7 @@ function characters() {
   return head + [1, 2, 3, 4].map((cost) => `<div class="panel gcard"><h4>${cost}골드</h4>${S.catalog.units.filter((u) => u.cost === cost).map((u) => `
     <div class="mv"><span class="gicon" style="--pc:${PIECE_COLOR[u.piece]};--img:url(assets/pieces/${u.piece}.png)"></span>
     <div><b>${esc(u.nameKo)}</b> <span class="sub">${PIECE_NAME[u.piece]} · ${esc(u.faction)} · ${esc(u.role)}</span>
-    <div class="sub">♥ ${u.hp} &nbsp; ⚔ ${u.atk}</div><div>${u.passive ? "패시브: " : "능력: "}${esc(u.abilityText)}</div></div></div>`).join("")}</div>`).join("");
+    <div class="sub">${ic("heart")} ${u.hp} &nbsp; ${ic("sword")} ${u.atk}</div><div>${u.passive ? "패시브: " : "능력: "}${esc(u.abilityText)}</div></div></div>`).join("")}</div>`).join("");
 }
 
 function synergy() {
@@ -104,7 +105,7 @@ function resources() {
     "전투가 끝난 뒤에 캔 재료를 받아요. 에드코인 슬링과 비트코인 대검은 골드도 줘요.",
   ]) + card("재련대와 무기 끼기", [
     "재료를 누르면 재련대에 들어가요. **재련대는 2칸**이고, 다음 라운드가 시작될 때 같은 이름의 무기로 완성돼요.",
-    "무기를 누른 뒤 기물(대기석이나 판 위)을 누르면 껴요. 🛡 표시가 있는 기물이 무기를 낀 기물이에요.",
+    "무기를 누른 뒤 기물(대기석이나 판 위)을 누르면 껴요. {icon:shield} 표시가 있는 기물이 무기를 낀 기물이에요.",
     "기물을 팔거나 ★2로 합칠 때 무기는 보관함으로 돌아와요. 선택한 기물 정보에서 **무기 빼기**도 할 수 있어요.",
     "재료와 무기는 서로 **조합**할 수도 있어요. (조합 도감 탭)",
   ]);
@@ -118,7 +119,7 @@ function resources() {
 function recipes() {
   const head = card("조합이란?", [
     "재료와 무기를 **서로 합쳐서** 새로운 재료나 무기를 만들어요. 합친 둘은 사라지고, 재련처럼 기다리지 않고 **바로** 결과가 나와요.",
-    "아이템을 **다른 아이템 위로 끌어다 놓으면** 합쳐져요. 끄는 동안 어떤 결과가 나올지 미리 보여 줘요. 끌기 어려우면 **⚗ 조합** 버튼을 켜고 두 아이템을 차례로 눌러도 돼요.",
+    "아이템을 **다른 아이템 위로 끌어다 놓으면** 합쳐져요. 끄는 동안 어떤 결과가 나올지 미리 보여 줘요. 끌기 어려우면 **{icon:flask} 조합** 버튼을 켜고 두 아이템을 차례로 눌러도 돼요.",
   ]) + card("무기 조합", [
     "**같은 무기 둘 → ★2 무기**: 효과가 1.5배예요. (예: 클로우스톤 도끼 + 클로우스톤 도끼)",
     "**다른 무기 둘 → 융합 무기**: 두 무기의 효과를 **각각 75%씩** 모두 가져요. (예: 클로우스톤 도끼 + 에드뮴 블레이드)",
@@ -153,11 +154,11 @@ const controls = () => card("준비 단계 조작", [
 ]) + card("항복", ["화면 위의 **항복** 버튼은 준비 중에도, 전투 중에도 눌러요. 누르면 바로 패배해요."]);
 
 const mobius = () => card("무한 모드란?", [
-  "판의 **왼쪽 끝과 오른쪽 끝이 이어져 있는** 특별한 규칙이에요. (뫼비우스의 띠) 방을 만들 때 **🌀 무한 모드**를 켜거나, 로비의 **무한 대전**으로 봇과 해 볼 수 있어요.",
+  "판의 **왼쪽 끝과 오른쪽 끝이 이어져 있는** 특별한 규칙이에요. (뫼비우스의 띠) 방을 만들 때 **{icon:infinity} 무한 모드**를 켜거나, 로비의 **무한 대전**으로 봇과 해 볼 수 있어요.",
   "준비 단계(상점·배치)는 똑같아요. 달라지는 건 **전투**뿐이에요.",
 ]) + card("이음매와 유령", [
   "판 왼쪽·오른쪽 가장자리를 넘어가면 반대편 가장자리로 나오고, **위아래가 뒤집혀요.** 판 가장자리의 보랏빛이 이음매예요. 위·아래 끝은 이어지지 않아요.",
-  "이음매를 넘으면 기물이 **유령**이 돼요. 반투명하고 👻가 붙어요. 유령은 같은 칸에 앞면 기물이 있어도 겹쳐서 있을 수 있어요.",
+  "이음매를 넘으면 기물이 **유령**이 돼요. 반투명하고 {icon:ghost}가 붙어요. 유령은 같은 칸에 앞면 기물이 있어도 겹쳐서 있을 수 있어요.",
   "**앞면 기물과 유령은 서로 닿지 않아요.** 막지도, 때리지도, 능력에 맞지도 않아요. 유령으로 적진 한가운데를 지나갈 수도 있어요. 유령끼리는 서로 싸워요.",
   "이음매 **너머 칸을 향한 공격**은 건너편에 있는 기물에게 닿아요.",
 ]) + card("웜홀", [
