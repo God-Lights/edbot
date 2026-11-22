@@ -13,6 +13,11 @@ async function request(path, options = {}) {
 
 export const api = {
   /** 로그인한 사용자. 안 했으면 null */
+  /** 이 서버의 이름·환경·로그인 방식·에디션·프로토콜 버전. 오래된 서버(이 API가 없는)면 null */
+  async server() {
+    const r = await request("/api/server");
+    return r.ok && r.body && typeof r.body.protocol === "number" ? r.body : null;
+  },
   async me() {
     const r = await request("/api/auth/me");
     return r.ok ? r.body.user : null;

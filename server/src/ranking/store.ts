@@ -1,4 +1,4 @@
-// D1에 전적과 랭킹을 저장하고 읽는다.
+// 전적과 랭킹을 저장하고 읽는다. 저장소는 RankingStore 하나로 감싸서, 운영·개발은 D1을, 로컬 서버는 JSON 파일을 꽂는다.
 
 import { START_RATING, nextRating } from "./elo";
 
@@ -19,7 +19,7 @@ export interface RatingChange {
   after: number;
 }
 
-interface PlayerRow {
+export interface PlayerRow {
   user_id: string;
   nickname: string;
   rating: number;
@@ -238,3 +238,36 @@ export async function getReplay(db: D1Database, id: string): Promise<string | nu
 
 /** 방 코드와 시작 시각으로 만든 판 id (recordMatch와 같은 규칙) */
 export const matchIdOf = (roomCode: string, startedAt: number): string => `${roomCode}:${startedAt}`;
+
+// ---- 저장소 한 겹 ----
+
+/**
+ * 전적과 랭킹을 저장하는 곳. 서버 코드는 이 여섯 가지만 안다.
+ * 운영·개발: D1(d1RankingStore). 로컬 서버: JSON 파일(local-server). 시험: 메모리(memory-store.ts).
+ */
+export interface RankingStore {
+  recordMatch(input: MatchInput): Promise<[RatingChange, RatingChange] | null>;
+  getLeaderboard(limit: number, meUserId: string | null): Promise<LeaderboardEntry[]>;
+  getPlayerStats(userId: string): Promise<PlayerStats | null>;
+  getRecentMatches(userId: string, limit: number): Promise<MatchSummary[]>;
+  saveReplay(id: string, data: string, now?: number): Promise<void>;
+  getReplay(id: string): Promise<string | null>;
+}
+
+export function d1RankingStore(db: D1Database): RankingStore {
+  return {
+    recordMatch: (input) => recordMatch(db, input),
+    getLeaderboard: (limit, me) => getLeaderboard(db, limit, me),
+    getPlayerStats: (userId) => getPlayerStats(db, userId),
+    getRecentMatches: (userId, limit) => getRecentMatches(db, userId, limit),
+    saveReplay: (id, data, now) => saveReplay(db, id, data, now),
+    getReplay: (id) => getReplay(db, id),
+  };
+}
+
+/** env.STORE(로컬 서버가 꽂아 주는 저장소)가 있으면 그것을, 없으면 D1을 쓴다. */
+export function rankingStoreOf(env: { DB?: D1Database; STORE?: RankingStore }): RankingStore {
+  if (env.STORE) return env.STORE;
+  if (!env.DB) throw new Error("전적 저장소가 없다. (DB 또는 STORE가 필요하다)");
+  return d1RankingStore(env.DB);
+}

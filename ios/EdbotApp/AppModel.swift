@@ -102,16 +102,48 @@ final class AppModel {
     /// 준비 단계에서 고른 내 기물(대기석 또는 판 위). 칸을 누르면 거기에 놓는다.
     var selectedUid: String?
 
-    private let tokens: TokenStore
+    /// 서버 주소(호스트와 포트)마다 따로 토큰을 둔다.
+    private let tokenFactory: (URL) -> TokenStore
+    private var tokens: TokenStore { tokenFactory(serverURL ?? URL(string: "https://edgame-api.officialgl.com")!) }
+    /// 이 서버의 이름·환경·로그인 방식. 아직 모르거나 오래된 서버면 nil.
+    private(set) var serverInfo: ServerInfo?
+    private var serverInfoTask: Task<Void, Never>?
     private var connection: RoomConnection?
     private var eventTask: Task<Void, Never>?
     private var loginTask: Task<Void, Never>?
 
-    init(tokens: TokenStore = KeychainTokenStore()) {
-        self.tokens = tokens
+    init(tokenFactory: @escaping (URL) -> TokenStore = { KeychainTokenStore(account: tokenAccount(forServer: $0)) }) {
+        self.tokenFactory = tokenFactory
         Sfx.shared.resumeMusicIfNeeded()
         authToken = tokens.load()
         if authToken != nil { Task { await restoreLogin() } }
+        refreshServerInfo()
+    }
+
+    /// 서버 입력칸이 바뀌었다: 그 서버의 토큰으로 바꾸고, 서버 정보를 다시 읽는다. (입력 중에는 잠깐 기다린다)
+    func serverChanged() {
+        loginTask?.cancel()
+        isLoggingIn = false
+        user = nil
+        authToken = tokens.load()
+        serverInfo = nil
+        refreshServerInfo(after: 0.6)
+    }
+
+    /// GET /api/server. 실패하거나 오래된 서버면 서버 정보를 비워 두고 예전처럼 동작한다.
+    func refreshServerInfo(after delay: TimeInterval = 0) {
+        serverInfoTask?.cancel()
+        guard let url = serverURL else { serverInfo = nil; return }
+        serverInfoTask = Task { [weak self] in
+            if delay > 0 { try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
+            if Task.isCancelled { return }
+            let info = try? await ApiClient(baseURL: url).serverInfo()
+            if Task.isCancelled { return }
+            guard let self, self.serverURL == url else { return }
+            self.serverInfo = info
+            if let info, !info.isCompatible { self.message = "서버가 더 새로운 버전이에요. 앱을 업데이트해 주세요." }
+            if self.authToken != nil, self.user == nil { await self.restoreLogin() }
+        }
     }
 
     var serverURL: URL? { normalizeServerURL(serverText) }

@@ -1,0 +1,129 @@
+name: Local server
+
+# 로컬 서버(local-server/): Cloudflare 없이 Bun으로 서버 엔진을 돌리는 단일 실행파일.
+# - 리눅스에서 윈도우용 .exe 와 리눅스용 실행파일을 만든다.
+# - 만든 .exe 를 진짜 윈도우 머신에서 실행하고, 웹 화면·API·봇과 한 판(WebSocket)까지 점검한다.
+on:
+  pull_request:
+    paths:
+      - "local-server/**"
+      - "server/src/**"
+      - "server/migrations/**"
+      - "web/**"
+      - ".github/workflows/local-server.yml"
+  push:
+    branches: [main]
+    paths:
+      - "local-server/**"
+      - ".github/workflows/local-server.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local-server-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: 실행파일 만들기 (리눅스)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: 저장소 시험 (JSON 파일, 데이터 폴더 잠금)
+        working-directory: local-server
+        run: bun test
+      - name: 소스로 실행해서 점검 (리눅스)
+        working-directory: local-server
+        run: |
+          bun --preload ./src/runtime/plugin.ts src/main.ts --port 8787 --data "$RUNNER_TEMP/dev-data" --phase-scale 0.08 &
+          for i in $(seq 1 30); do curl -sf localhost:8787/health >/dev/null && break; sleep 1; done
+          bun scripts/smoke.ts http://localhost:8787 ADMN
+          kill %1
+      - name: 윈도우용 .exe 와 리눅스용 실행파일 만들기
+        working-directory: local-server
+        run: |
+          bun build.ts --target bun-windows-x64
+          bun build.ts
+          sha256sum dist/* | tee dist/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: commander-server
+          path: local-server/dist/*
+          retention-days: 14
+
+  windows:
+    name: 윈도우에서 실행 점검
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/download-artifact@v4
+        with:
+          name: commander-server
+          path: dist
+      - name: exe 를 실행하고 점검
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "exe-test"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Copy-Item dist/commander-server.exe $dir
+          # 소스·웹 폴더가 없는 곳에서, exe 하나만으로 돌아가야 한다.
+          $p = Start-Process -FilePath "$dir/commander-server.exe" -ArgumentList "--port","8787","--phase-scale","0.08" -WorkingDirectory $dir -PassThru -RedirectStandardOutput "$dir/out.log" -RedirectStandardError "$dir/err.log"
+          $ok = $false
+          for ($i = 0; $i -lt 30; $i++) {
+            try { Invoke-RestMethod http://localhost:8787/health | Out-Null; $ok = $true; break } catch { Start-Sleep -Seconds 1 }
+          }
+          Get-Content "$dir/out.log" -ErrorAction SilentlyContinue
+          Get-Content "$dir/err.log" -ErrorAction SilentlyContinue
+          if (-not $ok) { throw "서버가 켜지지 않았다" }
+          bun local-server/scripts/smoke.ts http://localhost:8787 ADMN
+          if ($LASTEXITCODE -ne 0) { throw "점검 실패" }
+          # 데이터 폴더가 exe 옆에 만들어졌는지
+          if (-not (Test-Path "$dir/commander-data/data/players.json")) { throw "데이터 폴더(전적 JSON)가 exe 옆에 없다" }
+          if (-not (Test-Path "$dir/commander-data/data/matches.jsonl")) { throw "판 기록(matches.jsonl)이 없다" }
+          # 껐다 켜도 방이 남는지
+          $room = (Invoke-RestMethod -Method Post "http://localhost:8787/api/rooms?mobius=1").code
+          Start-Sleep -Seconds 1   # 저장은 바뀐 뒤 0.15초 안에 디스크에 쓴다. (그 사이에 강제로 끄면 마지막 변경만 잃는다)
+          Get-ChildItem "$dir/commander-data/objects/Room" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "저장된 방 파일: $($_.Name)" }
+          Stop-Process -Id $p.Id -Force
+          Start-Sleep -Seconds 2
+          $p = Start-Process -FilePath "$dir/commander-server.exe" -ArgumentList "--port","8787" -WorkingDirectory $dir -PassThru -RedirectStandardOutput "$dir/out2.log" -RedirectStandardError "$dir/err2.log"
+          $ok = $false
+          for ($i = 0; $i -lt 30; $i++) {
+            try { $info = Invoke-RestMethod "http://localhost:8787/api/rooms/$room"; $ok = $true; break } catch { Start-Sleep -Seconds 1 }
+          }
+          Stop-Process -Id $p.Id -Force
+          Get-Content "$dir/out2.log" -ErrorAction SilentlyContinue
+          Get-Content "$dir/err2.log" -ErrorAction SilentlyContinue
+          if (-not $ok -or $info.mobius -ne $true) { throw "껐다 켠 뒤 방($room)이 남아 있지 않다" }
+          Write-Host "껐다 켠 뒤에도 방($room)이 남아 있다."
+          # 전적(JSON 파일)도 남아 있는지: 점검에서 두 사람이 한 판을 했다. 서버를 다시 켠 뒤 순위표에 있어야 한다.
+          $p = Start-Process -FilePath "$dir/commander-server.exe" -ArgumentList "--port","8787" -WorkingDirectory $dir -PassThru -RedirectStandardOutput "$dir/out3.log" -RedirectStandardError "$dir/err3.log"
+          $count = 0
+          for ($i = 0; $i -lt 30; $i++) {
+            try { $count = @((Invoke-RestMethod "http://localhost:8787/api/leaderboard?limit=50").entries).Count; break } catch { Start-Sleep -Seconds 1 }
+          }
+          # 같은 데이터 폴더로 두 번째 서버를 켜면 막혀야 한다.
+          $second = Start-Process -FilePath "$dir/commander-server.exe" -ArgumentList "--port","8788" -WorkingDirectory $dir -PassThru -Wait -RedirectStandardOutput "$dir/out4.log" -RedirectStandardError "$dir/err4.log"
+          Get-Content "$dir/err4.log" -ErrorAction SilentlyContinue
+          Stop-Process -Id $p.Id -Force
+          Start-Sleep -Seconds 2
+          if ($count -lt 2) { throw "껐다 켠 뒤 순위표에 전적이 없다 ($count)" }
+          if ($second.ExitCode -eq 0) { throw "같은 데이터 폴더로 두 번째 서버가 켜졌다" }
+          Write-Host "껐다 켠 뒤에도 전적 $count 줄이 남아 있고, 두 번째 서버는 막혔다."
+          # 내보내기 -> 다른 폴더에 불러오기 (서버를 끈 상태에서)
+          Remove-Item "$dir/commander-data/commander.lock" -ErrorAction SilentlyContinue
+          & "$dir/commander-server.exe" export "$dir/export.json"
+          if ($LASTEXITCODE -ne 0) { throw "내보내기 실패" }
+          & "$dir/commander-server.exe" import "$dir/export.json" --data "$dir/other-data"
+          if ($LASTEXITCODE -ne 0) { throw "불러오기 실패" }
+          if (-not (Test-Path "$dir/other-data/data/players.json")) { throw "불러온 데이터가 없다" }
+          Write-Host "내보내기와 불러오기가 된다."

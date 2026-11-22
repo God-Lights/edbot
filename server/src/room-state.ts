@@ -1024,19 +1024,28 @@ export function buildReplay(state: RoomState): string | null {
  * 끝난 판을 전적으로 남길 수 있으면 저장할 내용을 만든다.
  * 두 사람 모두 GL 계정으로 로그인한 판만 기록하고(개발 서버의 익명 판은 기록하지 않는다), 한 번만 만든다.
  */
-export function takeMatchRecord(state: RoomState, now: number): MatchInput | null {
+export function takeMatchRecord(state: RoomState, now: number, anonymous = false): MatchInput | null {
   if (state.recorded || state.phase !== "result" || !state.result || !(state.game || state.chess)) return null;
   state.recorded = true; // 저장이 실패해도 같은 판을 반복해서 시도하지 않는다
   if (state.guest) return null; // 게스트 방은 전적과 레이팅에 남기지 않는다
   const [a, b] = [0, 1].map((seat) => state.players.find((p) => p.seat === seat));
-  if (!a?.userId || !b?.userId || a.userId === b.userId) return null;
+  if (!a || !b) return null;
+  // 로컬 서버(anonymous): GL 계정이 없어도 이름으로 전적을 남긴다. 봇과 한 판(테스트 방)은 남기지 않는다.
+  if (anonymous && (state.testMatch || a.bot || b.bot)) return null;
+  const idOf = (p: typeof a): string | undefined => {
+    if (p.userId) return p.userId;
+    const name = p.name.trim().toLowerCase();
+    return anonymous && name ? `name:${name}` : undefined;
+  };
+  const [idA, idB] = [idOf(a), idOf(b)];
+  if (!idA || !idB || idA === idB) return null;
   return {
     roomCode: state.code,
     startedAt: state.matchStartedAt,
     endedAt: now,
     users: [
-      { userId: a.userId, nickname: a.name },
-      { userId: b.userId, nickname: b.name },
+      { userId: idA, nickname: a.name },
+      { userId: idB, nickname: b.name },
     ],
     winnerSeat: state.result.winner === null ? null : (state.result.winner as 0 | 1),
     reason: state.result.reason,

@@ -139,4 +139,40 @@ final class ApiTests: XCTestCase {
         store.clear()
         XCTAssertNil(store.load())
     }
+
+    func testServerInfoDecodesAndReportsCompatibility() async throws {
+        let json = #"{"protocol":1,"name":"시연 서버","env":"local","authMode":"open","edition":"expert","version":"0.1.0","ruleset":"official","ranking":true,"guestRooms":false}"#
+        let http = StubHTTP { _ in (json, 200) }
+        let info = try await ApiClient(baseURL: base, http: http).serverInfo()
+        XCTAssertEqual(http.last?.url?.path, "/api/server")
+        XCTAssertEqual(info?.name, "시연 서버")
+        XCTAssertEqual(info?.env, .local)
+        XCTAssertEqual(info?.authMode, .open)
+        XCTAssertEqual(info?.edition, "expert")
+        XCTAssertEqual(info?.guestRooms, false)
+        XCTAssertEqual(info?.isCompatible, true)
+        let newer = ServerInfo(protocolVersion: clientProtocolVersion + 1, name: "x", env: .production, authMode: .gl)
+        XCTAssertFalse(newer.isCompatible)
+    }
+
+    func testServerInfoIsNilForOldServers() async throws {
+        let http = StubHTTP { _ in (#"{"error":"not_found"}"#, 404) }
+        let info = try await ApiClient(baseURL: base, http: http).serverInfo()
+        XCTAssertNil(info)
+        let garbled = StubHTTP { _ in ("<html>", 200) }
+        let none = try await ApiClient(baseURL: base, http: garbled).serverInfo()
+        XCTAssertNil(none)
+    }
+
+    func testTokenAccountDiffersPerServer() {
+        // 운영 서버는 예전 키를 그대로 써서 이미 로그인한 사람이 풀리지 않는다.
+        XCTAssertEqual(tokenAccount(forServer: URL(string: "https://edgame-api.officialgl.com")!), "game-session-token")
+        XCTAssertEqual(tokenAccount(forServer: URL(string: "https://EDGAME-API.officialgl.com")!), "game-session-token")
+        // 다른 서버·다른 포트는 따로
+        let local = tokenAccount(forServer: URL(string: "http://192.168.0.5:8787")!)
+        let other = tokenAccount(forServer: URL(string: "http://192.168.0.5:9000")!)
+        XCTAssertEqual(local, "game-session-token:192.168.0.5:8787")
+        XCTAssertNotEqual(local, other)
+        XCTAssertNotEqual(local, "game-session-token")
+    }
 }

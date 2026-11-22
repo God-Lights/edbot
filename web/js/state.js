@@ -15,6 +15,8 @@ export const store = (key, value) => {
 export const S = {
   user: null,
   authChecked: false,
+  /** GET /api/server: { protocol, name, env, authMode, edition, ... }. 아직 모르거나 오래된 서버면 null */
+  server: null,
   name: load("edbot.name", "Player"),
   roomCode: "",
   room: null,

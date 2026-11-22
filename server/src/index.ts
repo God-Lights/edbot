@@ -4,12 +4,13 @@ import { HYBRID_POWER, MATERIAL_FUSIONS, STAR_POWER } from "./chess/crafting";
 import { ALL_SYNERGIES } from "./chess/synergy";
 import { CHARACTERS } from "./characters";
 import { AuthStore } from "./auth-store";
-import { USER_HEADER, authRequired, authStore, bearerToken, identify, loginRedirectUrl } from "./auth";
+import { USER_HEADER, authMode, authRequired, authStore, bearerToken, identify, loginRedirectUrl } from "./auth";
+import { serverInfo } from "./server-info";
 import type { AuthEnv } from "./auth";
 import { loadSourceJson } from "./sidestore";
 import { SYNERGIES } from "./synergy";
 import { WEAPONS } from "./forge/weapons";
-import { getLeaderboard, getPlayerStats, getRecentMatches, getReplay } from "./ranking/store";
+import { rankingStoreOf } from "./ranking/store";
 import { approvedPage, donePage, failedPage, homePage } from "./pages";
 import { Room } from "./room";
 import { Matchmaker } from "./matchmaker";
@@ -99,6 +100,9 @@ export default {
 
     // ---- GL Account 로그인 ----
 
+    // GET /api/server -> 이 서버의 이름·환경·로그인 방식·에디션·프로토콜 버전. 클라이언트가 로비를 맞추는 데 쓴다.
+    if (request.method === "GET" && url.pathname === "/api/server") return json(serverInfo(env));
+
     // GET / -> 현재 로그인 상태. 자동으로 로그인 화면으로 보내지 않고, 버튼을 눌러야 간다.
     if (request.method === "GET" && url.pathname === "/") {
       return homePage(await identify(env, request), enabled, origin);
@@ -157,7 +161,9 @@ export default {
     const guest = isWs ? parseGuest(url.searchParams.get("guest"), url.searchParams.get("name")) : null;
     const guestWs = !!guest && url.searchParams.get("spectate") !== "1";
     const needsLogin = enabled && ((request.method === "POST" && url.pathname === "/api/rooms") || (isWs && !guestWs));
-    const user = needsLogin ? await identify(env, request) : null;
+    // hybrid(개발 서버): 로그인은 필요 없지만, 로그인한 사람이면 그 계정으로 방에 들어가고 전적이 남는다.
+    const mayLogin = authMode(env) === "hybrid" && ((request.method === "POST" && url.pathname === "/api/rooms") || isWs);
+    const user = needsLogin || mayLogin ? await identify(env, request) : null;
     if (needsLogin && !user) {
       return json({ error: "unauthorized", loginUrl: `${origin}/auth/login` }, 401);
     }
@@ -223,7 +229,7 @@ export default {
         let rating = 1000;
         if (me) {
           try {
-            rating = (await getPlayerStats(env.DB, me.id))?.rating ?? 1000;
+            rating = (await rankingStoreOf(env).getPlayerStats(me.id))?.rating ?? 1000;
           } catch {
             rating = 1000; // 랭킹 DB가 준비되지 않아도 매칭은 된다
           }
@@ -247,7 +253,7 @@ export default {
     // GET /api/replays/:id -> 끝난 판의 다시 보기 데이터 (id는 내 전적 목록의 id).
     if (request.method === "GET" && parts.length === 3 && parts[0] === "api" && parts[1] === "replays") {
       try {
-        const data = await getReplay(env.DB, decodeURIComponent(parts[2] ?? ""));
+        const data = await rankingStoreOf(env).getReplay(decodeURIComponent(parts[2] ?? ""));
         if (!data) return json({ error: "replay_not_found" }, 404);
         return new Response(data, { headers: { "content-type": "application/json", ...CORS_HEADERS } });
       } catch {
@@ -260,7 +266,7 @@ export default {
       const me = await identify(env, request);
       const limit = Number(url.searchParams.get("limit") ?? 20);
       try {
-        const entries = await getLeaderboard(env.DB, Number.isFinite(limit) ? limit : 20, me?.id ?? null);
+        const entries = await rankingStoreOf(env).getLeaderboard(Number.isFinite(limit) ? limit : 20, me?.id ?? null);
         return json({ entries });
       } catch {
         return json({ error: "ranking_unavailable" }, 503);
@@ -271,10 +277,10 @@ export default {
       const me = await identify(env, request);
       if (!me) return json({ error: "unauthorized", loginUrl: `${origin}/auth/login` }, 401);
       try {
-        if (parts[2] === "stats") return json({ stats: await getPlayerStats(env.DB, me.id) });
+        if (parts[2] === "stats") return json({ stats: await rankingStoreOf(env).getPlayerStats(me.id) });
         if (parts[2] === "matches") {
           const limit = Number(url.searchParams.get("limit") ?? 10);
-          return json({ matches: await getRecentMatches(env.DB, me.id, Number.isFinite(limit) ? limit : 10) });
+          return json({ matches: await rankingStoreOf(env).getRecentMatches(me.id, Number.isFinite(limit) ? limit : 10) });
         }
       } catch {
         return json({ error: "ranking_unavailable" }, 503);

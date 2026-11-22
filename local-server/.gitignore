@@ -1,0 +1,4 @@
+dist/
+commander-data/
+src/generated/
+node_modules/

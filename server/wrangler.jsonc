@@ -26,8 +26,44 @@
   "routes": [{ "pattern": "edgame-api.officialgl.com", "custom_domain": true }],
   "vars": {
     // 단계 시간 배율. 1이면 실제 시간, 0.05면 20배 빠르게 (개발·스모크 테스트용).
-    "PHASE_SCALE": "1"
+    "PHASE_SCALE": "1",
+    // 이 서버의 로그인 방식: gl(GL 계정 필수) | hybrid(GL 로그인 또는 이름만) | open(이름만). 운영은 반드시 gl.
+    // (server/test/config.test.ts 가 운영 설정이 gl 인지 지킨다. open 은 로컬 서버에서만 쓴다.)
+    "AUTH_MODE": "gl",
+    "SERVER_ENV": "production",
+    "SERVER_NAME": "COMMANDER",
+    "EDITION": "vanilla"
     // GL_ACCOUNT_KEY는 시크릿이라 여기에 쓰지 않는다: npx wrangler secret put GL_ACCOUNT_KEY
-    // 로그인 검사를 끄려면(로컬 개발) .dev.vars 에 REQUIRE_AUTH=false
+    // 로컬 개발에서 로그인 검사를 끄려면 .dev.vars 에 AUTH_MODE=open (예전 방식 REQUIRE_AUTH=false 도 된다)
+  },
+  // 개발 서버: 운영과 완전히 따로(이름이 달라서 방·로그인 저장소도 따로, D1도 edbot-dev). 배포: npm run deploy:dev
+  // 환경은 바인딩과 vars 를 물려받지 않아서 필요한 것을 다시 적는다. 도메인은 아직 없다(workers.dev 주소를 쓴다).
+  "env": {
+    "dev": {
+      "name": "edbot-server-dev",
+      "routes": [],
+      "vars": {
+        "PHASE_SCALE": "1",
+        "AUTH_MODE": "hybrid",
+        "SERVER_ENV": "development",
+        "SERVER_NAME": "COMMANDER 개발 서버",
+        "EDITION": "expert"
+      },
+      "durable_objects": {
+        "bindings": [
+          { "name": "ROOM", "class_name": "Room" },
+          { "name": "AUTH", "class_name": "AuthStore" },
+          { "name": "MATCH", "class_name": "Matchmaker" },
+          { "name": "LIVE", "class_name": "LiveRegistry" }
+        ]
+      },
+      "migrations": [
+        { "tag": "v1", "new_sqlite_classes": ["Room"] },
+        { "tag": "v2", "new_sqlite_classes": ["AuthStore"] },
+        { "tag": "v3", "new_sqlite_classes": ["Matchmaker"] },
+        { "tag": "v4", "new_sqlite_classes": ["LiveRegistry"] }
+      ],
+      "d1_databases": [{ "binding": "DB", "database_name": "edbot-dev", "migrations_dir": "migrations" }]
+    }
   }
 }

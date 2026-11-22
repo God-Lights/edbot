@@ -36,7 +36,45 @@ struct LobbyView: View {
     /// 한 화면에 다 들어오게: 왼쪽 로고, 가운데 계정·게스트·서버, 오른쪽 방 메뉴. (스크롤 없음)
     var body: some View {
         @Bindable var model = model
-        HStack(alignment: .center, spacing: compact ? 12 : 28) {
+        VStack(spacing: compact ? 4 : 8) {
+            serverBand
+            lobbyColumns
+        }
+        .padding(compact ? 10 : 28)
+        .onChange(of: model.loginURLToOpen) { _, url in
+            guard let url else { return }
+            openURL(url)
+            model.loginURLToOpen = nil
+        }
+        // 서버 주소를 바꾸면 그 서버의 로그인 상태와 정보로 바뀐다.
+        .onChange(of: model.serverText) { _, _ in model.serverChanged() }
+    }
+
+    /// 운영이 아닌 서버(개발·로컬)에 붙어 있을 때 맨 위에 보이는 안내 띠
+    @ViewBuilder private var serverBand: some View {
+        if let info = model.serverInfo, info.env != .production {
+            let local: Bool = info.env == .local
+            HStack(spacing: 8) {
+                Image(systemName: local ? "server.rack" : "testtube.2")
+                Text("\(local ? "로컬 서버" : "개발 서버") · \(info.name)").font(.subheadline.bold())
+                if info.edition == "expert" {
+                    Text("엑스퍼트").font(.caption2.bold())
+                        .padding(.horizontal, 8).padding(.vertical, 2)
+                        .background(Capsule().fill(Theme.accent.opacity(0.35)))
+                }
+                Spacer()
+                Text(local ? "이름이 곧 계정이에요. 전적은 이 서버에만 남아요." : "시험용 서버예요. 전적은 개발용 데이터예요.")
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.7)
+            }
+            .padding(.horizontal, 12).padding(.vertical, compact ? 4 : 8)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill((local ? Theme.good : Theme.warn).opacity(0.14)))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder((local ? Theme.good : Theme.warn).opacity(0.4), lineWidth: 1))
+        }
+    }
+
+    private var lobbyColumns: some View {
+        @Bindable var model = model
+        return HStack(alignment: .center, spacing: compact ? 12 : 28) {
             VStack(spacing: compact ? 6 : 16) {
                 Image("Logo")
                     .resizable()
@@ -52,7 +90,7 @@ struct LobbyView: View {
 
             VStack(spacing: compact ? 6 : 12) {
                 accountCard
-                guestCard
+                if model.serverInfo?.guestRooms != false { guestCard }
                 serverCard
                 if let message = model.message {
                     Text(message).font(.caption).foregroundStyle(Theme.warn).multilineTextAlignment(.center)
@@ -62,12 +100,6 @@ struct LobbyView: View {
 
             roomCard
                 .frame(maxWidth: 400, maxHeight: .infinity)
-        }
-        .padding(compact ? 10 : 28)
-        .onChange(of: model.loginURLToOpen) { _, url in
-            guard let url else { return }
-            openURL(url)
-            model.loginURLToOpen = nil
         }
     }
 
@@ -91,13 +123,19 @@ struct LobbyView: View {
                     Button("취소") { model.cancelLogin() }.buttonStyle(SecondaryButtonStyle())
                 }
             } else {
-                // 자동으로 넘기지 않고, 버튼을 눌렀을 때만 브라우저를 연다.
-                Button { model.beginLogin() } label: {
-                    Label("로그인하기", systemImage: "person.crop.circle").frame(maxWidth: .infinity)
+                // 서버가 알려 주는 로그인 방식에 맞춘다: gl(GL 로그인) | hybrid(둘 다) | open(이름만). 모르는 서버는 둘 다 보여 준다.
+                let mode: ServerInfo.AuthMode = model.serverInfo?.authMode ?? .hybrid
+                if mode != .open {
+                    // 자동으로 넘기지 않고, 버튼을 눌렀을 때만 브라우저를 연다.
+                    Button { model.beginLogin() } label: {
+                        Label("로그인하기", systemImage: "person.crop.circle").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
                 }
-                .buttonStyle(PrimaryButtonStyle())
-                TextField("이름 (로그인하지 않은 개발 서버용)", text: $model.playerName)
-                    .textFieldStyle(.roundedBorder)
+                if mode != .gl {
+                    TextField(mode == .open ? "이름 (이 서버에서 쓸 이름)" : "이름 (로그인하지 않으면 이 이름으로 놀아요)", text: $model.playerName)
+                        .textFieldStyle(.roundedBorder)
+                }
             }
         }
         .panel(padding: compact ? 8 : 16)

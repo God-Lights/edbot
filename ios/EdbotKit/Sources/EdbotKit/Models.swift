@@ -528,3 +528,57 @@ public enum ErrorCode {
         [roomNotFound, roomFull, gameInProgress, unauthorized, spectateUnavailable, roomClosed].contains(code)
     }
 }
+
+
+// MARK: 서버 정보 (GET /api/server)
+
+/// 이 클라이언트가 아는 메시지 형식 버전. 서버(`ServerInfo.protocolVersion`)가 더 높으면 앱 업데이트를 안내한다.
+public let clientProtocolVersion = 1
+
+/// 서버가 알려 주는 자기 소개: 이름, 환경, 로그인 방식, 에디션. 로비가 이걸 보고 로그인 영역을 바꾼다.
+public struct ServerInfo: Codable, Equatable, Sendable {
+    public enum AuthMode: String, Codable, Sendable {
+        /// GL 계정 로그인 필수 (운영)
+        case gl
+        /// GL 로그인 또는 이름만 (개발)
+        case hybrid
+        /// 이름만 (로컬 서버)
+        case open
+    }
+
+    public enum Environment: String, Codable, Sendable {
+        case production, development, local
+    }
+
+    public let protocolVersion: Int
+    public let name: String
+    public let env: Environment
+    public let authMode: AuthMode
+    /// vanilla | expert
+    public let edition: String
+    public let version: String
+    public let ruleset: String
+    /// 판이 끝나면 전적이 남는 서버인가
+    public let ranking: Bool
+    /// 게스트(학번과 이름) 방을 쓸 수 있는가
+    public let guestRooms: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case protocolVersion = "protocol", name, env, authMode, edition, version, ruleset, ranking, guestRooms
+    }
+
+    public init(protocolVersion: Int, name: String, env: Environment, authMode: AuthMode, edition: String = "vanilla", version: String = "0.0.0", ruleset: String = "official", ranking: Bool = true, guestRooms: Bool = true) {
+        self.protocolVersion = protocolVersion
+        self.name = name
+        self.env = env
+        self.authMode = authMode
+        self.edition = edition
+        self.version = version
+        self.ruleset = ruleset
+        self.ranking = ranking
+        self.guestRooms = guestRooms
+    }
+
+    /// 앱이 이 서버를 이해할 수 있는가 (서버의 메시지 형식이 앱보다 새로우면 false)
+    public var isCompatible: Bool { protocolVersion <= clientProtocolVersion }
+}

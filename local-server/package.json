@@ -1,0 +1,12 @@
+{
+  "name": "commander-local-server",
+  "private": true,
+  "version": "0.1.0",
+  "description": "COMMANDER 로컬 서버: Cloudflare 없이 기존 서버 엔진(../server/src)을 Bun으로 돌린다. 단일 실행파일(.exe)로 묶을 수 있다.",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --preload ./src/runtime/plugin.ts src/main.ts",
+    "build": "bun build.ts",
+    "smoke": "bun scripts/smoke.ts"
+  }
+}
