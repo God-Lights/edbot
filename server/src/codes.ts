@@ -3,7 +3,7 @@
 export const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 export const CODE_LENGTH = 4;
 /** 테스트 대전 방의 코드. 일반 방과 겹치지 않게 만들어 낸다. */
-export const RESERVED_CODES: readonly string[] = ["ADMN", "ADMF"];
+export const RESERVED_CODES: readonly string[] = ["ADMN", "ADMF", "ADMI"];
 
 export function generateRoomCode(): string {
   for (;;) {

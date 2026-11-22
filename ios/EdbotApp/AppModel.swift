@@ -675,6 +675,7 @@ final class AppModel {
         eventTask?.cancel()
         eventTask = nil
         room = nil
+        Sfx.shared.setScene(.prep)
         myPlayerId = nil
         isSpectating = false
         status = .idle
@@ -779,6 +780,18 @@ final class AppModel {
             interpolator.reset()
         }
         playChangeSounds(from: previous, to: room)
+        Sfx.shared.setScene(Self.musicScene(for: room))
         self.room = room
+    }
+
+    /// 지금 상황에 맞는 배경 음악: 로비·준비는 prep, 전투는 combat, 마지막 라운드·체력이 위태로울 때·결과는 finale.
+    static func musicScene(for room: RoomSnapshot?) -> Sfx.Track {
+        guard let room else { return .prep }
+        if room.phase == .result { return .finale }
+        if let chess = room.chess, room.phase == .prep || room.phase == .combat {
+            let lowest: Int = (chess.hps ?? []).min() ?? 99
+            if chess.round >= chess.maxRounds - 1 || lowest <= 8 { return .finale }
+        }
+        return [Phase.combat, .battle, .deathmatch].contains(room.phase) ? .combat : .prep
     }
 }

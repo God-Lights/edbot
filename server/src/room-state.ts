@@ -115,6 +115,8 @@ export interface RoomState {
   testMatch: boolean;
   /** 입문 모드: 쉬운 캐릭터만 나오고 자원 시스템이 없다. */
   lite: boolean;
+  /** 무한 모드(뫼비우스 규칙: 앞뒷면, 이음매, 웜홀, 폰 일주). 예전에 저장된 방에는 없을 수 있다. */
+  mobius?: boolean;
   /** 게스트 방: GL 계정이 없는 사람도 학번과 이름으로 들어올 수 있고, 전적은 남기지 않는다. */
   guest: boolean;
   /** 방을 만든 사람의 이름 (관전 목록에 보인다) */
@@ -131,7 +133,7 @@ export interface RoomState {
 
 type Failure = { ok: false; code: ErrorCode; message: string };
 
-export function createRoom(code: string, now: number, testMatch = false, mode: RoomMode = "lanes", lite = testMatch, guest = false, hostName = "", hostId = ""): RoomState {
+export function createRoom(code: string, now: number, testMatch = false, mode: RoomMode = "lanes", lite = testMatch, guest = false, hostName = "", hostId = "", mobius = false): RoomState {
   return {
     code,
     phase: "lobby",
@@ -151,6 +153,7 @@ export function createRoom(code: string, now: number, testMatch = false, mode: R
     recorded: false,
     testMatch,
     lite,
+    mobius,
     guest,
     hostName,
     hostId,
@@ -326,7 +329,7 @@ function enterPhase(
     for (const p of state.players) p.ready = false;
   } else if (phase === "prep") {
     if (!state.chess) {
-      state.chess = createChessGame(Math.floor(rng() * 0x7fffffff), state.lite);
+      state.chess = createChessGame(Math.floor(rng() * 0x7fffffff), state.lite, state.mobius === true);
       state.matchStartedAt = startedAt;
       state.recorded = false;
     }

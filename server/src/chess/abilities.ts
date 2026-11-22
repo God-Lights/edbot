@@ -40,12 +40,13 @@ const progress = (unit: CombatUnit): number => (unit.seat === 0 ? 7 - unit.y : u
 const depth = (unit: CombatUnit): number => (unit.seat === 1 ? 3 - unit.y : unit.y - 4);
 
 function summon(state: CombatState, owner: CombatUnit, hpRatio: number, atkRatio: number): void {
-  const spot = freeAdjacent(state, owner.x, owner.y, owner.seat);
+  const spot = freeAdjacent(state, owner.x, owner.y, owner.seat, owner.face);
   if (!spot) return;
   const p = starPower(owner);
   createUnit(state, {
     defId: owner.defId,
     seat: owner.seat,
+    face: owner.face,
     star: 1,
     x: spot.x,
     y: spot.y,
@@ -86,7 +87,7 @@ export const ABILITIES: Record<AbilityId, Cast> = {
   // 자신 최대 체력의 30%, 인접 아군은 각자 최대 체력의 15% 보호막 (6박자)
   "shield-wall": (s, u) => {
     shieldUnit(s, u, u, u.maxHp * 0.3, 6);
-    for (const ally of adjacentUnits(s, u).filter((x) => x.seat === u.seat)) shieldUnit(s, u, ally, ally.maxHp * 0.15, 6);
+    for (const ally of adjacentUnits(s, u).filter((x) => x.team === u.team)) shieldUnit(s, u, ally, ally.maxHp * 0.15, 6);
   },
   // 4박자 동안 받는 피해 -50%, 도발
   "stone-skin": (s, u) => {
@@ -121,7 +122,7 @@ export const ABILITIES: Record<AbilityId, Cast> = {
   "leap-bite": (s, u) => {
     const target = lowestHp(u, enemiesOf(s, u));
     if (!target) return;
-    const spot = freeAdjacent(s, target.x, target.y, u.seat);
+    const spot = freeAdjacent(s, target.x, target.y, u.seat, u.face);
     if (spot) jumpTo(s, u, spot.x, spot.y);
     addEffect(target, { type: "stun", value: 1, untilBeat: s.beat + 1 });
     abilityDamage(s, u, target, 1.4);
@@ -132,7 +133,7 @@ export const ABILITIES: Record<AbilityId, Cast> = {
     const crowd = (e: CombatUnit) => foes.filter((o) => chebyshev(e, o) <= 1).length;
     const target = [...foes].sort((a, b) => crowd(b) - crowd(a) || comparePerspective(u)(a, b))[0];
     if (!target) return;
-    const spot = freeAdjacent(s, target.x, target.y, u.seat);
+    const spot = freeAdjacent(s, target.x, target.y, u.seat, u.face);
     if (spot) jumpTo(s, u, spot.x, spot.y);
     for (const e of enemiesOf(s, u).filter((o) => chebyshev(u, o) <= 1)) abilityDamage(s, u, e, 1.0);
   },
@@ -154,7 +155,7 @@ export const ABILITIES: Record<AbilityId, Cast> = {
   flank: (s, u) => {
     const target = [...enemiesOf(s, u)].sort((a, b) => depth(b) - depth(a) || a.hp - b.hp || comparePerspective(u)(a, b))[0];
     if (!target) return;
-    const spot = freeAdjacent(s, target.x, target.y, u.seat);
+    const spot = freeAdjacent(s, target.x, target.y, u.seat, u.face);
     if (spot) jumpTo(s, u, spot.x, spot.y);
     abilityDamage(s, u, target, 2.2);
   },
@@ -172,11 +173,11 @@ export function castAbility(state: CombatState, unit: CombatUnit): void {
 export function onDeath(state: CombatState, unit: CombatUnit): void {
   const ability = unit.summon ? undefined : unitDef(unit.defId)?.ability;
   if (ability === "relic-shield") {
-    for (const ally of state.units.filter((u) => u.alive && u.seat === unit.seat && u.id !== unit.id && chebyshev(u, unit) === 1)) {
+    for (const ally of state.units.filter((u) => u.alive && u.team === unit.team && u.face === unit.face && u.id !== unit.id && chebyshev(u, unit) === 1)) {
       shieldUnit(state, unit, ally, ally.maxHp * 0.2, 5);
     }
   } else if (ability === "spore") {
-    for (const e of state.units.filter((u) => u.alive && u.seat !== unit.seat && chebyshev(u, unit) <= 1)) {
+    for (const e of state.units.filter((u) => u.alive && u.team !== unit.team && u.face === unit.face && chebyshev(u, unit) <= 1)) {
       addEffect(e, { type: "dot", value: 60 * starPower(unit), untilBeat: state.beat + 3 });
     }
   }

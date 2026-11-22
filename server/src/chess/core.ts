@@ -83,10 +83,19 @@ export function shieldUnit(state: CombatState, source: CombatUnit, target: Comba
 
 export function createUnit(
   state: CombatState,
-  fields: Omit<CombatUnit, "id" | "alive" | "shield" | "shieldUntilBeat" | "effects" | "kills" | "atkStack" | "energy" | "promoted" | "lastHitBy" | "weapon" | "weaponParts" | "weaponPower" | "procs" | "dmgMult" | "energyMult"> & { promoted?: boolean; weapon?: string | null },
+  fields: Omit<CombatUnit, "id" | "alive" | "shield" | "shieldUntilBeat" | "effects" | "kills" | "atkStack" | "energy" | "promoted" | "lastHitBy" | "weapon" | "weaponParts" | "weaponPower" | "procs" | "dmgMult" | "energyMult" | "team" | "face" | "g" | "dir" | "u" | "c" | "ghosted" | "stoned" | "cloneOf"> & { face?: CombatUnit["face"]; dir?: 1 | -1; cloneOf?: string | null; ghosted?: boolean; promoted?: boolean; weapon?: string | null },
 ): CombatUnit {
   const unit: CombatUnit = {
     ...fields,
+    team: fields.seat,
+    face: fields.face ?? 0,
+    g: 0,
+    dir: fields.dir ?? (fields.seat === 0 ? -1 : 1),
+    u: 0,
+    c: 0,
+    ghosted: fields.ghosted ?? false,
+    stoned: false,
+    cloneOf: fields.cloneOf ?? null,
     id: `u${state.nextUnitNumber++}`,
     alive: true,
     shield: 0,

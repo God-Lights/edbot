@@ -28,6 +28,9 @@ const MAX_CREATE_ATTEMPTS = 8;
 const TEST_ROOM_CODE = "ADMN";
 /** 전체 캐릭터와 자원 시스템까지 켜진 봇 대전 (연습을 넘어선 판). */
 const FULL_TEST_ROOM_CODE = "ADMF";
+/** 무한 모드(뫼비우스 규칙)의 봇 대전. 전체 캐릭터와 자원 시스템이 켜져 있다. */
+const INFINITE_TEST_ROOM_CODE = "ADMI";
+const isTestCode = (code: string): boolean => code === TEST_ROOM_CODE || code === FULL_TEST_ROOM_CODE || code === INFINITE_TEST_ROOM_CODE;
 
 const CORS_HEADERS = {
   "access-control-allow-origin": "*",
@@ -65,9 +68,11 @@ async function sideStoreSource(origin: string): Promise<Response> {
 }
 
 /** ADMN은 접속한 사람마다 자기만의 방(Durable Object)을 쓴다. 다른 사람과 섞이지 않는다. */
-function testRoomStub(env: Env, owner: string, full = false) {
-  return env.ROOM.get(env.ROOM.idFromName(full ? `testfull:${owner}` : `test:${owner}`));
+function testRoomStub(env: Env, owner: string, kind: "lite" | "full" | "infinite" = "lite") {
+  const prefix = kind === "full" ? "testfull" : kind === "infinite" ? "testinf" : "test";
+  return env.ROOM.get(env.ROOM.idFromName(`${prefix}:${owner}`));
 }
+const testKind = (code: string): "lite" | "full" | "infinite" => (code === FULL_TEST_ROOM_CODE ? "full" : code === INFINITE_TEST_ROOM_CODE ? "infinite" : "lite");
 
 function testOwner(user: { id: string } | null, request: Request): string {
   if (user) return user.id;
@@ -165,7 +170,9 @@ export default {
         const mode = url.searchParams.get("mode") === "lanes" ? "lanes" : "chess";
         // 게스트 방(?guest=1): GL 계정으로 로그인한 사람이 만들고, 학번과 이름만으로 들어올 수 있다. 전적은 남기지 않는다.
         const guestRoom = url.searchParams.get("guest") === "1";
-        if (await roomStub(env, code).init(code, false, mode, false, guestRoom, user?.nickname ?? "", user?.id ?? "")) {
+        // 무한 모드(?mobius=1): 앞뒷면·이음매·웜홀이 있는 뫼비우스 규칙으로 싸운다.
+        const mobius = url.searchParams.get("mobius") === "1" && mode === "chess";
+        if (await roomStub(env, code).init(code, false, mode, false, guestRoom, user?.nickname ?? "", user?.id ?? "", mobius)) {
           return json({ code }, 201);
         }
       }
@@ -310,10 +317,10 @@ export default {
     if (request.method === "GET" && parts.length === 3 && parts[0] === "api" && parts[1] === "rooms") {
       const code = (parts[2] ?? "").toUpperCase();
       if (!CODE_PATTERN.test(code)) return json({ error: "room_not_found" }, 404);
-      if (code === TEST_ROOM_CODE || code === FULL_TEST_ROOM_CODE) {
+      if (isTestCode(code)) {
         // 아직 만들어지지 않았어도 들어갈 수 있다. (들어가는 순간 만들어진다)
         const me = await identify(env, request);
-        const info = me || !enabled ? await testRoomStub(env, testOwner(me, request), code === FULL_TEST_ROOM_CODE).info() : null;
+        const info = me || !enabled ? await testRoomStub(env, testOwner(me, request), testKind(code)).info() : null;
         return json(info ?? { code, phase: "lobby", players: 0, joinable: true, mode: "chess" });
       }
       const info = await roomStub(env, code).info();
@@ -331,10 +338,10 @@ export default {
       if (!access.ok) return json({ error: access.error, loginUrl: `${origin}/auth/login` }, 401);
       if (user) forwarded.headers.set(USER_HEADER, JSON.stringify({ id: user.id, nickname: user.nickname }));
       else if (guest && guestWs) forwarded.headers.set(GUEST_HEADER, JSON.stringify(guest));
-      if (code === TEST_ROOM_CODE || code === FULL_TEST_ROOM_CODE) {
-        const full = code === FULL_TEST_ROOM_CODE;
-        const stub = testRoomStub(env, testOwner(user, request), full);
-        await stub.init(code, true, "chess", !full); // 이미 있으면 false를 돌려줄 뿐이다
+      if (isTestCode(code)) {
+        const kind = testKind(code);
+        const stub = testRoomStub(env, testOwner(user, request), kind);
+        await stub.init(code, true, "chess", kind === "lite", false, "", "", kind === "infinite"); // 이미 있으면 false를 돌려줄 뿐이다
         return stub.fetch(forwarded);
       }
       return roomStub(env, code).fetch(forwarded);

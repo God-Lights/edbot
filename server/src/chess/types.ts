@@ -61,10 +61,30 @@ export interface Effect {
   untilBeat: number;
 }
 
+/** 뫼비우스 규칙: 앞면(0)과 밑면(1). 밑면에 있는 기물은 "유령"이다. 같은 면의 기물끼리만 서로 닿는다. */
+export type Face = 0 | 1;
+
 export interface CombatUnit {
   id: string;
   defId: string;
   seat: Seat;
+  /** 같은 팀끼리는 서로 때리지 않는다. 1:1에서는 seat와 같다. (2:2로 넓힐 때를 위한 자리) */
+  team: number;
+  /** 뫼비우스 규칙에서만 쓴다. 일반 규칙에서는 늘 0이다. */
+  face: Face;
+  /** 속성 게이지: 밑면에서 보낸 박자 수. 앞면에 있으면 0. */
+  g: number;
+  /** 폰의 진행 방향(절대 y 방향). 일반 규칙에서는 forward(seat)로 변하지 않는다. */
+  dir: 1 | -1;
+  /** 폰 일주: u는 가장자리 U턴 횟수(0~1), c는 완료 횟수 */
+  u: number;
+  c: number;
+  /** 일주를 마친 폰이 밑면으로 간 상태. 밑면에서는 U턴 대신 석화한다. */
+  ghosted: boolean;
+  /** 석화: 밑면 가장자리에 닿아 움직이지도 공격하지도 못한다. 잡힐 수는 있다. */
+  stoned: boolean;
+  /** 이 폰이 분신이면 본체의 id (연동). 실체화하면 null. */
+  cloneOf: string | null;
   star: 1 | 2;
   x: number;
   y: number;
@@ -107,7 +127,8 @@ export interface Hit {
 
 export interface CombatEvent {
   beat: number;
-  type: "attack" | "ability" | "move" | "death" | "promote" | "mine" | "suddenDeath" | "end";
+  type: "attack" | "ability" | "move" | "death" | "promote" | "mine" | "suddenDeath" | "end"
+    | "ghost" | "surface" | "uturn" | "lap" | "clone" | "stone";
   unitId?: string;
   targetId?: string;
   text?: string;
@@ -126,7 +147,17 @@ export interface SynergyBonus {
   teamAtk: number;
 }
 
+/** 전투 옵션. mobius가 true면 무한 모드(뫼비우스 규칙)로 싸운다. */
+export interface CombatOptions {
+  mobius?: boolean;
+}
+
 export interface CombatState {
+  /** 무한 모드(이음매·앞뒷면·웜홀·폰 일주) */
+  mobius: boolean;
+  /** 이 박자부터 돌발 사망, 이 박자에 끝나지 않으면 체력 비율로 승부 */
+  suddenBeat: number;
+  maxBeats: number;
   beat: number;
   units: CombatUnit[];
   nextUnitNumber: number;

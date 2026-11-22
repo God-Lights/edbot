@@ -73,48 +73,82 @@ const SOUNDS = {
   suddenDeath: () => { tone(110, 0.5, { type: "sawtooth", vol: 0.05 }); tone(116, 0.5, { type: "sawtooth", vol: 0.04 }); },
 };
 
-// ---- 배경 음악: 파일 없이 합성한 잔잔한 아르페지오. 기본은 꺼져 있다. ----
+// ---- 배경 음악: 곡 3개를 상황에 맞게 바꿔 튼다 ----
+// prep   = Tactical Drop     : 로비, 방 대기, 준비 단계
+// combat = Tactical Drop (1) : 전투 단계
+// finale = Final Checkmate   : 마지막 라운드(끝 두 라운드), 체력이 위태로울 때, 결과 화면
+// 곡마다 재생 위치를 기억해서, 준비 ↔ 전투로 바뀌어도 이어서 들린다. 바뀔 때는 서로 겹치며 부드럽게 넘어간다.
 
-const SCALE = [0, 3, 5, 7, 10, 12, 15]; // 마이너 펜타토닉 계열
-let bgmOn = false;
-try { bgmOn = localStorage.getItem("edbot.bgm") === "1"; } catch { bgmOn = false; }
-let bgmTimer = null;
-let bgmStep = 0;
+const TRACKS = { prep: "/assets/music/prep.mp3", combat: "/assets/music/combat.mp3", finale: "/assets/music/finale.mp3" };
+const MUSIC_VOL = 0.5;
+let bgmOn = true; // 처음에는 켜져 있고, 끄면 기억한다.
+try { bgmOn = localStorage.getItem("edbot.bgm") !== "0"; } catch { bgmOn = true; }
+let scene = "prep";
+let unlocked = false; // 브라우저는 첫 클릭 전에는 소리를 못 낸다.
+const players = {};
 
-function bgmTick() {
-  if (muted || !bgmOn) return;
-  const root = [110, 98, 123, 98][Math.floor(bgmStep / 8) % 4];
-  const note = SCALE[[0, 2, 4, 2, 5, 4, 2, 1][bgmStep % 8]];
-  const freq = root * 2 ** (note / 12);
-  tone(freq, 0.7, { type: "sine", vol: 0.035 });
-  if (bgmStep % 8 === 0) tone(root / 2, 1.6, { type: "triangle", vol: 0.03 });
-  bgmStep += 1;
+function player(name) {
+  let p = players[name];
+  if (p) return p;
+  const c = audio();
+  if (!c) return null;
+  const el = new Audio(TRACKS[name]);
+  el.loop = true;
+  el.preload = "auto";
+  const gain = c.createGain();
+  gain.gain.value = 0;
+  try { c.createMediaElementSource(el).connect(gain); } catch { return null; }
+  gain.connect(c.destination);
+  p = { el, gain, stop: 0 };
+  players[name] = p;
+  return p;
 }
 
-function startBgm() {
-  if (bgmTimer) return;
-  audio();
-  bgmTimer = setInterval(bgmTick, 420);
+function syncBgm() {
+  if (!unlocked) return;
+  const c = audio();
+  if (!c) return;
+  for (const name of Object.keys(TRACKS)) {
+    const active = bgmOn && !muted && name === scene;
+    if (active) {
+      const p = player(name);
+      if (!p) continue;
+      clearTimeout(p.stop);
+      p.el.play().catch(() => {});
+      p.gain.gain.cancelScheduledValues(c.currentTime);
+      p.gain.gain.setTargetAtTime(MUSIC_VOL, c.currentTime, 0.45);
+    } else if (players[name]) {
+      const p = players[name];
+      clearTimeout(p.stop);
+      p.gain.gain.cancelScheduledValues(c.currentTime);
+      p.gain.gain.setTargetAtTime(0, c.currentTime, 0.45);
+      p.stop = setTimeout(() => { if (!(bgmOn && !muted && name === scene)) p.el.pause(); }, 2200); // 위치는 그대로 남는다
+    }
+  }
 }
 
-function stopBgm() {
-  clearInterval(bgmTimer);
-  bgmTimer = null;
-}
-
-if (bgmOn) {
-  // 브라우저는 첫 클릭 전에는 소리를 못 내서, 첫 클릭 때 시작한다.
-  const once = () => { startBgm(); window.removeEventListener("pointerdown", once); };
-  window.addEventListener("pointerdown", once);
-}
+const unlock = () => {
+  unlocked = true;
+  window.removeEventListener("pointerdown", unlock);
+  window.removeEventListener("keydown", unlock);
+  syncBgm();
+};
+window.addEventListener("pointerdown", unlock);
+window.addEventListener("keydown", unlock);
 
 export const bgm = {
   get on() { return bgmOn; },
   toggle() {
     bgmOn = !bgmOn;
     try { localStorage.setItem("edbot.bgm", bgmOn ? "1" : "0"); } catch { /* 무시 */ }
-    if (bgmOn) startBgm(); else stopBgm();
+    syncBgm();
     return bgmOn;
+  },
+  /** 지금 상황에 맞는 곡으로 바꾼다. (같은 곡이면 아무 일도 없다) */
+  scene(name) {
+    if (!TRACKS[name] || name === scene) return;
+    scene = name;
+    syncBgm();
   },
 };
 
@@ -131,6 +165,7 @@ export const sfx = {
   toggle() {
     muted = !muted;
     try { localStorage.setItem("edbot.mute", muted ? "1" : "0"); } catch { /* 무시 */ }
+    syncBgm();
     if (!muted) SOUNDS.click();
     return muted;
   },
