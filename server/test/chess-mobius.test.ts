@@ -139,7 +139,7 @@ describe("폰", () => {
   it("무한 모드에서는 승급하지 않고 끝줄에서 U턴한다", () => {
     const s = arena();
     const pawn = put(s, { seat: 0, piece: "pawn", x: 3, y: 1 });
-    put(s, { seat: 1, piece: "king", x: 7, y: 7, hp: 100000, atk: 0 });
+    put(s, { seat: 1, piece: "king", x: 7, y: 7, face: 1, hp: 100000, atk: 0 }); // 같은 면에 적이 없을 때만 U턴하며 일주한다
     stepCombat(s); // (3,0)
     expect(pawn.y).toBe(0);
     expect(pawn.piece).toBe("pawn");
@@ -153,7 +153,8 @@ describe("폰", () => {
     const s = arena();
     const pawn = put(s, { seat: 0, piece: "pawn", x: 3, y: 1, hp: 100000 });
     pawn.dir = -1;
-    put(s, { seat: 1, piece: "king", x: 7, y: 7, hp: 100000, atk: 0 });
+    pawn.u = 1; // 다음 U턴이 일주 완료
+    put(s, { seat: 1, piece: "king", x: 7, y: 7, face: 1, hp: 100000, atk: 0 });
     // 위 끝(y=0)에서 U턴, 아래 끝(y=7)까지 가서 U턴 -> 일주
     for (let i = 0; i < 20 && pawn.c === 0; i++) stepCombat(s);
     expect(pawn.c).toBe(1);
@@ -182,7 +183,7 @@ describe("폰", () => {
     const body = put(s, { seat: 0, piece: "pawn", x: 2, y: 5, hp: 100000 });
     const clone = createUnit(s, { defId: "nut-wolf", seat: 0, face: 1, star: 1, x: 2, y: 0, hp: 50, maxHp: 50, atk: 99, energyMax: null, piece: "pawn", summon: true, cloneOf: body.id, ghosted: true });
     clone.dir = -1;
-    put(s, { seat: 1, piece: "king", x: 3, y: 1, face: 1, hp: 100000, atk: 0 });
+    put(s, { seat: 1, piece: "king", x: 3, y: 1, face: 0, hp: 100000, atk: 0 }); // 앞면의 적이라 밑면의 분신과는 닿지 않는다
     stepCombat(s);
     expect(clone.stoned).toBe(true);
     const foe = s.units.find((u) => u.seat === 1)!;
@@ -191,9 +192,32 @@ describe("폰", () => {
     expect(foe.hp).toBe(before); // 석화한 폰은 공격하지 못한다
     expect(clone.y).toBe(0);
   });
+  it("폰만 있는 판에서도 서로 만나 싸워서 돌발 사망 전에 끝난다", () => {
+    const s = arena();
+    // 세로줄이 서로 다른 폰들: 자기 줄만 왕복하면 영영 만나지 못한다
+    [0, 2, 4].forEach((x) => put(s, { seat: 0, piece: "pawn", x, y: 6, hp: 300, atk: 60 }));
+    [7, 5, 3].forEach((x) => put(s, { seat: 1, piece: "pawn", x, y: 1, hp: 300, atk: 60 }));
+    while (!s.finished) stepCombat(s);
+    expect(s.beat).toBeLessThan(s.suddenBeat);
+    expect(s.events.some((e) => e.type === "attack")).toBe(true);
+    expect(s.events.filter((e) => e.type === "lap")).toHaveLength(0); // 싸우는 동안에는 일주하지 않는다
+  });
+  it("석화한 분신은 웜홀이 열리면 앞면으로 올라와서 싸운다", () => {
+    const s = arena();
+    const body = put(s, { seat: 0, piece: "pawn", x: 2, y: 5, hp: 100000, atk: 0 });
+    const clone = createUnit(s, { defId: "nut-wolf", seat: 0, face: 1, star: 1, x: 5, y: 0, hp: 50, maxHp: 50, atk: 10, energyMax: null, piece: "pawn", summon: true, cloneOf: body.id, ghosted: true });
+    clone.stoned = true;
+    clone.g = WORMHOLE_BEATS;
+    const foe = put(s, { seat: 1, piece: "pawn", x: 5, y: 3, hp: 100000, atk: 0 });
+    stepCombat(s);
+    expect(clone.face).toBe(0);
+    expect(clone.stoned).toBe(false);
+    expect(clone.cloneOf).toBeNull(); // 실체화
+    expect(foe.alive).toBe(true);
+  });
   it(`분신은 한 쪽에 최대 ${CLONE_CAP}개`, () => {
     const s = arena();
-    put(s, { seat: 1, piece: "king", x: 7, y: 0, hp: 1e9, atk: 0 });
+    put(s, { seat: 1, piece: "king", x: 7, y: 0, face: 1, hp: 1e9, atk: 0 });
     const pawns = [0, 1, 2, 3, 4, 5].map((x) => put(s, { seat: 0, piece: "pawn", x, y: 3, hp: 1e9, atk: 0 }));
     for (const p of pawns) p.u = 1; // 다음 U턴이 일주 완료
     for (let i = 0; i < 30; i++) stepCombat(s);
