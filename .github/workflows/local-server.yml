@@ -87,6 +87,8 @@ jobs:
           if (-not (Test-Path "$dir/commander-data/data/commander.db")) { throw "데이터 폴더가 exe 옆에 없다" }
           # 껐다 켜도 방이 남는지
           $room = (Invoke-RestMethod -Method Post "http://localhost:8787/api/rooms?mobius=1").code
+          Start-Sleep -Seconds 1   # 저장은 바뀐 뒤 0.15초 안에 디스크에 쓴다. (그 사이에 강제로 끄면 마지막 변경만 잃는다)
+          Get-ChildItem "$dir/commander-data/objects/Room" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "저장된 방 파일: $($_.Name)" }
           Stop-Process -Id $p.Id -Force
           Start-Sleep -Seconds 2
           $p = Start-Process -FilePath "$dir/commander-server.exe" -ArgumentList "--port","8787" -WorkingDirectory $dir -PassThru -RedirectStandardOutput "$dir/out2.log" -RedirectStandardError "$dir/err2.log"
@@ -95,5 +97,7 @@ jobs:
             try { $info = Invoke-RestMethod "http://localhost:8787/api/rooms/$room"; $ok = $true; break } catch { Start-Sleep -Seconds 1 }
           }
           Stop-Process -Id $p.Id -Force
+          Get-Content "$dir/out2.log" -ErrorAction SilentlyContinue
+          Get-Content "$dir/err2.log" -ErrorAction SilentlyContinue
           if (-not $ok -or $info.mobius -ne $true) { throw "껐다 켠 뒤 방($room)이 남아 있지 않다" }
           Write-Host "껐다 켠 뒤에도 방($room)이 남아 있다."
