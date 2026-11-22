@@ -1,5 +1,6 @@
 // 준비 단계 화면: 판, 대기석, 상점, 자원 패널. HTML 문자열을 만들고, 클릭/드래그는 main.js가 한꺼번에 처리한다.
 
+import { itemName } from "./crafting.js";
 import { S, conn, materialInfo, mySeat, synergyInfo, unitInfo, weaponInfo } from "./state.js";
 import {
   BOARD, COST_COLOR, DEPLOY_ROWS, PHASE_NAME, PIECE_COLOR, PIECE_NAME, RARITY_COLOR, RARITY_NAME, START_HP, countdown, esc, sellValue, starText,
@@ -111,6 +112,8 @@ function shopHtml(chess, me) {
     <div class="odds">등장 확률: ${odds}</div></div>`;
 }
 
+const itemLabel = (item) => itemName(item, S.catalog);
+
 function resourceHtml(chess, me) {
   const materials = Object.entries(me.materials).filter(([, n]) => n > 0).sort();
   const weapons = Object.entries(me.weapons).filter(([, n]) => n > 0).sort();
@@ -130,11 +133,21 @@ function resourceHtml(chess, me) {
         <em>${me.marketBought ? "구매함" : `${item.price}골드`}</em></button>`;
     });
   }
+  const itemCount = materials.length + weapons.length;
+  if (itemCount) {
+    html += `<div class="combinebar"><button class="btn sec${S.combineMode ? " on" : ""}" data-act="combine-mode">⚗ 조합${S.combineMode ? " 중 (둘을 차례로 누르세요)" : ""}</button>
+      <button class="btn sec" data-act="guide" data-tab="recipes">📜 조합 도감</button></div>
+      <div class="combine-hint" id="combine-hint">${S.combineFirst ? `<b>${esc(itemLabel(S.combineFirst))}</b>와(과) 합칠 아이템을 누르세요` : "아이템을 다른 아이템 위로 끌어다 놓으면 합쳐져요 (재료+재료, 무기+무기, 무기+원재료)"}</div>`;
+  }
+  const mode = S.combineMode;
+  const first = S.combineFirst;
+  const chipClass = (kind, id, extra = "") => `chip${extra}${S.fx.items && !S.fx.items.has(`${kind}:${id}`) ? " pop" : ""}${first && first.kind === kind && first.id === id ? " on" : ""}`;
   if (materials.length) {
-    html += `<div class="sub">재료 · 누르거나 <b>재련대로 끌어다</b> 놓아요</div><div class="chips">${materials
+    const usable = free || mode;
+    html += `<div class="sub">재료 · 누르면 재련, <b>재련대로</b> 끌어 놓아도 돼요 (다른 재료 위로 끌면 <b>조합</b>)</div><div class="chips">${materials
       .map(([id, n]) => {
         const r = materialInfo(id)?.rarity ?? "common";
-        return `<button class="chip${free ? "" : " dim"}" style="--rc:${RARITY_COLOR[r]}" data-act="smelt" data-id="${esc(id)}" data-drag="material" draggable="${free ? "true" : "false"}"${free ? "" : " disabled"}>${esc(materialInfo(id)?.nameKo ?? id)} ×${n}</button>`;
+        return `<button class="${chipClass("material", id, usable ? "" : " dim")}" style="--rc:${RARITY_COLOR[r]}" data-act="smelt" data-id="${esc(id)}" data-kind="material" data-drag="material" data-drop="combine" draggable="true"${usable ? "" : " disabled"}>${esc(materialInfo(id)?.nameKo ?? id)} ×${n}</button>`;
       })
       .join("")}</div>`;
   }
@@ -147,7 +160,7 @@ function resourceHtml(chess, me) {
     html += `<div class="sub">무기 · <b>기물 위로 끌어다</b> 놓으면 껴요 (누른 뒤 기물을 눌러도 돼요)</div><div class="chips" data-drop="inventory">${weapons
       .map(([id, n]) => {
         const r = weaponInfo(id)?.rarity ?? "common";
-        return `<button class="chip${S.selWeapon === id ? " on" : ""}" style="--rc:${RARITY_COLOR[r]}" data-act="pick-weapon" data-id="${esc(id)}" data-drag="weapon" draggable="true">${esc(weaponInfo(id)?.nameKo ?? id)} ×${n}</button>`;
+        return `<button class="${chipClass("weapon", id, S.selWeapon === id ? " on" : "")}" style="--rc:${RARITY_COLOR[r]}" data-act="pick-weapon" data-id="${esc(id)}" data-kind="weapon" data-drag="weapon" data-drop="combine" draggable="true">${esc(weaponInfo(id)?.nameKo ?? id)} ×${n}</button>`;
       })
       .join("")}</div>`;
     if (S.selWeapon) html += `<div class="sub warn">${esc(weaponInfo(S.selWeapon)?.text ?? "")}</div>`;

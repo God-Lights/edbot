@@ -37,6 +37,7 @@ const ERRORS = {
   no_free_smelter: "빈 재련대가 없어요. 다음 라운드에 무기가 나와요.",
   no_weapon: "그 무기가 없어요.",
   room_closed: "방이 닫혔어요.",
+  invalid_recipe: "그 둘은 합칠 수 없어요. (조합 도감을 확인해 보세요)",
   spectate_unavailable: "이 방은 관전할 수 없어요. (연습·전체 대전 방이거나 없는 방이에요)",
 };
 export const errorText = (code, fallback) => ERRORS[code] ?? fallback ?? code;

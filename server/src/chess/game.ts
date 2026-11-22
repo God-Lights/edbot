@@ -5,7 +5,10 @@ import { POOL_COPIES, ROSTER, unitDef } from "./roster";
 import { recordCombat } from "./sim";
 import type { CombatRecording } from "./sim";
 import type { Placement, ResourceTile, Seat } from "./types";
-import { MARKET_PRICE, MATERIALS, materialDef, weaponDef } from "./weapons";
+import { combine } from "./crafting";
+import type { ItemRef } from "./crafting";
+import { parseWeapon } from "./crafting";
+import { MARKET_PRICE, MATERIALS, materialDef } from "./weapons";
 import type { Rarity } from "./weapons";
 
 export const START_HP = 30;
@@ -126,7 +129,8 @@ export type ChessFailureCode =
   | "market_sold"
   | "no_material"
   | "no_free_smelter"
-  | "no_weapon";
+  | "no_weapon"
+  | "invalid_recipe";
 
 export type ChessResult = { ok: true } | { ok: false; code: ChessFailureCode };
 const fail = (code: ChessFailureCode): ChessResult => ({ ok: false, code });
@@ -298,7 +302,7 @@ export function startRound(game: ChessGame): void {
         if (weaponId) player.weapons[weaponId] = (player.weapons[weaponId] ?? 0) + 1;
         return null;
       });
-      const pouches = [...player.board, ...player.bench.filter((u): u is OwnedUnit => u !== null)].filter((u) => u.weapon === "digital-miner-pouch").length;
+      const pouches = [...player.board, ...player.bench.filter((u): u is OwnedUnit => u !== null)].filter((u) => u.weapon && parseWeapon(u.weapon)?.parts.includes("digital-miner-pouch")).length;
       if (pouches > 0) player.materials.bit = (player.materials.bit ?? 0) + pouches;
       player.marketBought = false;
     }
@@ -471,13 +475,36 @@ export function smelt(game: ChessGame, seat: Seat, materialId: string): ChessRes
 export function equip(game: ChessGame, seat: Seat, weaponId: string, uid: string): ChessResult {
   const player = game.players[seat];
   if (!game.resources) return fail("no_resources");
-  if (!weaponDef(weaponId) || (player.weapons[weaponId] ?? 0) <= 0) return fail("no_weapon");
+  if (!parseWeapon(weaponId) || (player.weapons[weaponId] ?? 0) <= 0) return fail("no_weapon");
   const found = findUnit(player, uid);
   if (!found) return fail("unit_not_found");
   const old = found.unit.weapon;
   if (old) player.weapons[old] = (player.weapons[old] ?? 0) + 1;
   player.weapons[weaponId] = (player.weapons[weaponId] ?? 0) - 1;
   found.unit.weapon = weaponId;
+  return { ok: true };
+}
+
+/**
+ * 재료와 무기를 서로 합쳐 새 재료나 무기를 만든다. 합친 둘은 사라지고 결과가 보관함에 들어온다. (재련처럼 기다리지 않는다)
+ * 규칙은 crafting.ts: 재료+재료(같은 희귀도, 다른 재료) -> 상위 재료, 무기+무기(같으면 ★2, 다르면 융합), 무기+원재료 -> ★2.
+ */
+export function combineItems(game: ChessGame, seat: Seat, a: ItemRef, b: ItemRef): ChessResult {
+  const player = game.players[seat];
+  if (!game.resources) return fail("no_resources");
+  const stock = (item: ItemRef): number => (item.kind === "material" ? player.materials[item.id] : player.weapons[item.id]) ?? 0;
+  const sameItem = a.kind === b.kind && a.id === b.id;
+  for (const item of [a, b]) {
+    if (stock(item) < (sameItem ? 2 : 1)) return fail(item.kind === "material" ? "no_material" : "no_weapon");
+  }
+  const result = combine(a, b);
+  if (!result) return fail("invalid_recipe");
+  for (const item of [a, b]) {
+    const bag = item.kind === "material" ? player.materials : player.weapons;
+    bag[item.id] = (bag[item.id] ?? 0) - 1;
+  }
+  const bag = result.kind === "material" ? player.materials : player.weapons;
+  bag[result.id] = (bag[result.id] ?? 0) + 1;
   return { ok: true };
 }
 

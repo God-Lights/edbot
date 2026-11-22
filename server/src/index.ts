@@ -1,5 +1,6 @@
 import { ROSTER } from "./chess/roster";
 import { MARKET_PRICE, MATERIALS, WEAPONS as CHESS_WEAPONS } from "./chess/weapons";
+import { HYBRID_POWER, MATERIAL_FUSIONS, STAR_POWER } from "./chess/crafting";
 import { ALL_SYNERGIES } from "./chess/synergy";
 import { CHARACTERS } from "./characters";
 import { AuthStore } from "./auth-store";
@@ -287,6 +288,9 @@ export default {
         synergies: ALL_SYNERGIES.map(({ id, piece, need, tier, nameKo, text }) => ({ id, piece, need, tier, nameKo, text })),
         materials: MATERIALS.map((m) => ({ ...m, price: MARKET_PRICE[m.rarity] })),
         weapons: CHESS_WEAPONS,
+        // 조합: 재료 조합표(재료 둘 -> 한 단계 위 재료)와 무기 조합의 효과 배율
+        fusions: MATERIAL_FUSIONS,
+        crafting: { starPower: STAR_POWER, hybridPower: HYBRID_POWER },
       });
     }
 

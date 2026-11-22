@@ -7,6 +7,7 @@ import { autoPlace, S, act, conn, join, leave, me, mySeat, setRender, store, toa
 import { hpPill, prepView } from "./prep.js";
 import { openMatchReplay, openReplay, replayAction, replayModal, replayScrub, startReplay } from "./replay.js";
 import { openRanking, rankingModal } from "./ranking.js";
+import { combineItems, itemName } from "./crafting.js";
 import { bgm, sfx } from "./sfx.js";
 import { PHASE_NAME, REASON_TEXT, countdown, esc } from "./util.js";
 
@@ -292,6 +293,10 @@ function applyFx(room, inRoom) {
     fx.uids = new Set(all.map((u) => u.uid));
     fx.weapons = Object.fromEntries(all.filter((u) => u.weapon).map((u) => [u.uid, u.weapon]));
     fx.shop = mine.shop.join("|");
+    fx.items = new Set([
+      ...Object.entries(mine.materials).filter(([, n]) => n > 0).map(([id]) => `material:${id}`),
+      ...Object.entries(mine.weapons).filter(([, n]) => n > 0).map(([id]) => `weapon:${id}`),
+    ]);
   } else if (phase !== "prep") {
     fx.ring = null;
     fx.gold = null;
@@ -438,11 +443,23 @@ document.addEventListener("click", (event) => {
   if (!el || el.disabled) return;
   const d = el.dataset;
   if (d.act.startsWith("replay-") && d.act !== "replay-match") { replayAction(d.act, d); return; }
+  // 조합 방식: 아이템 둘을 차례로 눌러 합친다.
+  if (S.combineMode && d.kind && (d.act === "smelt" || d.act === "pick-weapon")) {
+    const item = { kind: d.kind, id: d.id };
+    if (!S.combineFirst) update({ combineFirst: item });
+    else {
+      sfx.play("combine");
+      act.combine(S.combineFirst, item);
+      update({ combineFirst: null });
+    }
+    return;
+  }
   const SFX = { buy: "buy", market: "buy", smelt: "buy", sell: "sell", "sell-sel": "sell", cell: "place", auto: "place", done: "ready", ready: "ready", reroll: "click", "pick-weapon": "click", "bench-slot": "click" };
   if (SFX[d.act]) sfx.play(SFX[d.act]);
   switch (d.act) {
     case "create": createRoom(); break;
     case "mute": sfx.toggle(); render(); break;
+    case "combine-mode": update({ combineMode: !S.combineMode, combineFirst: null }); break;
     case "bgm": bgm.toggle(); render(); break;
     case "create-guest": createGuestRoom(); break;
     case "live": openLive(); break;
@@ -569,8 +586,8 @@ let drag = null; // { kind: "unit" | "weapon" | "material", id }
 /** 끌고 있는 것이 이 칸에 놓일 수 있는가 */
 function accepts(kind, zoneKind) {
   if (kind === "unit") return ["cell", "bench", "sell", "inventory"].includes(zoneKind);
-  if (kind === "weapon") return ["cell", "bench"].includes(zoneKind);
-  if (kind === "material") return zoneKind === "smelter";
+  if (kind === "weapon") return ["cell", "bench", "combine"].includes(zoneKind);
+  if (kind === "material") return ["smelter", "combine"].includes(zoneKind);
   return false;
 }
 
@@ -600,6 +617,18 @@ document.addEventListener("dragenter", (event) => {
   const zone = event.target.closest?.("[data-drop]");
   clearDragOver();
   if (zone && accepts(drag.kind, zone.dataset.drop)) zone.classList.add("drag-over");
+  // 아이템 위로 끌고 가면 합친 결과를 미리 보여 준다.
+  if (zone?.dataset.drop === "combine") {
+    const hint = document.getElementById("combine-hint");
+    const target = { kind: zone.dataset.kind, id: zone.dataset.id };
+    const result = combineItems({ kind: drag.kind, id: drag.id }, target, S.catalog);
+    if (hint) {
+      hint.classList.toggle("ok", !!result);
+      hint.innerHTML = result
+        ? `${esc(itemName({ kind: drag.kind, id: drag.id }, S.catalog))} + ${esc(itemName(target, S.catalog))} → <b>${esc(itemName(result, S.catalog))}</b>`
+        : "이 둘은 합칠 수 없어요";
+    }
+  }
 });
 document.addEventListener("drop", (event) => {
   const zone = event.target.closest?.("[data-drop]");
@@ -610,6 +639,12 @@ document.addEventListener("drop", (event) => {
   if (!zone || !item || !mine || mine.done || !accepts(item.kind, zone.dataset.drop)) return;
   event.preventDefault();
   const where = zone.dataset.drop;
+  if (where === "combine") {
+    // 아이템을 다른 아이템 위에 놓으면 합친다.
+    sfx.play("combine");
+    act.combine({ kind: item.kind, id: item.id }, { kind: zone.dataset.kind, id: zone.dataset.id });
+    return;
+  }
   if (item.kind === "unit") {
     if (where === "cell") { sfx.play("drop"); act.deploy(item.id, num(zone.dataset.col), num(zone.dataset.row)); }
     else if (where === "sell") act.sell(item.id);

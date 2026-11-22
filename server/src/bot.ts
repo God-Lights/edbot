@@ -5,6 +5,7 @@ import { availableIds, currentTurnSeat } from "./game";
 import { deployCap } from "./chess/game";
 import { unitDef } from "./chess/roster";
 import { MARKET_PRICE, materialDef } from "./chess/weapons";
+import { combine, parseWeapon } from "./chess/crafting";
 import type { Role } from "./chess/types";
 import { CHARACTERS } from "./characters";
 import type { Lane } from "./protocol";
@@ -198,6 +199,26 @@ export function runChessBot(state: RoomState, botId: string, now: number, scale:
         if (!cmd({ t: "smelt", material: id })) break;
       }
     }
+    // 어려운 봇: 재련대에 못 넣고 남은 재료는 같은 희귀도끼리 합쳐서 한 단계 위 재료로 만들고, 재련대가 비면 그것을 재련한다.
+    if (level === "hard") {
+      const leftovers = () => Object.entries(me.materials).filter(([, n]) => n > 0).map(([id]) => id).sort();
+      for (let guard = 0; guard < 4; guard++) {
+        const ids = leftovers();
+        let fused = false;
+        for (let i = 0; i < ids.length && !fused; i++) {
+          for (let j = i + 1; j < ids.length && !fused; j++) {
+            const result = combine({ kind: "material", id: ids[i]! }, { kind: "material", id: ids[j]! });
+            if (result && cmd({ t: "combine", a: { kind: "material", id: ids[i]! }, b: { kind: "material", id: ids[j]! } })) fused = true;
+          }
+        }
+        if (!fused) break;
+      }
+      for (const id of leftovers().sort((a, b) => rarityRank(b) - rarityRank(a))) {
+        while ((me.materials[id] ?? 0) > 0 && me.smelters.some((w) => w === null)) {
+          if (!cmd({ t: "smelt", material: id })) break;
+        }
+      }
+    }
   }
 
   // 1) 사기. 쉬운 봇: 되는 대로 5개까지. 보통: 이미 가진 캐릭터(합치려고) > 비싼 캐릭터. 어려운 봇: 보통 + 이자를 챙기고 새로고침으로 합칠 캐릭터를 찾는다.
@@ -282,7 +303,22 @@ export function runChessBot(state: RoomState, botId: string, now: number, scale:
   }
 
   // 3) 무기: 가진 무기를 판 위의 가치 높은 기물부터 낀다. (쉬운 봇은 무기를 안 쓴다)
+  //    같은 무기 둘은 ★2로 합치고, 어려운 봇은 무기가 기물보다 많으면 서로 다른 무기를 융합한다.
   if (chess.resources && level !== "easy") {
+    for (const [weaponId, count] of Object.entries(me.weapons)) {
+      if (count >= 2 && parseWeapon(weaponId)?.kind === "single") {
+        for (let i = 0; i < Math.floor(count / 2); i++) cmd({ t: "combine", a: { kind: "weapon", id: weaponId }, b: { kind: "weapon", id: weaponId } });
+      }
+    }
+    if (level === "hard") {
+      for (let guard = 0; guard < 4; guard++) {
+        const singles = Object.entries(me.weapons).filter(([id, n]) => n > 0 && parseWeapon(id)?.kind === "single").map(([id]) => id).sort();
+        const free = me.board.filter((u) => !u.weapon).length;
+        const total = Object.values(me.weapons).reduce((a, b) => a + b, 0);
+        if (singles.length < 2 || total <= free) break;
+        if (!cmd({ t: "combine", a: { kind: "weapon", id: singles[0]! }, b: { kind: "weapon", id: singles[1]! } })) break;
+      }
+    }
     for (const [weaponId, count] of Object.entries(me.weapons)) {
       for (let i = 0; i < count; i++) {
         const target = me.board.filter((u) => !u.weapon).sort((a, b) => unitValue(b.defId, b.star) - unitValue(a.defId, a.star))[0];

@@ -86,8 +86,11 @@ export interface CombatUnit {
   atkStack: number;
   /** 마지막으로 이 기물을 때린 기물의 id (처치 보상 계산용) */
   lastHitBy: string | null;
-  /** 낀 무기 id */
+  /** 낀 무기 id ("a"=기본, "a*"=★2, "a+b"=융합) */
   weapon: string | null;
+  /** 효과를 내는 기본 무기들과 효과 배율(★2 1.5, 융합 0.75, 기본 1) */
+  weaponParts: string[];
+  weaponPower: number;
   /** "쌓였다가 터지는" 확률 효과의 누적값 (출혈, 회피, 추가 공격...). 난수를 쓰지 않는다. */
   procs: Record<string, number>;
   /** 받는 피해 배율(무기), 에너지 충전 배율(무기) */

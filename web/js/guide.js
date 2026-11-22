@@ -5,7 +5,7 @@ import { PIECE_COLOR, PIECE_NAME, RARITY_COLOR, RARITY_NAME, esc } from "./util.
 
 export const TABS = [
   ["flow", "게임 흐름"], ["prep", "상점과 배치"], ["combat", "전투 규칙"], ["characters", "캐릭터"],
-  ["synergy", "시너지"], ["resources", "자원과 무기"], ["controls", "조작"],
+  ["synergy", "시너지"], ["resources", "자원과 무기"], ["recipes", "조합 도감"], ["controls", "조작"],
 ];
 
 const li = (text) => `<li>${text.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")}</li>`;
@@ -106,12 +106,34 @@ function resources() {
     "재료를 누르면 재련대에 들어가요. **재련대는 2칸**이고, 다음 라운드가 시작될 때 같은 이름의 무기로 완성돼요.",
     "무기를 누른 뒤 기물(대기석이나 판 위)을 누르면 껴요. 🛡 표시가 있는 기물이 무기를 낀 기물이에요.",
     "기물을 팔거나 ★2로 합칠 때 무기는 보관함으로 돌아와요. 선택한 기물 정보에서 **무기 빼기**도 할 수 있어요.",
+    "재료와 무기는 서로 **조합**할 수도 있어요. (조합 도감 탭)",
   ]);
   if (!S.catalog) return head + `<div class="panel">불러오는 중...</div>`;
   return head + ["common", "uncommon", "rare", "legendary"].map((r) => `<div class="panel gcard"><h4>${RARITY_NAME[r]} 재료와 무기</h4>${S.catalog.materials.filter((m) => m.rarity === r).map((m) => {
     const w = S.catalog.weapons.find((x) => x.id === m.weaponId);
     return `<div class="syn-row"><b><i style="color:${RARITY_COLOR[r]}">◆</i> ${esc(m.nameKo)} → ${esc(w?.nameKo ?? "")} ${m.price ? `<span class="sub">시장 ${m.price}골드</span>` : ""}</b><span class="sub">${esc(w?.text ?? "")}</span></div>`;
   }).join("")}</div>`).join("");
+}
+
+function recipes() {
+  const head = card("조합이란?", [
+    "재료와 무기를 **서로 합쳐서** 새로운 재료나 무기를 만들어요. 합친 둘은 사라지고, 재련처럼 기다리지 않고 **바로** 결과가 나와요.",
+    "아이템을 **다른 아이템 위로 끌어다 놓으면** 합쳐져요. 끄는 동안 어떤 결과가 나올지 미리 보여 줘요. 끌기 어려우면 **⚗ 조합** 버튼을 켜고 두 아이템을 차례로 눌러도 돼요.",
+  ]) + card("무기 조합", [
+    "**같은 무기 둘 → ★2 무기**: 효과가 1.5배예요. (예: 클로우스톤 도끼 + 클로우스톤 도끼)",
+    "**다른 무기 둘 → 융합 무기**: 두 무기의 효과를 **각각 75%씩** 모두 가져요. (예: 클로우스톤 도끼 + 에드뮴 블레이드)",
+    "**무기 + 그 무기의 원재료 → ★2 무기**: 재료를 재련하지 않고 바로 무기에 보태요. (예: 클로우스톤 도끼 + 클로우스톤)",
+    "★2 무기와 융합 무기는 더 합칠 수 없어요. 기물에는 무기를 하나만 낄 수 있어요.",
+  ]) + card("재료 조합", [
+    "**같은 희귀도의 서로 다른 재료 둘 → 한 단계 위 희귀도의 재료**예요. 흔함 → 보통 → 희귀 → 전설. (전설 재료끼리는 합칠 수 없어요)",
+    "시장에서 못 사는 전설 재료도 조합으로 만들 수 있어요. 어떤 재료가 나오는지는 아래 조합표를 보세요.",
+  ]);
+  if (!S.catalog?.fusions) return head + `<div class="panel">불러오는 중...</div>`;
+  const name = (id) => S.catalog.materials.find((m) => m.id === id)?.nameKo ?? id;
+  const rarity = (id) => S.catalog.materials.find((m) => m.id === id)?.rarity ?? "common";
+  const groups = [["common", "흔함 + 흔함 → 보통"], ["uncommon", "보통 + 보통 → 희귀"], ["rare", "희귀 + 희귀 → 전설"]];
+  return head + groups.map(([r, title]) => `<div class="panel gcard"><h4>${title}</h4>${S.catalog.fusions.filter((f) => rarity(f.a) === r).map((f) => `
+    <div class="syn-row"><b>${esc(name(f.a))} + ${esc(name(f.b))} → <span style="color:${RARITY_COLOR[rarity(f.result)]}">◆ ${esc(name(f.result))}</span></b></div>`).join("")}</div>`).join("");
 }
 
 const controls = () => card("준비 단계 조작", [
@@ -130,7 +152,7 @@ const controls = () => card("준비 단계 조작", [
   "전투 중 선은 이번 박자의 공격(흰색)과 능력(보라색)이에요.",
 ]) + card("항복", ["화면 위의 **항복** 버튼은 준비 중에도, 전투 중에도 눌러요. 누르면 바로 패배해요."]);
 
-const BODY = { flow, prep, combat, characters, synergy, resources, controls };
+const BODY = { flow, prep, combat, characters, synergy, resources, recipes, controls };
 
 export function guideModal() {
   const tabs = TABS.map(([id, title]) => `<button class="tab${S.guideTab === id ? " on" : ""}" data-act="guide-tab" data-tab="${id}">${title}</button>`).join("");

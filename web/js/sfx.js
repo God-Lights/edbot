@@ -64,6 +64,7 @@ const SOUNDS = {
   drop: () => tone(260, 0.07, { type: "triangle", vol: 0.06, slide: -60 }),
   equip: () => { tone(1200, 0.05, { type: "square", vol: 0.04 }); tone(1800, 0.14, { type: "triangle", vol: 0.05, delay: 0.04 }); noise(0.05, 0.03); },
   smelt: () => { noise(0.35, 0.05); tone(120, 0.35, { type: "sawtooth", vol: 0.04, slide: 160 }); tone(660, 0.12, { type: "triangle", vol: 0.04, delay: 0.3 }); },
+  combine: () => { noise(0.12, 0.04); tone(440, 0.1, { type: "sawtooth", vol: 0.04, slide: 400 }); [880, 1109, 1319, 1760].forEach((f, i) => tone(f, 0.18, { type: "triangle", vol: 0.06, delay: 0.1 + i * 0.07 })); },
   merge: () => [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.16, { type: "triangle", vol: 0.07, delay: i * 0.06 })),
   full: () => { tone(880, 0.08, { type: "triangle", vol: 0.06 }); tone(1175, 0.16, { type: "triangle", vol: 0.06, delay: 0.07 }); },
   roundStart: () => { tone(196, 0.5, { type: "sine", vol: 0.07 }); tone(392, 0.4, { type: "triangle", vol: 0.04, delay: 0.02 }); },

@@ -80,7 +80,8 @@ export type ErrorCode =
   | "no_weapon"
   | "spectate_unavailable"
   | "unauthorized"
-  | "room_closed";
+  | "room_closed"
+  | "invalid_recipe";
 
 export interface PublicPlayer {
   id: string;
@@ -410,6 +411,8 @@ export type ClientMessage =
   | { t: "market"; slot: number }
   /** 재료를 재련대에 넣는다. 다음 라운드 시작에 무기가 나온다. */
   | { t: "smelt"; material: string }
+  /** 재료·무기 둘을 합쳐 새 재료나 무기를 만든다. */
+  | { t: "combine"; a: { kind: "material" | "weapon"; id: string }; b: { kind: "material" | "weapon"; id: string } }
   /** 무기를 기물(uid)에 낀다. */
   | { t: "equip"; weaponId: string; uid: string }
   /** 기물(uid)의 무기를 뺀다. */
@@ -541,6 +544,17 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       const weaponId = characterId(msg.weaponId);
       const uid = characterId(msg.uid);
       return weaponId && uid ? { t: "equip", weaponId, uid } : null;
+    }
+    case "combine": {
+      const ref = (value: unknown): { kind: "material" | "weapon"; id: string } | null => {
+        if (typeof value !== "object" || value === null) return null;
+        const { kind, id } = value as { kind?: unknown; id?: unknown };
+        const clean = characterId(id);
+        return (kind === "material" || kind === "weapon") && clean ? { kind, id: clean } : null;
+      };
+      const a = ref(msg.a);
+      const b = ref(msg.b);
+      return a && b ? { t: "combine", a, b } : null;
     }
     case "unequip": {
       const uid = characterId(msg.uid);
