@@ -169,10 +169,11 @@ jobs:
             try { $info = Invoke-RestMethod http://localhost:8790/api/server; break } catch { Start-Sleep -Seconds 1 }
           }
           $chess = (Invoke-WebRequest http://localhost:8790/api/chess -UseBasicParsing).Content
+          $connect = (Invoke-WebRequest http://localhost:8790/connect -UseBasicParsing).Content
           Stop-Process -Id $p.Id -Force
           Get-Content "$dir/out5.log" -ErrorAction SilentlyContinue
           if ($null -eq $info -or $info.edition -ne "expert") { throw "엑스퍼트 exe가 엑스퍼트로 보이지 않는다" }
           if (@($info.packs).Count -lt 1) { throw "엑스퍼트 exe에 팩이 적용되지 않았다" }
           if (-not $chess.Contains("example:moon-guard")) { throw "새 캐릭터가 도감에 없다" }
-          $connect = (Invoke-WebRequest http://localhost:8790/connect -UseBasicParsing -ErrorAction SilentlyContinue)
+          if (-not $connect.Contains("<svg")) { throw "접속 QR 화면이 없다" }
           Write-Host "엑스퍼트 exe에서 팩이 적용된다 ($($info.ruleset))."
