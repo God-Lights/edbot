@@ -1,7 +1,8 @@
 import AVFoundation
 import Foundation
 
-/// 효과음과 배경 음악. 파일 없이 합성한다. (웹의 sfx.js와 같은 소리)
+/// 효과음(합성)과 배경 음악(곡 3개를 상황에 맞게 바꿔 튼다). 웹의 sfx.js와 같은 구성이다.
+/// 곡: prep = Tactical Drop (로비·준비), combat = Tactical Drop (1) (전투), finale = Final Checkmate (마지막 라운드·체력 위태로울 때·결과).
 @MainActor
 final class Sfx {
     static let shared = Sfx()
@@ -31,15 +32,20 @@ final class Sfx {
     }
 
     var muted: Bool = UserDefaults.standard.bool(forKey: "sfxMuted")
-    private(set) var musicOn: Bool = UserDefaults.standard.bool(forKey: "bgmOn")
+    /// 처음에는 켜져 있고, 끄면 기억한다.
+    private(set) var musicOn: Bool = UserDefaults.standard.object(forKey: "bgmOn") as? Bool ?? true
+
+    enum Track: String, CaseIterable { case prep, combat, finale }
+    private var scene: Track = .prep
+    private var trackPlayers: [Track: AVAudioPlayer] = [:]
+    private let musicVolume: Float = 0.5
+    private let fadeSeconds: TimeInterval = 1.0
 
     private let sampleRate: Double = 44100
     private let format: AVAudioFormat
     private let engine = AVAudioEngine()
     private var players: [AVAudioPlayerNode] = []
-    private let musicPlayer = AVAudioPlayerNode()
     private var buffers: [Sound: AVAudioPCMBuffer] = [:]
-    private var musicBuffer: AVAudioPCMBuffer?
     private var nextPlayer = 0
     private var started = false
     private var lastPlayed: [Sound: CFAbsoluteTime] = [:]
@@ -76,18 +82,25 @@ final class Sfx {
     func setMuted(_ value: Bool) {
         muted = value
         UserDefaults.standard.set(value, forKey: "sfxMuted")
-        if value { musicPlayer.pause() } else if musicOn { startMusic() }
+        syncMusic()
     }
 
     func setMusic(_ value: Bool) {
         musicOn = value
         UserDefaults.standard.set(value, forKey: "bgmOn")
-        if value { startMusic() } else { musicPlayer.stop() }
+        syncMusic()
     }
 
     /// 앱이 켜질 때 배경 음악이 켜져 있으면 시작한다.
     func resumeMusicIfNeeded() {
-        if musicOn && !muted { startMusic() }
+        syncMusic()
+    }
+
+    /// 지금 상황에 맞는 곡으로 바꾼다. 같은 곡이면 아무 일도 없다.
+    func setScene(_ track: Track) {
+        guard track != scene else { return }
+        scene = track
+        syncMusic()
     }
 
     // MARK: 엔진
@@ -107,9 +120,6 @@ final class Sfx {
                 engine.connect(node, to: engine.mainMixerNode, format: format)
                 players.append(node)
             }
-            engine.attach(musicPlayer)
-            engine.connect(musicPlayer, to: engine.mainMixerNode, format: format)
-            musicPlayer.volume = 0.8
         }
         if !engine.isRunning {
             do { try engine.start() } catch { return false }
@@ -117,13 +127,33 @@ final class Sfx {
         return true
     }
 
-    private func startMusic() {
-        guard ensureStarted(), !muted else { return }
-        if musicBuffer == nil { musicBuffer = renderMusic() }
-        guard let buffer = musicBuffer else { return }
-        if musicPlayer.isPlaying { return }
-        musicPlayer.scheduleBuffer(buffer, at: nil, options: .loops, completionHandler: nil)
-        musicPlayer.play()
+    /// 곡마다 재생 위치를 기억한다. 바뀔 때는 앞 곡이 사라지며 새 곡이 커진다.
+    private func player(for track: Track) -> AVAudioPlayer? {
+        if let cached = trackPlayers[track] { return cached }
+        guard let url = Bundle.main.url(forResource: track.rawValue, withExtension: "mp3"),
+              let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
+        player.numberOfLoops = -1
+        player.volume = 0
+        player.prepareToPlay()
+        trackPlayers[track] = player
+        return player
+    }
+
+    private func syncMusic() {
+        guard ensureStarted() else { return }
+        for track in Track.allCases {
+            if musicOn && !muted && track == scene {
+                guard let player = player(for: track) else { continue }
+                if !player.isPlaying { player.play() }
+                player.setVolume(musicVolume, fadeDuration: fadeSeconds)
+            } else if let player = trackPlayers[track], player.isPlaying {
+                player.setVolume(0, fadeDuration: fadeSeconds)
+                Task { [weak player] in
+                    try? await Task.sleep(nanoseconds: UInt64((fadeSeconds + 0.2) * 1_000_000_000))
+                    if let player, player.volume == 0 { player.pause() } // 위치는 그대로 남는다
+                }
+            }
+        }
     }
 
     // MARK: 합성
@@ -179,22 +209,6 @@ final class Sfx {
         }
         for i in 0..<count { channel[i] = max(-1, min(1, mix[i])) }
         return buffer
-    }
-
-    /// 잔잔한 아르페지오 13.4초를 이어 붙여 반복한다.
-    private func renderMusic() -> AVAudioPCMBuffer? {
-        let scale: [Double] = [0, 3, 5, 7, 10, 12, 15]
-        let pattern: [Int] = [0, 2, 4, 2, 5, 4, 2, 1]
-        let roots: [Double] = [110, 98, 123, 98]
-        let step = 0.42
-        var notes: [Note] = []
-        for s in 0..<32 {
-            let root = roots[(s / 8) % 4]
-            let freq = root * pow(2, scale[pattern[s % 8]] / 12)
-            notes.append(Note(freq: freq, dur: 0.7, wave: .sine, vol: 0.035, delay: Double(s) * step))
-            if s % 8 == 0 { notes.append(Note(freq: root / 2, dur: 1.6, wave: .triangle, vol: 0.03, delay: Double(s) * step)) }
-        }
-        return render(notes: notes, noise: [], length: 32 * step, wrap: true)
     }
 
     private func score(for sound: Sound) -> (notes: [Note], noise: [Burst]) {

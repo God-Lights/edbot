@@ -318,11 +318,25 @@ function applyFx(room, inRoom) {
   }
   fx.phase = phase;
 }
+/** 지금 상황에 맞는 배경 음악: 준비·로비는 prep, 전투는 combat, 마지막 라운드·체력이 위태로울 때·결과는 finale. */
+function musicScene(room, inRoom) {
+  if (!inRoom || !room) return "prep";
+  if (room.phase === "result") return "finale";
+  const chess = room.chess;
+  if (chess && (room.phase === "prep" || room.phase === "combat")) {
+    const last = chess.round >= chess.maxRounds - 1;
+    const danger = Math.min(chess.hps?.[0] ?? 99, chess.hps?.[1] ?? 99) <= 8;
+    if (last || danger) return "finale";
+  }
+  return ["combat", "battle", "deathmatch"].includes(room.phase) ? "combat" : "prep";
+}
+
 function render() {
   const active = document.activeElement;
   const keepFocus = active && active.id ? { id: active.id, start: active.selectionStart, end: active.selectionEnd } : null;
   const room = S.room;
   const inRoom = !!room && S.status !== "idle";
+  bgm.scene(musicScene(room, inRoom));
   // 전투가 시작되면 열려 있던 다시 보기는 닫는다. (판이 두 개 겹치지 않게)
   if (S.modal === "replay" && room?.phase === "combat") S.modal = null;
   // 전투 재생은 화면을 다시 그릴 때만 다시 시작한다.
