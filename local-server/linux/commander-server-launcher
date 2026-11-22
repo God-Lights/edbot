@@ -1,0 +1,87 @@
+#!/bin/sh
+# COMMANDER 서버 열기 (우분투): 서버를 뒤에서 켜고, 접속 화면(QR)을 브라우저로 연다.
+#
+#   commander-server-launcher [start|stop|status|open|log] [--expert]
+#   (인자 없이 부르면 start)
+#
+# 데이터: ~/.local/share/commander-server   설정: ~/.config/commander-server/config (선택)
+#   PORT=8787  NAME="내 컴퓨터 서버"  EDITION=vanilla|expert
+
+set -u
+APP_DIR="${COMMANDER_APP_DIR:-/opt/commander-server}"
+DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/commander-server"
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}/commander-server/config"
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/commander-server"
+PID_FILE="$STATE/server.pid"
+LOG_FILE="$STATE/server.log"
+
+PORT=8787
+NAME="내 컴퓨터 서버"
+EDITION=vanilla
+[ -f "$CONF" ] && . "$CONF"
+
+cmd="${1:-start}"
+[ $# -gt 0 ] && shift
+for arg in "$@"; do
+  case "$arg" in
+    --expert) EDITION=expert ;;
+    --vanilla) EDITION=vanilla ;;
+  esac
+done
+
+mkdir -p "$DATA_DIR" "$STATE"
+
+notify() {
+  if command -v notify-send >/dev/null 2>&1; then notify-send "COMMANDER 서버" "$1" 2>/dev/null || true; fi
+  echo "$1"
+}
+
+running() {
+  [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
+}
+
+url() { echo "http://localhost:$PORT"; }
+
+case "$cmd" in
+  start|open)
+    if running; then
+      notify "이미 켜져 있어요: $(url)"
+    else
+      bin="$APP_DIR/commander-server"
+      [ "$EDITION" = expert ] && bin="$APP_DIR/commander-server-expert"
+      if [ ! -x "$bin" ]; then notify "서버 파일이 없어요: $bin"; exit 1; fi
+      nohup "$bin" --port "$PORT" --data "$DATA_DIR" --name "$NAME" >"$LOG_FILE" 2>&1 &
+      echo $! >"$PID_FILE"
+      i=0
+      while [ $i -lt 30 ]; do
+        if command -v curl >/dev/null 2>&1; then curl -sf "$(url)/health" >/dev/null 2>&1 && break; else break; fi
+        if ! running; then notify "서버가 켜지지 않았어요. 기록: $LOG_FILE"; tail -n 5 "$LOG_FILE" 2>/dev/null; rm -f "$PID_FILE"; exit 1; fi
+        sleep 1; i=$((i + 1))
+      done
+      notify "서버를 켰어요 ($EDITION): $(url)/connect"
+    fi
+    [ "${NO_BROWSER:-0}" = 1 ] || { command -v xdg-open >/dev/null 2>&1 && xdg-open "$(url)/connect" >/dev/null 2>&1 || true; }
+    ;;
+  stop)
+    if running; then
+      kill "$(cat "$PID_FILE")" 2>/dev/null
+      i=0; while running && [ $i -lt 10 ]; do sleep 1; i=$((i + 1)); done
+      running && kill -9 "$(cat "$PID_FILE")" 2>/dev/null
+      rm -f "$PID_FILE"
+      notify "서버를 껐어요."
+    else
+      rm -f "$PID_FILE"
+      echo "켜져 있지 않아요."
+    fi
+    ;;
+  status)
+    if running; then echo "켜져 있어요 (PID $(cat "$PID_FILE")): $(url)"; else echo "꺼져 있어요."; exit 3; fi
+    ;;
+  log)
+    exec tail -n 50 -f "$LOG_FILE"
+    ;;
+  *)
+    echo "사용법: commander-server-launcher [start|stop|status|open|log] [--expert]"
+    exit 2
+    ;;
+esac

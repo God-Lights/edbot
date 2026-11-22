@@ -67,3 +67,13 @@ commander-data/
 - 서버를 켜면 터미널에 QR이 나온다. 같은 와이파이의 폰 카메라로 찍으면 COMMANDER 앱이 열리고 서버 주소가 입력된다. 같은 화면이 `http://localhost:8787/connect`에도 있다.
 - 앱의 서버 입력칸 아래에는 같은 와이파이에서 찾은 서버가 목록으로 뜬다(Bonjour `_commander._tcp`). 눌러서 고른다. 윈도우 방화벽이 처음에 물으면 "허용"을 눌러야 폰이 찾을 수 있다.
 - 웹 브라우저로는 화면에 나온 `http://IP:8787` 주소를 그대로 열면 된다.
+
+## 우분투 (.deb)
+```bash
+sh linux/build-deb.sh              # 먼저 bun build.ts 와 bun build.ts --edition expert 로 두 실행파일을 만든다
+sudo apt install ./dist/commander-server_0.1.0_amd64.deb
+```
+- 앱 메뉴의 **COMMANDER 서버**를 누르면 서버를 뒤에서 켜고 접속 화면(QR)을 브라우저로 연다. 오른쪽 클릭 메뉴에 "서버 끄기", "엑스퍼트로 켜기", "기록 보기".
+- 터미널: `commander-server-launcher start|stop|status|log [--expert]`. 설정은 `~/.config/commander-server/config`(`PORT=`, `NAME=`, `EDITION=`), 데이터는 `~/.local/share/commander-server`(플러그인은 그 안 `plugins/`).
+- 로그인할 때마다 켜려면 `systemctl --user enable --now commander-server`.
+- 같은 와이파이의 폰이 못 찾으면 방화벽에서 8787(TCP)과 5353(UDP)을 연다: `sudo ufw allow 8787/tcp && sudo ufw allow 5353/udp`.

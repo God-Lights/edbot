@@ -1,0 +1,21 @@
+[Desktop Entry]
+Type=Application
+Name=COMMANDER 서버
+Comment=같은 와이파이의 폰·패드와 함께 할 COMMANDER 서버를 켭니다
+Exec=commander-server-launcher start
+Icon=commander-server
+Terminal=false
+Categories=Game;Network;
+Actions=stop;expert;log;
+
+[Desktop Action stop]
+Name=서버 끄기
+Exec=commander-server-launcher stop
+
+[Desktop Action expert]
+Name=엑스퍼트로 켜기 (플러그인)
+Exec=commander-server-launcher start --expert
+
+[Desktop Action log]
+Name=기록 보기
+Exec=x-terminal-emulator -e commander-server-launcher log
