@@ -2,7 +2,7 @@ import EdbotKit
 import SwiftUI
 
 enum GuideTab: String, CaseIterable, Identifiable {
-    case flow, prep, combat, characters, synergy, resources, recipes, controls
+    case flow, prep, combat, characters, synergy, resources, recipes, mobius, controls
 
     var id: String { rawValue }
 
@@ -15,6 +15,7 @@ enum GuideTab: String, CaseIterable, Identifiable {
         case .synergy: return "시너지"
         case .resources: return "자원과 무기"
         case .recipes: return "조합 도감"
+        case .mobius: return "무한 모드"
         case .controls: return "조작"
         }
     }
@@ -74,6 +75,7 @@ struct GuideView: View {
         case .synergy: SynergyGuide()
         case .resources: ResourceGuide()
         case .recipes: RecipeGuide()
+        case .mobius: MobiusGuide()
         case .controls: ControlsGuide()
         }
     }
@@ -269,7 +271,7 @@ private struct CharacterGuide: View {
                     Text("\(Labels.pieceName(info.piece)) · \(info.faction) · \(info.role)")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                Text("♥ \(info.hp)   ⚔ \(info.atk)").font(.caption.monospacedDigit())
+                Text("\(Image(systemName: "heart.fill")) \(info.hp)   \(Image(systemName: "flame.fill")) \(info.atk)").font(.caption.monospacedDigit())
                 Text((info.passive ? "패시브: " : "능력: ") + info.abilityText)
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
@@ -394,6 +396,36 @@ private struct ResourceGuide: View {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+private struct MobiusGuide: View {
+    var body: some View {
+        VStack(spacing: 14) {
+            GuideCard(title: "무한 모드란?") {
+                guideLine("판의 **왼쪽 끝과 오른쪽 끝이 이어져 있는** 특별한 규칙이에요. (뫼비우스의 띠) 방을 만들 때 **\(Image(systemName: "infinity")) 무한 모드**를 켜거나, 로비의 **무한 대전**으로 봇과 해 볼 수 있어요.")
+                guideLine("준비 단계(상점·배치)는 똑같아요. 달라지는 건 **전투**뿐이에요.")
+            }
+            GuideCard(title: "이음매와 유령") {
+                guideLine("판 왼쪽·오른쪽 가장자리를 넘어가면 반대편 가장자리로 나오고, **위아래가 뒤집혀요.** 판 가장자리의 보랏빛이 이음매예요. 위·아래 끝은 이어지지 않아요.")
+                guideLine("이음매를 넘으면 기물이 **유령**이 돼요. 반투명한 모습에 점선 테두리가 붙어요. 유령은 같은 칸에 앞면 기물이 있어도 겹쳐서 있을 수 있어요.")
+                guideLine("**앞면 기물과 유령은 서로 닿지 않아요.** 막지도, 때리지도, 능력에 맞지도 않아요. 유령으로 적진 한가운데를 지나갈 수도 있어요. 유령끼리는 서로 싸워요.")
+                guideLine("이음매 **너머 칸을 향한 공격**은 건너편에 있는 기물에게 닿아요.")
+            }
+            GuideCard(title: "웜홀") {
+                guideLine("유령이 된 기물은 **4박자**가 지나면 둘레의 고리가 가득 차고 청록색으로 빛나요. 그러면 **같은 칸의 앞면으로 올라올 수 있어요.** (그 칸이 비어 있어야 해요)")
+                guideLine("적의 등 뒤로 돌아 들어가 유령으로 기다렸다가, 웜홀이 열리는 순간 올라와서 치는 것이 이 모드의 핵심이에요.")
+            }
+            GuideCard(title: "폰") {
+                guideLine("폰은 **승급하지 않아요.** 판 끝줄에 닿으면 **U턴**해서 다시 걸어와요. 앞면에서 U턴을 두 번 하면 **일주 한 번**이에요.")
+                guideLine("일주를 마친 폰은 같은 칸 밑면에 **분신**(보랏빛 선으로 이어진 유령 폰)을 남겨요. 한 쪽에 최대 4개예요.")
+                guideLine("밑면의 분신은 판 끝에 닿으면 **석화**해서 움직이지도 공격하지도 못해요. 본체가 쓰러지면 분신도 모두 사라져요. 분신이 앞면으로 올라오면 독립한 폰이 돼요.")
+            }
+            GuideCard(title: "달라지는 점") {
+                guideLine("돌발 사망이 **28박자**부터예요. (일반은 20박자) 이음매로 돌아가는 시간이 필요해서 전투가 조금 길어요.")
+                guideLine("암살·기동 기물과 나이트·퀸·룩·비숍은 이음매를 돌아서 적 뒷줄로 **측면 기습**을 가기도 해요.")
             }
         }
     }

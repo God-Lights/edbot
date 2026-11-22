@@ -29,6 +29,8 @@ export const S = {
   ranking: null,
   /** 봇 난이도: "" (기본: 연습 쉬움, 전체 보통) | easy | normal | hard */
   botLevel: load("edbot.botLevel"),
+  /** 방을 만들 때 무한 모드로 만들지 */
+  mobius: load("edbot.mobius") === "1",
   coachDismissed: load("edbot.coachDismissed") === "1",
   tipSeen: load("edbot.tipSeen") === "1",
   creating: false,

@@ -46,8 +46,8 @@ struct CharacterCard: View {
                 .font(.caption2)
                 .foregroundStyle(Theme.color(for: info.piece))
             HStack(spacing: 10) {
-                stat("♥", "\(info.hp)")
-                stat("⚔", "\(info.attack)")
+                stat("heart.fill", "\(info.hp)")
+                stat("flame.fill", "\(info.attack)")
             }
             Text("\(Labels.speed(info.speed)) · \(Labels.range(info.range))")
                 .font(.caption2)
@@ -98,7 +98,7 @@ struct CharacterCard: View {
 
     private func stat(_ icon: String, _ value: String) -> some View {
         HStack(spacing: 3) {
-            Text(icon).font(.caption2).foregroundStyle(.secondary)
+            Image(systemName: icon).font(.caption2).foregroundStyle(.secondary)
             Text(value).font(.caption.monospacedDigit().weight(.semibold))
         }
     }

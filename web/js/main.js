@@ -1,5 +1,6 @@
 // COMMANDER 웹 클라이언트. 서버(Cloudflare Worker)와 같은 출처에서 열린다.
 
+import { ic } from "./icons.js";
 import { api } from "./api.js";
 import { arenaHtml, combatView, startPlayback, stopPlayback, teamPanels } from "./combat.js";
 import { guideModal, openGuide } from "./guide.js";
@@ -20,7 +21,7 @@ function lobbyView() {
   const loggedIn = !!S.user;
   const account = loggedIn
     ? `<div class="panel"><div class="row tight"><div><div class="sub">로그인됨</div><b class="big">${esc(S.user.nickname)}</b></div><span class="grow"></span><button class="btn sec" data-act="logout">새로고침</button></div></div>`
-    : `<div class="panel stack tight"><a class="btn primary wide" href="/auth/login">🔑 로그인하기</a>
+    : `<div class="panel stack tight"><a class="btn primary wide" href="/auth/login">${ic("key")} 로그인하기</a>
         <input id="name" class="input" maxlength="16" placeholder="이름 (로그인하지 않은 개발 서버용)" value="${esc(S.name)}"></div>`;
   return `<div class="lobby">
     <div class="hero"><img class="logo" src="assets/logo.png" alt="COMMANDER"><div class="sub herotext">체스판 자동 전투 · 2인 실시간 대전</div></div>
@@ -28,7 +29,7 @@ function lobbyView() {
       <div class="mgroup">
         ${account}
         <div class="panel stack tight">
-          <b>🎓 게스트로 참가</b><div class="sub tiny">GL 계정 없이 학번과 이름으로 게스트 방에 들어가요. (전적은 안 남아요)</div>
+          <b>${ic("cap")} 게스트로 참가</b><div class="sub tiny">GL 계정 없이 학번과 이름으로 게스트 방에 들어가요. (전적은 안 남아요)</div>
           <form class="stack tight" data-form="guest">
             <div class="row tight"><input id="gid" class="input" inputmode="numeric" maxlength="10" placeholder="학번 (예: 20211)" value="${esc(S.guest.studentId)}">
               <input id="gname" class="input" maxlength="16" placeholder="이름" value="${esc(S.guest.name)}"></div>
@@ -39,25 +40,27 @@ function lobbyView() {
       </div>
       <div class="mgroup">
         <div class="panel stack tight">
-          <button class="btn primary wide" data-act="quick"${S.quick ? " disabled" : ""}>⚔ 빠른 대전</button>
+          <button class="btn primary wide" data-act="quick"${S.quick ? " disabled" : ""}>${ic("swords")} 빠른 대전</button>
+          <label class="chk" title="앞면·밑면, 이음매, 웜홀이 있는 뫼비우스 규칙으로 싸워요"><input type="checkbox" id="mobius"${S.mobius ? " checked" : ""}> ${ic("infinity")} 무한 모드로 만들기</label>
           <button class="btn sec wide" data-act="create"${S.creating ? " disabled" : ""}>${S.creating ? "방을 만드는 중..." : "방 만들기"}</button>
           <form class="row tight" data-form="join"><input id="code" class="input code" maxlength="4" placeholder="방 코드 4자리" autocapitalize="characters" autocomplete="off" value="${esc(S.roomCode)}">
             <button class="btn sec" type="submit">입장</button></form>
           <form class="row tight" data-form="watch"><input id="watch" class="input code" maxlength="4" placeholder="관전할 방 코드" autocapitalize="characters" autocomplete="off" value="${esc(S.watchCode ?? "")}">
-            <button class="btn sec" type="submit">👁 관전</button></form>
+            <button class="btn sec" type="submit">${ic("eye")} 관전</button></form>
         </div>
-        ${loggedIn ? `<div class="panel stack tight"><div class="two"><button class="btn sec" data-act="create-guest">🎓 게스트 방</button><button class="btn sec" data-act="live">👁 경기 관전</button></div>
-          <button class="btn sec wide" data-act="myrooms">🗂 내 방 관리</button></div>` : ""}
+        ${loggedIn ? `<div class="panel stack tight"><div class="two"><button class="btn sec" data-act="create-guest">${ic("cap")} 게스트 방</button><button class="btn sec" data-act="live">${ic("eye")} 경기 관전</button></div>
+          <button class="btn sec wide" data-act="myrooms">${ic("folder")} 내 방 관리</button></div>` : ""}
       </div>
       <div class="mgroup">
         <div class="panel stack tight">
           <label class="levelrow"><span class="sub">봇 난이도</span>
             <select id="botlevel" class="input sel">${[["", "기본"], ["easy", "쉬움"], ["normal", "보통"], ["hard", "어려움"]]
               .map(([v, t]) => `<option value="${v}"${S.botLevel === v ? " selected" : ""}>${t}</option>`).join("")}</select></label>
-          <button class="btn sec wide" data-act="join-code" data-code="ADMN" title="봇과 한 판, 쉬운 캐릭터만">🤖 연습 대전</button>
-          <button class="btn sec wide" data-act="join-code" data-code="ADMF" title="봇, 모든 캐릭터와 자원 시스템">🤖 전체 대전</button>
+          <button class="btn sec wide" data-act="join-code" data-code="ADMN" title="봇과 한 판, 쉬운 캐릭터만">${ic("bot")} 연습 대전</button>
+          <button class="btn sec wide" data-act="join-code" data-code="ADMF" title="봇, 모든 캐릭터와 자원 시스템">${ic("bot")} 전체 대전</button>
+          <button class="btn sec wide" data-act="join-code" data-code="ADMX" title="봇, 앞면·밑면과 이음매가 있는 무한 모드">${ic("infinity")} 무한 대전</button>
         </div>
-        <div class="panel two tight"><button class="btn sec" data-act="ranking">🏆 랭킹</button><button class="btn sec" data-act="guide" data-tab="flow">📖 가이드</button></div>
+        <div class="panel two tight"><button class="btn sec" data-act="ranking">${ic("trophy")} 랭킹</button><button class="btn sec" data-act="guide" data-tab="flow">${ic("book")} 가이드</button></div>
       </div>
     </div></div>`;
 }
@@ -68,7 +71,7 @@ function guestRoomModal() {
     <div class="roomlobby" style="padding:10px 0"><div class="sub">방 코드</div><div class="code-big">${esc(code)}</div>
       <div class="sub">참가자는 <b>게스트로 참가</b>에서 학번·이름·이 코드를 입력하면 들어와요.</div>
       <div class="row center"><button class="btn primary" data-act="guestroom-play" data-code="${esc(code)}">내가 플레이어로 참가</button>
-        <button class="btn sec" data-act="guestroom-watch" data-code="${esc(code)}">👁 관전하기</button></div></div></div></div>`;
+        <button class="btn sec" data-act="guestroom-watch" data-code="${esc(code)}">${ic("eye")} 관전하기</button></div></div></div></div>`;
 }
 
 const LIVE_PHASE = { lobby: "대기 중", prep: "준비 중", combat: "전투 중", result: "결과" };
@@ -84,15 +87,15 @@ function liveModal() {
       const who = r.players.length
         ? r.players.map((p) => `${p.studentId ? esc(p.studentId) + " " : ""}${esc(p.name)}${p.connected ? "" : " (끊김)"}`).join("  vs  ")
         : "참가자를 기다리는 중";
-      const hp = r.hps ? `♥ ${Math.max(0, r.hps[0])} : ${Math.max(0, r.hps[1])}` : "";
+      const hp = r.hps ? `${ic("heart")} ${Math.max(0, r.hps[0])} : ${Math.max(0, r.hps[1])}` : "";
       const round = r.round ? `라운드 ${r.round}/${r.maxRounds}` : "";
       return `<div class="panel livecard"><div><b>${who}</b><div class="sub">${esc(LIVE_PHASE[r.phase] ?? r.phase)} ${round} ${hp} · 방 ${esc(r.code)} · 만든 사람 ${esc(r.host)}</div></div>
-        <span class="grow"></span>${r.mine ? `<button class="btn sec" data-act="room-close" data-code="${esc(r.code)}" data-from="live">🗑 삭제</button>` : ""}
-        <button class="btn primary" data-act="live-watch" data-code="${esc(r.code)}">👁 관전</button></div>`;
+        <span class="grow"></span>${r.mine ? `<button class="btn sec" data-act="room-close" data-code="${esc(r.code)}" data-from="live">${ic("trash")} 삭제</button>` : ""}
+        <button class="btn primary" data-act="live-watch" data-code="${esc(r.code)}">${ic("eye")} 관전</button></div>`;
     }).join("");
   }
   return `<div class="modal"><div class="modal-box"><div class="modal-head"><h2>진행 중인 게스트 경기</h2>
-    <div class="row"><button class="btn sec" data-act="live-refresh">⟳ 새로고침</button><button class="btn sec" data-act="close-modal">닫기</button></div></div>
+    <div class="row"><button class="btn sec" data-act="live-refresh">${ic("refresh")} 새로고침</button><button class="btn sec" data-act="close-modal">닫기</button></div></div>
     <div class="modal-body">${body}</div></div></div>`;
 }
 
@@ -106,12 +109,12 @@ function myRoomsModal() {
     body = m.rooms.map((r) => {
       const who = r.players.length ? r.players.map((p) => `${p.studentId ? esc(p.studentId) + " " : ""}${esc(p.name)}${p.connected ? "" : " (끊김)"}`).join("  vs  ") : "참가자 없음";
       return `<div class="panel livecard"><div><b>방 ${esc(r.code)} · ${r.guest ? "게스트 방" : "일반 방"}</b><div class="sub">${esc(LIVE_PHASE[r.phase] ?? r.phase)}${r.round ? ` · 라운드 ${r.round}/${r.maxRounds}` : ""} · ${who}</div></div>
-        <span class="grow"></span><button class="btn sec" data-act="room-close" data-code="${esc(r.code)}" data-from="myrooms">🗑 삭제</button></div>`;
+        <span class="grow"></span><button class="btn sec" data-act="room-close" data-code="${esc(r.code)}" data-from="myrooms">${ic("trash")} 삭제</button></div>`;
     }).join("");
   }
   const count = m?.rooms?.length ?? 0;
   return `<div class="modal"><div class="modal-box"><div class="modal-head"><h2>내 방 관리</h2>
-    <div class="row">${count ? `<button class="btn sec" data-act="myrooms-clear">🗑 모두 닫기 (${count})</button>` : ""}<button class="btn sec" data-act="myrooms">⟳ 새로고침</button><button class="btn sec" data-act="close-modal">닫기</button></div></div>
+    <div class="row">${count ? `<button class="btn sec" data-act="myrooms-clear">${ic("trash")} 모두 닫기 (${count})</button>` : ""}<button class="btn sec" data-act="myrooms">${ic("refresh")} 새로고침</button><button class="btn sec" data-act="close-modal">닫기</button></div></div>
     <div class="sub">방을 닫으면 안에 있는 사람이 모두 나가지고, 방의 내용이 지워져요. 내가 만든 방만 보여요.</div>
     <div class="modal-body">${body}</div></div></div>`;
 }
@@ -164,7 +167,7 @@ function openLive() {
 
 async function createGuestRoom() {
   update({ creating: true, message: "" });
-  const result = await api.createRoom(true);
+  const result = await api.createRoom(true, S.mobius);
   update({ creating: false });
   if (result.code) update({ modal: "guestroom", guestRoom: result.code });
   else if (result.status === 401) toast("게스트 방은 GL 로그인 후에 만들 수 있어요.");
@@ -194,10 +197,11 @@ function roomLobbyView(room) {
   const ready = me()?.ready;
   const cards = room.players.map((p) => `<div class="panel pcard"><b class="big">${esc(p.name)}</b><div class="${p.ready ? "good" : "sub"}">${p.connected ? (p.ready ? "준비 완료" : "준비 중") : "연결 끊김"}</div></div>`).join("");
   return `<div class="roomlobby"><div class="sub">방 코드</div><div class="code-big">${esc(room.code)}</div>
+    ${room.mobius ? `<div class="badge mob" title="앞면·밑면, 이음매, 웜홀이 있는 뫼비우스 규칙">${ic("infinity")} 무한 모드</div>` : ""}
     ${room.players.length < 2 ? `<div class="sub">상대를 기다리는 중... 방 코드를 알려 주세요.</div>` : ""}
     <div class="row center">${cards}</div>
     <button class="btn primary" data-act="ready">${ready ? "준비 취소" : "준비"}</button>
-    ${["ADMN", "ADMF"].includes(room.code) ? "" : `<button class="btn sec" data-act="copy-watch" data-code="${esc(room.code)}">👁 관전 링크 복사</button>`}</div>`;
+    ${["ADMN", "ADMF", "ADMX"].includes(room.code) ? "" : `<button class="btn sec" data-act="copy-watch" data-code="${esc(room.code)}">${ic("eye")} 관전 링크 복사</button>`}</div>`;
 }
 
 function resultView(room) {
@@ -216,15 +220,15 @@ function resultView(room) {
     ${rating ? `<div class="big ${delta >= 0 ? "good" : "bad"}">레이팅 ${rating.before} → ${rating.after} (${delta >= 0 ? "+" : ""}${delta})</div>` : ""}
     <div class="sub" data-timer="${room.phaseEndsAt ?? ""}" data-suffix=" 뒤 로비로 돌아가요">${countdown(conn.remainingMs(room.phaseEndsAt))} 뒤 로비로 돌아가요</div>
     <div class="row center">${Object.keys(S.sessionRounds).length ? `<button class="btn sec" data-act="rewatch-all">▶ 전투 다시 보기 (${Object.keys(S.sessionRounds).length}라운드)</button>` : ""}
-    <button class="btn sec" data-act="ranking">🏆 랭킹 보기</button></div></div>`;
+    <button class="btn sec" data-act="ranking">${ic("trophy")} 랭킹 보기</button></div></div>`;
 }
 
 function spectatorHeader(room, chess) {
   const names = [0, 1].map((seat) => room.players.find((p) => p.seat === seat)?.name ?? "?");
   return `<header class="gbar"><div class="gb-side"><b class="mono gb-code">${esc(room.code)}</b>${hpPill(names[0], chess.hps[0], "var(--mine)")}</div>
     <div class="gb-center"><b>R${chess.round}/${chess.maxRounds}</b><span class="sub gb-timer" data-timer="${room.phaseEndsAt ?? ""}" data-label="${PHASE_NAME[room.phase]}">${PHASE_NAME[room.phase]} ${countdown(conn.remainingMs(room.phaseEndsAt))}</span></div>
-    <div class="gb-side gb-right">${hpPill(names[1], chess.hps[1], "var(--theirs)")}<span class="badge">👁 관전</span>
-      <div class="gb-btns"><button class="ibtn" data-act="mute" title="효과음">${sfx.muted ? "🔇" : "🔊"}</button><button class="ibtn" data-act="leave" title="관전 끝내기">⎋</button></div></div></header>`;
+    <div class="gb-side gb-right">${hpPill(names[1], chess.hps[1], "var(--theirs)")}<span class="badge">${ic("eye")} 관전</span>
+      <div class="gb-btns"><button class="ibtn" data-act="mute" title="효과음">${ic(sfx.muted ? "volume-off" : "volume")}</button><button class="ibtn" data-act="leave" title="관전 끝내기">${ic("log-out")}</button></div></div></header>`;
 }
 
 function spectatorCombat(room) {
@@ -256,7 +260,7 @@ function roomShell(room) {
   if (S.spectating) {
     if (room.phase === "combat" && room.chess?.combat) return spectatorCombat(room) + reconnect;
     return `<div class="topbar"><img class="mini-logo" src="assets/logo.png" alt=""><b class="mono">${esc(room.code)}</b><span class="grow"></span>
-      <button class="ibtn" data-act="mute" title="효과음">${sfx.muted ? "🔇" : "🔊"}</button><button class="btn sec" data-act="leave">관전 끝내기</button></div>
+      <button class="ibtn" data-act="mute" title="효과음">${ic(sfx.muted ? "volume-off" : "volume")}</button><button class="btn sec" data-act="leave">관전 끝내기</button></div>
       ${reconnect}<div class="room">${spectatorBody(room)}</div>`;
   }
   // 준비와 전투 화면은 위 막대 하나에 모든 버튼이 들어 있고, 한 화면에 다 들어온다.
@@ -270,8 +274,8 @@ function roomShell(room) {
     default: body = `<div class="center-msg">이 웹 버전은 체스판 자동 전투만 지원해요. (${esc(PHASE_NAME[room.phase] ?? room.phase)})</div>`;
   }
   return `<div class="topbar"><img class="mini-logo" src="assets/logo.png" alt=""><b class="mono">${esc(room.code)}</b><span class="grow"></span>${players}
-    <button class="ibtn" data-act="mute" title="효과음">${sfx.muted ? "🔇" : "🔊"}</button><button class="ibtn" data-act="bgm" title="배경 음악">${bgm.on ? "🎵" : "🎶"}</button><button class="ibtn" data-act="guide" data-tab="flow" title="가이드">📖</button>
-    ${room.isHost ? `<button class="ibtn" data-act="room-close" data-code="${esc(room.code)}" data-from="room" title="방 닫기">🗑</button>` : ""}<button class="btn sec" data-act="leave">나가기</button></div>
+    <button class="ibtn" data-act="mute" title="효과음">${ic(sfx.muted ? "volume-off" : "volume")}</button><button class="ibtn" data-act="bgm" title="배경 음악">${ic(bgm.on ? "music" : "music-off")}</button><button class="ibtn" data-act="guide" data-tab="flow" title="가이드">${ic("book")}</button>
+    ${room.isHost ? `<button class="ibtn" data-act="room-close" data-code="${esc(room.code)}" data-from="room" title="방 닫기">${ic("trash")}</button>` : ""}<button class="btn sec" data-act="leave">나가기</button></div>
     ${reconnect}<div class="room">${body}</div>`;
 }
 
@@ -458,7 +462,7 @@ async function cancelQuick() {
 
 async function createRoom() {
   update({ creating: true, message: "" });
-  const result = await api.createRoom();
+  const result = await api.createRoom(false, S.mobius);
   update({ creating: false });
   if (result.code) join(result.code);
   else if (result.status === 401) toast("로그인이 필요해요. 로그인하기를 눌러 주세요.");
@@ -556,6 +560,11 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("change", (event) => {
+  if (event.target.id === "mobius") {
+    S.mobius = event.target.checked;
+    store("edbot.mobius", S.mobius ? "1" : "0");
+    return;
+  }
   if (event.target.id === "botlevel") {
     S.botLevel = event.target.value;
     store("edbot.botLevel", S.botLevel);

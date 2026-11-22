@@ -7,20 +7,20 @@ struct ResourceBar: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            item("💰", resources?.talent)
-            item("🌿", resources?.branch)
-            item("🪨", resources?.stone)
-            item("⛏️", resources?.ore)
-            item("🔩", resources?.ironIngot)
-            item("💎", resources?.rare)
-            item("📜", resources?.blueprints)
+            item("dollarsign.circle.fill", resources?.talent)
+            item("leaf.fill", resources?.branch)
+            item("mountain.2.fill", resources?.stone)
+            item("square.stack.3d.up.fill", resources?.ore)
+            item("gearshape.fill", resources?.ironIngot)
+            item("diamond.fill", resources?.rare)
+            item("doc.text.fill", resources?.blueprints)
         }
         .font(.subheadline.monospacedDigit())
     }
 
-    private func item(_ icon: String, _ value: Int?) -> some View {
+    private func item(_ symbol: String, _ value: Int?) -> some View {
         HStack(spacing: 3) {
-            Text(icon)
+            Image(systemName: symbol).foregroundStyle(.secondary)
             Text("\(value ?? 0)").bold()
         }
     }
@@ -89,7 +89,7 @@ struct TileButton: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 2) {
-                Text(Labels.tileGlyph(tile.known ? tile.kind : nil)).font(.system(size: 30))
+                Image(systemName: Labels.tileSymbol(tile.known ? tile.kind : nil)).font(.system(size: 28)).foregroundStyle(Theme.silver)
                 Text(label).font(.system(size: 11, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.7)
                 if let line = statusLine { Text(line).font(.system(size: 10, weight: .bold)).foregroundStyle(lineColor) }
             }
@@ -104,7 +104,7 @@ struct TileButton: View {
     private var label: String { tile.known ? Labels.tileName(tile.kind) : "안개" }
 
     private var statusLine: String? {
-        if tile.enemyAmbush { return "⚠ 상대 매복" }
+        if tile.enemyAmbush { return "상대 매복 주의" }
         if let ticks = tile.myGatherInTicks { return "채집 \(Int(ceil(explore.seconds(ticks))))초" }
         if let ticks = tile.myAmbushInTicks { return "매복 \(Int(ceil(explore.seconds(ticks))))초" }
         if tile.known, tile.depleted, tile.kind != "empty" {
@@ -149,9 +149,9 @@ struct ForgePanel: View {
                 }
 
                 HStack(spacing: 10) {
-                    Button { model.buyOre() } label: { Text("광석 사기 (💰\(forge.orePrice))").frame(maxWidth: .infinity) }
+                    Button { model.buyOre() } label: { Text("광석 사기 (\(Image(systemName: "dollarsign.circle.fill"))\(forge.orePrice))").frame(maxWidth: .infinity) }
                         .buttonStyle(SecondaryButtonStyle())
-                    Button { model.smelt() } label: { Text("재련 (⛏️1 💰2 스팀3)").frame(maxWidth: .infinity) }
+                    Button { model.smelt() } label: { Text("재련 (\(Image(systemName: "square.stack.3d.up.fill"))1 \(Image(systemName: "dollarsign.circle.fill"))2 스팀3)").frame(maxWidth: .infinity) }
                         .buttonStyle(SecondaryButtonStyle())
                 }
                 smelters

@@ -76,6 +76,10 @@ final class AppModel {
     /// 방금 만든 게스트 방의 코드. 값이 있으면 안내 시트를 연다.
     var createdGuestRoomCode: String?
     private(set) var isCreatingGuestRoom = false
+    /// 방을 만들 때 무한 모드로 만들지 (기억한다)
+    var createMobius: Bool = UserDefaults.standard.bool(forKey: "createMobius") {
+        didSet { UserDefaults.standard.set(createMobius, forKey: "createMobius") }
+    }
     private(set) var liveRooms: [LiveRoom] = []
     private(set) var liveError: String?
     private(set) var isLoadingLive = false
@@ -526,7 +530,7 @@ final class AppModel {
         Task {
             defer { isCreatingRoom = false }
             do {
-                let code = try await ApiClient(baseURL: url, authToken: authToken).createRoom()
+                let code = try await ApiClient(baseURL: url, authToken: authToken).createRoom(mobius: createMobius)
                 join(code: code)
             } catch ApiError.unauthorized {
                 clearLogin()
@@ -548,7 +552,7 @@ final class AppModel {
         Task {
             defer { isCreatingGuestRoom = false }
             do {
-                let code = try await ApiClient(baseURL: url, authToken: authToken).createRoom(guest: true)
+                let code = try await ApiClient(baseURL: url, authToken: authToken).createRoom(guest: true, mobius: createMobius)
                 createdGuestRoomCode = code
             } catch ApiError.unauthorized {
                 clearLogin()

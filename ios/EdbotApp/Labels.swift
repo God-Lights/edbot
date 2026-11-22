@@ -103,18 +103,6 @@ enum Labels {
         }
     }
 
-    /// 체스 기물 글자. 캐릭터 카드의 아이콘으로 쓴다.
-    static func pieceGlyph(_ piece: Piece) -> String {
-        switch piece {
-        case .king: return "♚"
-        case .queen: return "♛"
-        case .rook: return "♜"
-        case .bishop: return "♝"
-        case .knight: return "♞"
-        case .pawn: return "♟"
-        }
-    }
-
     /// 기물 아이콘(Assets의 PieceXxx). 단색이라 foregroundStyle로 색을 입힌다.
     static func pieceImageName(_ piece: Piece) -> String {
         switch piece {
@@ -189,14 +177,15 @@ enum Labels {
         }
     }
 
-    static func tileGlyph(_ kind: String?) -> String {
+    /// 탐사 지도 칸의 아이콘 (SF Symbols 이름)
+    static func tileSymbol(_ kind: String?) -> String {
         switch kind {
-        case "tree": return "🌲"
-        case "rock": return "🪨"
-        case "ore": return "⛏️"
-        case "chest": return "🎁"
-        case "empty": return "·"
-        default: return "☁️"
+        case "tree": return "leaf.fill"
+        case "rock": return "mountain.2.fill"
+        case "ore": return "diamond.fill"
+        case "chest": return "shippingbox.fill"
+        case "empty": return "circle.dotted"
+        default: return "cloud.fill"
         }
     }
 

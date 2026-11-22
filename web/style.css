@@ -281,3 +281,50 @@ small { font-size: .8em; color: var(--muted); }
   .gb-last, .rtile, .gnext { display: none; } .btn { min-height: 2.2rem; } .hero .logo { max-height: 30vh; }
   .menu { gap: .4rem; } .mgroup .panel { padding: .35rem .45rem; } .mgroup .btn { min-height: 2.1rem; } .input { min-height: 2.1rem; } .input.code { font-size: 1.1rem; }
 }
+
+/* ---------- 무한 모드(뫼비우스): 유령, 웜홀, 이음매 ---------- */
+:root { --mob: #b040be; --wormhole: #59ccbf; }
+.badge.mob { background: rgba(176,64,190,.28); color: #e9b6f0; }
+.chk { display: flex; align-items: center; gap: .5rem; font-size: .9em; color: var(--silver); cursor: pointer; padding: .1rem .2rem; }
+.chk input { width: 1.1rem; height: 1.1rem; accent-color: var(--mob); }
+/* 판 양쪽 끝의 보랏빛: 이어져 있다는 표시 */
+.arena.mobius::before, .arena.mobius::after { content: ""; position: absolute; top: 0; bottom: 0; width: 7%; pointer-events: none; z-index: 1; }
+.arena.mobius::before { left: 0; background: linear-gradient(90deg, rgba(176,64,190,.55), transparent); }
+.arena.mobius::after { right: 0; background: linear-gradient(270deg, rgba(176,64,190,.55), transparent); }
+.board.mobius { border-radius: 8px; box-shadow: inset 14px 0 14px -10px var(--mob), inset -14px 0 14px -10px var(--mob); }
+/* 유령: 반투명, 점선, 살짝 떠 있다 */
+.au { z-index: 2; }
+.au.ghost { z-index: 1; }
+.au .gbadge { display: none; position: absolute; left: 6%; top: 0; font-style: normal; font-size: max(8px, 26cqw); z-index: 3; pointer-events: none; }
+.au.ghost .gbadge { display: block; }
+.au.ghost .token { opacity: .5; border-style: dashed; filter: saturate(.8) drop-shadow(0 0 6px var(--mob)); animation: ghostfloat 2.4s ease-in-out infinite; }
+.au.ghost.stack .token { translate: -14% -14%; scale: .88; animation: none; }
+.au.ghost .ubar { opacity: .6; }
+@keyframes ghostfloat { 50% { translate: 0 -7%; } }
+/* 웜홀 게이지: 유령 둘레의 고리 */
+.au .whring { display: none; position: absolute; inset: 1%; border-radius: 50%; pointer-events: none; z-index: 2;
+  background: conic-gradient(var(--wormhole) calc(var(--wh, 0) * 360deg), rgba(255,255,255,.12) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 4px)); mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 4px)); }
+.au.ghost .whring { display: block; }
+.au.ghost.wh-open .whring { filter: drop-shadow(0 0 5px var(--wormhole)); animation: whpulse .7s ease-in-out infinite alternate; }
+@keyframes whpulse { to { opacity: .45; } }
+.float.ghost { font-size: clamp(12px, 2.8vh, 22px); }
+.float.wormhole { color: var(--wormhole); }
+.float.stone { color: #c9c2b8; }
+@media (prefers-reduced-motion: reduce) { .au.ghost .token, .au.ghost.wh-open .whring { animation: none !important; } }
+
+/* ---------- 아이콘(이모지 대신 쓰는 SVG): 글자 색과 크기를 따라간다 ---------- */
+.ic { width: 1.1em; height: 1.1em; vertical-align: -0.2em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.ibtn .ic { width: 1.2rem; height: 1.2rem; vertical-align: middle; }
+.btn .ic, .mini .ic, .chk .ic, .badge .ic { vertical-align: -0.18em; }
+.slot.act span .ic { width: 1em; height: 1em; vertical-align: middle; }
+.shopcard.reroll .rr .ic { width: 1em; height: 1em; vertical-align: middle; }
+.ringbox .mid .coin .ic, .cost .ic, .mchip .ic { color: #f2c74d; }
+.ic-coin circle:last-child { fill: currentColor; fill-opacity: .25; }
+.ic-heart { color: var(--theirs); fill: currentColor; fill-opacity: .25; }
+.hp-top .ic-heart { color: #ff8e84; }
+.token .armed { color: #ffb84d; }
+.token .armed .ic { fill: currentColor; fill-opacity: .3; }
+.au .gbadge .ic { color: #f1d2f7; fill: currentColor; fill-opacity: .2; filter: drop-shadow(0 0 2px #000); }
+.float .ic { width: 1.1em; height: 1.1em; vertical-align: -0.2em; }
+.float.ghost .ic { fill: currentColor; fill-opacity: .25; color: #f1d2f7; }

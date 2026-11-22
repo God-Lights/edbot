@@ -181,4 +181,41 @@ final class ChessTests: XCTestCase {
         let catalog = try XCTUnwrap(MessageCodec.parseChessCatalog(Data(json.utf8)))
         XCTAssertEqual(catalog.fusions?.first?.result, "titanium")
     }
+
+    func testMobiusFrameFlagsAndSeamCrossing() throws {
+        // flags: 1 생존, 4 밑면(유령), 게이지 3 -> 1 | 4 | (3 << 3) = 29
+        let combat = ChessCombatSnapshot(
+            boards: [], units: [],
+            frames: [[[7, 3, 100, 0, 0, 1]], [[0, 4, 100, 0, 0, 29]]],
+            events: [], winner: nil, survivors: [0, 0], damage: [0, 0], beats: 1, tiles: [], mines: [], goldBonus: [0, 0], mobius: true
+        )
+        let before = try XCTUnwrap(combat.frameUnit(beat: 0, index: 0))
+        XCTAssertFalse(before.ghost)
+        XCTAssertEqual(before.gauge, 0)
+        let after = try XCTUnwrap(combat.frameUnit(beat: 1, index: 0))
+        XCTAssertTrue(after.ghost)
+        XCTAssertEqual(after.gauge, 3)
+        // 이음매를 넘는 박자: 판을 가로질러 미끄러지지 않고, 그 자리에서 사라졌다가 반대편에서 나타난다.
+        let early = try XCTUnwrap(combat.interpolated(position: 0.25, index: 0))
+        XCTAssertEqual(early.x, 7)
+        XCTAssertEqual(early.fade, 0.5, accuracy: 0.001)
+        XCTAssertFalse(early.ghost)
+        let late = try XCTUnwrap(combat.interpolated(position: 0.75, index: 0))
+        XCTAssertEqual(late.x, 0)
+        XCTAssertEqual(late.fade, 0.5, accuracy: 0.001)
+        XCTAssertTrue(late.ghost)
+        XCTAssertEqual(combat.suddenDeathBeat, 28)
+    }
+
+    func testNormalCombatHasNoGhosts() throws {
+        let combat = ChessCombatSnapshot(
+            boards: [], units: [], frames: [[[3, 3, 100, 0, 0, 1]], [[4, 3, 90, 0, 0, 1]]],
+            events: [], winner: nil, survivors: [0, 0], damage: [0, 0], beats: 1, tiles: [], mines: [], goldBonus: [0, 0]
+        )
+        let mid = try XCTUnwrap(combat.interpolated(position: 0.5, index: 0))
+        XCTAssertFalse(mid.ghost)
+        XCTAssertEqual(mid.fade, 1)
+        XCTAssertEqual(mid.x, 3.5, accuracy: 0.001)
+        XCTAssertEqual(combat.suddenDeathBeat, 20)
+    }
 }

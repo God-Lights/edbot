@@ -57,6 +57,7 @@ export function toChessSnapshot(game: ChessGame, viewerSeat: Seat | null, showCo
             tiles: game.combat.tiles,
             mines: game.combat.mines,
             goldBonus: game.combat.goldBonus,
+            ...(game.mobius ? { mobius: true } : {}),
           }
         : null,
     lastRound: game.lastRound,

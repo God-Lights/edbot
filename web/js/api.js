@@ -18,8 +18,9 @@ export const api = {
     return r.ok ? r.body.user : null;
   },
   /** 새 방을 만들고 코드를 돌려준다. 실패하면 { error } */
-  async createRoom(guest = false) {
-    const r = await request(`/api/rooms${guest ? "?guest=1" : ""}`, { method: "POST" });
+  async createRoom(guest = false, mobius = false) {
+    const query = [guest ? "guest=1" : "", mobius ? "mobius=1" : ""].filter(Boolean).join("&");
+    const r = await request(`/api/rooms${query ? `?${query}` : ""}`, { method: "POST" });
     if (r.status === 201 || r.ok) return { code: r.body.code };
     return { error: r.body?.error ?? "could_not_create_room", status: r.status };
   },

@@ -79,6 +79,9 @@ jobs:
         working-directory: ios
         shell: bash
         run: |
+          mkdir -p build
+          # 전체 로그는 build/xcodebuild.log에 두고, 실패하면 컴파일 오류 줄만 따로 보여 준다. (tail만 보면 오류가 잘려서 안 보인다)
+          set +e
           xcodebuild archive \
             -project Commander.xcodeproj \
             -scheme Commander \
@@ -87,7 +90,15 @@ jobs:
             -archivePath build/Commander.xcarchive \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             MARKETING_VERSION="${{ steps.version.outputs.marketing }}" CURRENT_PROJECT_VERSION="${{ steps.version.outputs.marketing }}" \
-            | tail -n 40
+            > build/xcodebuild.log 2>&1
+          status=$?
+          tail -n 40 build/xcodebuild.log
+          if [ "$status" -ne 0 ]; then
+            echo "::group::컴파일 오류"
+            grep -E "error:" build/xcodebuild.log | sort -u | head -40
+            echo "::endgroup::"
+          fi
+          exit "$status"
 
       - name: .ipa 만들기
         working-directory: ios

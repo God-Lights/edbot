@@ -4,6 +4,8 @@ import Foundation
 // 설계: docs/DESIGN-autochess.md
 
 public let chessBoardSize = 8
+/// 무한 모드: 밑면에서 이만큼 박자를 보내면 웜홀이 열린다. (서버 sim.ts의 WORMHOLE_BEATS와 같게)
+public let chessWormholeBeats = 4
 public let chessDeployRows = 4
 
 /// 기물 하나(내 대기석 또는 판 위). uid로 사고팔고 놓는다.
@@ -101,7 +103,8 @@ public struct ChessEvent: Codable, Equatable, Sendable {
     }
 }
 
-/// 한 기물의 한 박자 모습. 서버는 [x, y, hp, energy, shield, flags(1=생존, 2=승급)] 배열로 보낸다.
+/// 한 기물의 한 박자 모습. 서버는 [x, y, hp, energy, shield, flags] 배열로 보낸다.
+/// flags: 1=생존, 2=승급, 4=밑면(유령), 8 이상=웜홀 게이지 g(flags >> 3). 무한 모드에서만 4 이상이 쓰인다.
 public struct ChessFrameUnit: Equatable, Sendable {
     public let x: Double
     public let y: Double
@@ -110,12 +113,31 @@ public struct ChessFrameUnit: Equatable, Sendable {
     public let shield: Double
     public let alive: Bool
     public let promoted: Bool
+    /// 밑면에 있다(유령)
+    public let ghost: Bool
+    /// 웜홀 게이지: 밑면에서 보낸 박자 수
+    public let gauge: Int
+    /// 이음매를 넘는 박자에서 사라졌다 나타나는 정도(1이 온전한 모습)
+    public let fade: Double
 
     init?(_ values: [Double]) {
         guard values.count >= 6 else { return nil }
         x = values[0]; y = values[1]; hp = values[2]; energy = values[3]; shield = values[4]
-        alive = Int(values[5]) & 1 != 0
-        promoted = Int(values[5]) & 2 != 0
+        let flags = Int(values[5])
+        alive = flags & 1 != 0
+        promoted = flags & 2 != 0
+        ghost = flags & 4 != 0
+        gauge = flags >> 3
+        fade = 1
+    }
+
+    init(x: Double, y: Double, hp: Double, energy: Double, shield: Double, alive: Bool, promoted: Bool, ghost: Bool, gauge: Int, fade: Double) {
+        self.x = x; self.y = y; self.hp = hp; self.energy = energy; self.shield = shield
+        self.alive = alive; self.promoted = promoted; self.ghost = ghost; self.gauge = gauge; self.fade = fade
+    }
+
+    func with(fade: Double) -> ChessFrameUnit {
+        ChessFrameUnit(x: x, y: y, hp: hp, energy: energy, shield: shield, alive: alive, promoted: promoted, ghost: ghost, gauge: gauge, fade: fade)
     }
 }
 
@@ -133,8 +155,13 @@ public struct ChessCombatSnapshot: Codable, Equatable, Sendable {
     public let tiles: [ChessTileView]
     public let mines: [[Int]]
     public let goldBonus: [Int]
+    /// 무한 모드(뫼비우스 규칙)로 싸운 전투. 오래된 서버거나 일반 규칙이면 nil.
+    public var mobius: Bool? = nil
 
-    enum CodingKeys: String, CodingKey { case boards, units, frames, events, winner, survivors, damage, beats, tiles, mines, goldBonus }
+    enum CodingKeys: String, CodingKey { case boards, units, frames, events, winner, survivors, damage, beats, tiles, mines, goldBonus, mobius }
+
+    /// 돌발 사망이 시작되는 박자 (서버 sim.ts와 같게)
+    public var suddenDeathBeat: Int { mobius == true ? 28 : 20 }
 
     /// 박자 beat까지(그 박자 포함) 캐진 칸 번호
     public func minedTiles(upTo beat: Int) -> Set<Int> {
@@ -158,11 +185,15 @@ public struct ChessCombatSnapshot: Codable, Equatable, Sendable {
         }
         guard k < last, let b = frameUnit(beat: k + 1, index: index), a.alive, b.alive else { return a }
         let t = clamped - Double(k)
-        return ChessFrameUnit([
-            a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.hp + (b.hp - a.hp) * t,
-            a.energy + (b.energy - a.energy) * t, a.shield + (b.shield - a.shield) * t,
-            (a.alive ? 1 : 0) + (b.promoted ? 2 : 0),
-        ]) ?? a
+        // 이음매를 넘는 박자: 판을 가로질러 미끄러지지 않고, 그 자리에서 사라졌다가 반대편에서 나타난다.
+        if a.ghost != b.ghost && (abs(a.x - b.x) > 1.5 || abs(a.y - b.y) > 1.5) {
+            return t < 0.5 ? a.with(fade: 1 - 2 * t) : b.with(fade: 2 * t - 1)
+        }
+        let to = t < 0.5 ? a : b
+        return ChessFrameUnit(
+            x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, hp: a.hp + (b.hp - a.hp) * t,
+            energy: a.energy + (b.energy - a.energy) * t, shield: a.shield + (b.shield - a.shield) * t,
+            alive: true, promoted: b.promoted, ghost: to.ghost, gauge: to.gauge, fade: 1)
     }
 }
 
