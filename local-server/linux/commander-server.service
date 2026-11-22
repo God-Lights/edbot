@@ -1,0 +1,13 @@
+# 로그인할 때마다 서버를 자동으로 켜고 싶을 때:
+#   systemctl --user enable --now commander-server
+[Unit]
+Description=COMMANDER 서버
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/commander-server/commander-server --port 8787 --data %h/.local/share/commander-server --name "내 컴퓨터 서버"
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
