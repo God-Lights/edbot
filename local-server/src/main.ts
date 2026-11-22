@@ -12,6 +12,8 @@ import { JsonRankingStore, acquireLock } from "./runtime/json-store";
 import { ObjectNamespace } from "./runtime/objects";
 import { installWebSocketGlobals, upgradeTarget } from "./runtime/websocket";
 import type { ServerSocket } from "./runtime/websocket";
+import { connectLink, connectPage, qrTerminal } from "./connect";
+import { startMdns } from "./mdns";
 import packageInfo from "../package.json" with { type: "json" };
 
 installWebSocketGlobals();
@@ -182,6 +184,10 @@ const server = Bun.serve<SocketData>({
   idleTimeout: 120,
   async fetch(request, srv) {
     const url = new URL(request.url);
+    if (request.method === "GET" && url.pathname === "/connect") {
+      const urls = lanAddresses().map((ip) => `http://${ip}:${port}`);
+      return new Response(connectPage(serverName, urls), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
+    }
     if ((request.method === "GET" || request.method === "HEAD") && !API_PREFIXES.some((p) => url.pathname.startsWith(p))) {
       const file = staticFile(url.pathname);
       if (file) return file;
@@ -229,6 +235,17 @@ function lanAddresses(): string[] {
 console.log(`${serverName} (COMMANDER 로컬 서버 ${packageInfo.version}, ${edition})  |  데이터: ${dataDir}`);
 console.log(`  이 컴퓨터:        http://localhost:${server.port}`);
 for (const ip of lanAddresses()) console.log(`  같은 와이파이:    http://${ip}:${server.port}`);
+const lan = lanAddresses();
+if (lan[0]) {
+  console.log(`  폰으로 접속: 같은 와이파이에서 앱의 서버 목록에 뜨거나, 아래 QR을 폰 카메라로 찍으세요. (화면: http://localhost:${server.port}/connect)`);
+  console.log(qrTerminal(connectLink(`http://${lan[0]}:${server.port}`, serverName)).split("\n").map((l) => "    " + l).join("\n"));
+}
+const stopMdns = process.argv.includes("--no-discovery")
+  ? null
+  : startMdns(
+      { name: serverName, ips: lan, port: server.port!, txt: { name: serverName, ip: lan.join(","), port: String(server.port), ed: edition === "expert" ? "expert" : "vanilla", proto: "1" } },
+      (m) => console.warn(`  [주의] ${m}`),
+    );
 if (woken > 0) console.log(`  이어서 진행하는 방: ${woken}개`);
 if (pluginReport) {
   const { accepted, rejected, notes, ruleset } = pluginReport;
@@ -250,6 +267,7 @@ function shutdown(): void {
   closing = true;
   console.log("\n저장하고 끄는 중...");
   for (const ns of Object.values(namespaces)) ns.flushAll();
+  stopMdns?.();
   lock.release();
   void server.stop(true).then(() => process.exit(0));
 }

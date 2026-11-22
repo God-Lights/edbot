@@ -23,7 +23,7 @@ bun build.ts --edition vanilla --target bun-windows-x64   # 바닐라: 플러그
 웹 화면이 실행파일 안에 들어가서, **exe 하나만 있으면** 돈다. 데이터는 exe 옆 `commander-data/`에 만든다.
 (쓸 수 없는 폴더면 `%APPDATA%\CommanderServer`.) `--data 경로`로 바꿀 수 있다.
 
-옵션: `--port`, `--data`, `--name <서버 이름>`(앱·웹 로비에 보인다), `--host`, `--phase-scale`, `--web <폴더>`(exe 안의 화면 대신 그 폴더를 쓴다).
+옵션: `--no-discovery`(서버 자동 찾기 끄기), `--port`, `--data`, `--name <서버 이름>`(앱·웹 로비에 보인다), `--host`, `--phase-scale`, `--web <폴더>`(exe 안의 화면 대신 그 폴더를 쓴다).
 
 `GET /api/server`가 이 서버의 이름·환경(`local`)·로그인 방식(`open`)·에디션·프로토콜 버전을 알려 준다. 앱과 웹은 이걸 보고 로비를 맞춘다(로그인 버튼 대신 이름 입력, "로컬 서버" 띠).
 
@@ -62,3 +62,8 @@ commander-data/
 
 ## 플러그인 (엑스퍼트만)
 `COMMANDER_EDITION=expert bun run dev` 또는 엑스퍼트 exe로 켜면 `commander-data/plugins/`를 만들고 거기의 `*.json`·`*/pack.json`을 읽는다. 시작 화면에 적용된 팩과 거절된 팩(이유 포함)이 나온다. 형식은 `docs/PLUGINS.md`. 바닐라는 이 폴더를 읽지 않는다.
+
+## 폰으로 접속하기 (QR, 자동 찾기)
+- 서버를 켜면 터미널에 QR이 나온다. 같은 와이파이의 폰 카메라로 찍으면 COMMANDER 앱이 열리고 서버 주소가 입력된다. 같은 화면이 `http://localhost:8787/connect`에도 있다.
+- 앱의 서버 입력칸 아래에는 같은 와이파이에서 찾은 서버가 목록으로 뜬다(Bonjour `_commander._tcp`). 눌러서 고른다. 윈도우 방화벽이 처음에 물으면 "허용"을 눌러야 폰이 찾을 수 있다.
+- 웹 브라우저로는 화면에 나온 `http://IP:8787` 주소를 그대로 열면 된다.

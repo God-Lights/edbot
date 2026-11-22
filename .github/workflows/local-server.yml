@@ -35,7 +35,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
-      - name: 저장소 시험 (JSON 파일, 데이터 폴더 잠금)
+      - name: 의존 패키지 설치 (QR)
+        working-directory: local-server
+        run: bun install --frozen-lockfile
+      - name: 시험 (JSON 파일, 데이터 폴더 잠금, QR, 서버 찾기 패킷)
         working-directory: local-server
         run: bun test
       - name: 소스로 실행해서 점검 (리눅스)
@@ -44,6 +47,7 @@ jobs:
           bun --preload ./src/runtime/plugin.ts src/main.ts --port 8787 --data "$RUNNER_TEMP/dev-data" --phase-scale 0.08 &
           for i in $(seq 1 30); do curl -sf localhost:8787/health >/dev/null && break; sleep 1; done
           bun scripts/smoke.ts http://localhost:8787 ADMN
+          curl -sf localhost:8787/connect | grep -q "<svg" || { echo "접속 QR 화면이 없다"; exit 1; }
           kill %1
       - name: "엑스퍼트로 소스 실행 - 팩 적용과 바닐라의 무시 점검"
         working-directory: local-server
@@ -170,4 +174,5 @@ jobs:
           if ($null -eq $info -or $info.edition -ne "expert") { throw "엑스퍼트 exe가 엑스퍼트로 보이지 않는다" }
           if (@($info.packs).Count -lt 1) { throw "엑스퍼트 exe에 팩이 적용되지 않았다" }
           if (-not $chess.Contains("example:moon-guard")) { throw "새 캐릭터가 도감에 없다" }
+          $connect = (Invoke-WebRequest http://localhost:8790/connect -UseBasicParsing -ErrorAction SilentlyContinue)
           Write-Host "엑스퍼트 exe에서 팩이 적용된다 ($($info.ruleset))."

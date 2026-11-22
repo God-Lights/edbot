@@ -166,6 +166,22 @@ final class ApiTests: XCTestCase {
         XCTAssertEqual(b.ruleset, "official")
     }
 
+    func testConnectLinkParsesServerAndName() {
+        let link = ConnectLink(URL(string: "commander://connect?url=http%3A%2F%2F192.168.0.5%3A8787&name=%EB%82%B4%20%EC%84%9C%EB%B2%84")!)
+        XCTAssertEqual(link?.serverURL.absoluteString, "http://192.168.0.5:8787")
+        XCTAssertEqual(link?.name, "내 서버")
+        XCTAssertNil(ConnectLink(URL(string: "https://example.com")!))
+        XCTAssertNil(ConnectLink(URL(string: "commander://connect?url=ftp%3A%2F%2Fx")!))
+        XCTAssertNil(ConnectLink(URL(string: "commander://other?url=http%3A%2F%2Fx")!))
+    }
+
+    func testFoundServerFromTxt() {
+        let s = FoundServer(txt: ["name": "집", "ip": "10.0.0.2,10.0.0.3", "port": "8787", "ed": "expert"], fallbackName: "x")
+        XCTAssertEqual(s?.urlText, "http://10.0.0.2:8787")
+        XCTAssertEqual(s?.expert, true)
+        XCTAssertNil(FoundServer(txt: ["ip": "10.0.0.2"], fallbackName: "x"))
+    }
+
     func testServerInfoIsNilForOldServers() async throws {
         let http = StubHTTP { _ in (#"{"error":"not_found"}"#, 404) }
         let info = try await ApiClient(baseURL: base, http: http).serverInfo()
