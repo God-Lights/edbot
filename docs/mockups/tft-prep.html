@@ -1,0 +1,270 @@
+<title>COMMANDER 준비 화면 시안</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<style>
+/* 레이아웃: 1180x720 무대를 화면 폭에 맞춰 축소. 위 HUD / 왼쪽 시너지 / 가운데 기울어진 판+벤치 / 오른쪽 상대·아이템 / 아래 상점 바 */
+:root {
+  color-scheme: dark;
+  --ink: #070b18;        /* 바탕 */
+  --navy: #0f1730;       /* 패널 */
+  --navy-2: #17213f;
+  --gold: #c8aa6e;       /* 헥스텍 금색 테두리 */
+  --gold-hi: #f0d9a0;
+  --text: #e9e4d6;
+  --dim: #8d93a8;
+  --mine: #4aa8ff;
+  --theirs: #ff5a5a;
+  --c1: #8b8f9a; --c2: #2fb36a; --c3: #2f8be0; --c4: #b04de0; --c5: #f2b43a;
+  --display: "Black Han Sans", "Noto Sans KR", system-ui, sans-serif;
+  --body: "Noto Sans KR", system-ui, sans-serif;
+}
+html, body { background: var(--ink); color: var(--text); font-family: var(--body); }
+body { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 32px; }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 18px; }
+h1 { font-family: var(--display); font-weight: 400; font-size: 26px; margin: 0; letter-spacing: .02em; }
+.lede { color: var(--dim); margin: 4px 0 0; max-width: 65ch; line-height: 1.6; }
+
+.fit { width: 100%; position: relative; overflow: hidden; border-radius: 10px; border: 1px solid #2a3150; }
+.stage {
+  width: 1180px; height: 720px; transform-origin: top left; position: relative;
+  background:
+    radial-gradient(ellipse 60% 55% at 46% 52%, #1d2b55 0%, transparent 70%),
+    radial-gradient(ellipse 80% 60% at 50% 110%, #2a1a3a 0%, transparent 60%),
+    linear-gradient(#0a1024, #060914);
+  overflow: hidden;
+}
+.frame { background: linear-gradient(180deg, var(--navy-2), var(--navy)); border: 1px solid var(--gold); box-shadow: inset 0 0 0 1px #000a, 0 4px 18px #0008; }
+
+/* HUD */
+.hud { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; padding: 6px 18px; clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 14px 100%, 0 50%); }
+.stagepips { display: flex; gap: 5px; }
+.pip { width: 18px; height: 6px; background: #2b3352; transform: skewX(-20deg); }
+.pip.win { background: var(--mine); } .pip.lose { background: var(--theirs); } .pip.now { background: var(--gold-hi); }
+.round { font-family: var(--display); font-size: 20px; color: var(--gold-hi); }
+.timer { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 18px; min-width: 34px; text-align: center; }
+.timebar { width: 220px; height: 4px; background: #222a45; position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%); }
+.timebar i { display: block; height: 100%; width: 62%; background: linear-gradient(90deg, var(--gold), var(--gold-hi)); }
+
+/* 시너지 */
+.traits { position: absolute; left: 12px; top: 64px; width: 168px; display: grid; gap: 6px; }
+.trait { display: grid; grid-template-columns: 34px 1fr; gap: 8px; align-items: center; padding: 5px 8px 5px 5px; background: #0d142bcc; border: 1px solid #263055; }
+.trait.on { border-color: var(--gold); background: linear-gradient(90deg, #3a2e12cc, #0d142bcc); }
+.hex { width: 34px; height: 38px; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); display: grid; place-items: center; font-size: 20px; background: #2a3150; color: var(--dim); }
+.trait.on .hex { background: linear-gradient(160deg, var(--gold-hi), #8a6a2a); color: #1a1205; }
+.trait.gold .hex { background: linear-gradient(160deg, #fff1b8, var(--c5)); }
+.trait b { font-size: 13px; display: block; }
+.steps { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.steps em { font-style: normal; color: var(--gold-hi); font-weight: 700; }
+.traits .hint { font-size: 11px; color: var(--dim); padding: 2px 4px; }
+
+/* 판 */
+.arena { position: absolute; left: 196px; top: 52px; width: 760px; height: 470px; perspective: 1100px; }
+.board { position: absolute; left: 50%; top: 0; width: 600px; transform: translateX(-50%) rotateX(38deg); transform-origin: 50% 100%; display: grid; grid-template-columns: repeat(8, 1fr); border: 2px solid var(--gold); box-shadow: 0 30px 60px #000c, 0 0 0 6px #0b1124, 0 0 0 7px #3a3320; }
+.sq { aspect-ratio: 1; position: relative; }
+.sq.l { background: #2a3763; } .sq.d { background: #1b2546; }
+.sq.enemy.l { background: #3a2c4e; } .sq.enemy.d { background: #2a2040; }
+.sq.res::after { content: ""; position: absolute; inset: 22%; transform: rotate(45deg); background: radial-gradient(circle, #7ef2ff, #1a8fb0); box-shadow: 0 0 14px #5ee2ff; border-radius: 3px; opacity: .85; }
+.mid { position: absolute; left: 0; right: 0; top: 50%; height: 2px; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
+
+/* 유닛 (판 위에 똑바로 서 있는 토큰) */
+.units { position: absolute; inset: 0; pointer-events: none; }
+.u { position: absolute; width: 66px; transform: translate(-50%, -100%); display: grid; justify-items: center; gap: 2px; }
+.bars { width: 60px; display: grid; gap: 1px; }
+.hp { height: 6px; background: #1a0f12; border: 1px solid #000; }
+.hp i { display: block; height: 100%; background: linear-gradient(#7dff8f, #2fa84a); }
+.u.foe .hp i { background: linear-gradient(#ff8a8a, #c93030); }
+.mp { height: 3px; background: #0a1230; } .mp i { display: block; height: 100%; background: #5ab8ff; }
+.stars { font-size: 11px; color: var(--c5); letter-spacing: -1px; text-shadow: 0 1px 2px #000; height: 12px; }
+.tok { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; font-size: 34px; line-height: 1; border: 3px solid var(--cost); box-shadow: 0 6px 10px #000a, 0 0 0 2px #000 inset; background: var(--art); color: #fff; text-shadow: 0 2px 4px #0009; }
+
+/* 벤치 */
+.bench { position: absolute; left: 230px; top: 528px; display: flex; gap: 6px; }
+.slot { width: 62px; height: 62px; background: #0c1328; border: 1px solid #2a3355; display: grid; place-items: center; position: relative; }
+.slot .tok { width: 50px; height: 50px; font-size: 28px; }
+.slot .stars { position: absolute; top: -2px; }
+
+/* 오른쪽 */
+.side { position: absolute; right: 12px; top: 64px; width: 200px; display: grid; gap: 10px; }
+.player { display: grid; grid-template-columns: 40px 1fr auto; gap: 8px; align-items: center; padding: 8px; }
+.ava { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-family: var(--display); font-size: 18px; border: 2px solid; }
+.player .nm { font-size: 13px; font-weight: 700; }
+.player .sub { font-size: 11px; color: var(--dim); }
+.player .lp { font-family: var(--display); font-size: 22px; font-variant-numeric: tabular-nums; }
+.items { padding: 8px; display: grid; gap: 6px; }
+.items h3 { margin: 0; font-size: 11px; letter-spacing: .08em; color: var(--gold); font-weight: 700; }
+.ig { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+.it { aspect-ratio: 1; border: 1px solid #3a4266; background: radial-gradient(circle at 35% 30%, #5d6a9c, #1a2142); display: grid; place-items: center; font-size: 16px; position: relative; }
+.it span { position: absolute; right: 1px; bottom: -1px; font-size: 10px; font-weight: 700; }
+.sell { padding: 8px; text-align: center; font-size: 12px; color: var(--dim); border: 1px dashed #4a3a2a; }
+
+/* 상점 바 */
+.shopbar { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); display: grid; grid-template-columns: 150px auto; gap: 8px; align-items: end; }
+.left { display: grid; gap: 6px; }
+.btn { font-family: var(--body); font-weight: 700; font-size: 13px; color: var(--text); padding: 8px 10px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+.btn .g { color: var(--c5); font-variant-numeric: tabular-nums; }
+.level { font-size: 12px; display: grid; gap: 3px; }
+.level .xp { height: 5px; background: #0b1228; border: 1px solid #2a3150; } .level .xp i { display: block; width: 40%; height: 100%; background: #4ac6ff; }
+.cards { display: flex; gap: 6px; padding: 6px; position: relative; }
+.gold { position: absolute; left: 50%; top: -22px; transform: translateX(-50%); font-family: var(--display); font-size: 20px; color: var(--c5); padding: 0 14px; background: var(--ink); border: 1px solid var(--gold); clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 100%, 0 100%); display: flex; gap: 6px; align-items: center; }
+.gold small { font-family: var(--body); font-size: 11px; color: var(--dim); }
+.card { width: 132px; height: 112px; position: relative; border: 2px solid var(--cost); background: var(--art); overflow: hidden; cursor: pointer; }
+.card .glyph { position: absolute; right: -6px; top: -14px; font-size: 96px; line-height: 1; color: #ffffff2e; }
+.card .tr { position: absolute; left: 5px; top: 5px; display: grid; gap: 3px; }
+.card .tr span { font-size: 10px; font-weight: 700; background: #000a; padding: 1px 5px; border-left: 2px solid var(--gold); }
+.card .foot { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; align-items: center; padding: 4px 7px; background: linear-gradient(transparent, #000d 45%); }
+.card .nm { font-weight: 900; font-size: 14px; }
+.card .cost { font-weight: 900; color: var(--c5); font-size: 14px; font-variant-numeric: tabular-nums; }
+.card.owned::after { content: "★ 2개 보유"; position: absolute; right: 5px; top: 5px; font-size: 10px; font-weight: 700; color: #1a1205; background: var(--c5); padding: 1px 5px; }
+.card:hover { filter: brightness(1.15); }
+.odds { position: absolute; right: 14px; bottom: 132px; font-size: 11px; color: var(--dim); display: flex; gap: 8px; font-variant-numeric: tabular-nums; }
+.odds b { font-weight: 700; }
+.ready { position: absolute; right: 12px; bottom: 12px; width: 160px; height: 52px; font-family: var(--display); font-size: 20px; color: #1a1205; background: linear-gradient(var(--gold-hi), var(--gold)); border: 0; clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); cursor: pointer; }
+
+/* 아래 설명 */
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.note { padding: 12px 14px; background: var(--navy); border: 1px solid #263055; min-width: 0; }
+.note b { color: var(--gold-hi); display: block; margin-bottom: 4px; font-size: 14px; }
+.note p { margin: 0; color: var(--dim); font-size: 13px; line-height: 1.55; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--dim); }
+.legend span::before { content: ""; display: inline-block; width: 12px; height: 12px; margin-right: 5px; vertical-align: -2px; border: 2px solid var(--c); background: #0006; }
+button:focus-visible, .card:focus-visible { outline: 2px solid var(--gold-hi); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>준비 화면 시안 · 롤토체스풍</h1>
+    <p class="lede">지금의 배치(위 체력, 가운데 판, 아래 상점)는 그대로 두고 겉모습만 바꾼 안이에요. 캐릭터 그림 자리는 진영 색과 큰 말 모양으로 임시로 채웠어요.</p>
+  </header>
+
+  <div class="fit" id="fit"><div class="stage" id="stage">
+    <div class="hud frame">
+      <div class="stagepips"><i class="pip win"></i><i class="pip lose"></i><i class="pip win"></i><i class="pip now"></i><i class="pip"></i><i class="pip"></i><i class="pip"></i><i class="pip"></i></div>
+      <span class="round">라운드 4 / 8</span>
+      <span class="timer">18</span>
+      <div class="timebar"><i></i></div>
+    </div>
+
+    <aside class="traits">
+      <div class="trait on gold"><div class="hex">♞</div><div><b>나이트</b><span class="steps"><em>4</em> / 2 · <em>4</em> · 6</span></div></div>
+      <div class="trait on"><div class="hex">♜</div><div><b>룩</b><span class="steps"><em>2</em> / <em>2</em> · 4</span></div></div>
+      <div class="trait"><div class="hex">♝</div><div><b>비숍</b><span class="steps">1 / 2 · 4</span></div></div>
+      <div class="trait"><div class="hex">♟</div><div><b>폰</b><span class="steps">1 / 3 · 6</span></div></div>
+      <div class="trait"><div class="hex">♚</div><div><b>킹</b><span class="steps">0 / 1</span></div></div>
+      <div class="hint">켜진 시너지는 금색. 다음 단계까지 남은 수가 보여요.</div>
+    </aside>
+
+    <div class="arena">
+      <div class="board" id="board"><div class="mid"></div></div>
+      <div class="units" id="units"></div>
+    </div>
+
+    <div class="bench" id="bench"></div>
+
+    <aside class="side">
+      <div class="player frame"><div class="ava" style="border-color:var(--theirs);color:var(--theirs)">봇</div><div><div class="nm">테스트 봇</div><div class="sub">레벨 4 · 연승 2</div></div><div class="lp" style="color:var(--theirs)">24</div></div>
+      <div class="player frame"><div class="ava" style="border-color:var(--mine);color:var(--mine)">나</div><div><div class="nm">Player</div><div class="sub">레벨 4 · 이자 +2</div></div><div class="lp" style="color:var(--mine)">27</div></div>
+      <div class="items frame"><h3>재료 · 무기</h3><div class="ig">
+        <div class="it">◆<span>2</span></div><div class="it">⚔<span>1</span></div><div class="it">⛨</div><div class="it">✦</div>
+      </div></div>
+      <div class="sell">여기로 끌어서 팔기</div>
+    </aside>
+
+    <div class="odds"><span>확률</span><b style="color:var(--c1)">55%</b><b style="color:var(--c2)">30%</b><b style="color:var(--c3)">15%</b><b style="color:var(--c4)">0%</b><b style="color:var(--c5)">0%</b></div>
+
+    <div class="shopbar">
+      <div class="left">
+        <div class="level frame" style="padding:6px 8px">레벨 4 <span style="color:var(--dim)">· 배치 4/5</span><div class="xp"><i></i></div></div>
+        <button class="btn frame" type="button">경험치 구매 <span class="g">◎4</span></button>
+        <button class="btn frame" type="button">새로고침 <span class="g">◎2</span></button>
+      </div>
+      <div class="cards frame" id="cards"><div class="gold">◎ 23 <small>이자 +2</small></div></div>
+    </div>
+
+    <button class="ready" type="button">준비 끝</button>
+  </div></div>
+
+  <div class="legend">
+    <span style="--c:var(--c1)">1코스트</span><span style="--c:var(--c2)">2코스트</span><span style="--c:var(--c3)">3코스트</span><span style="--c:var(--c4)">4코스트</span><span style="--c:var(--c5)">5코스트</span>
+  </div>
+
+  <section class="notes">
+    <div class="note"><b>비용 색 테두리</b><p>상점, 판, 벤치의 모든 말 테두리가 1~5코스트 색이에요. 상점에서 비싼 말이 한눈에 보여요.</p></div>
+    <div class="note"><b>그림 중심 상점 카드</b><p>카드에는 그림, 이름, 비용, 시너지만 남기고 능력 설명은 길게 눌렀을 때 보여요. 이미 가진 말은 "★ 2개 보유"로 알려 줘요.</p></div>
+    <div class="note"><b>상점 바 한 줄</b><p>골드, 이자, 새로고침, 레벨이 상점 바 하나에 모였어요. 눈이 아래쪽 한 곳에만 머물러요.</p></div>
+    <div class="note"><b>왼쪽 시너지 목록</b><p>육각형 아이콘과 단계(2 · 4 · 6)를 세로로 보여 주고, 켜진 시너지는 금색이에요.</p></div>
+    <div class="note"><b>기울어진 판과 토큰</b><p>판을 살짝 눕혀 무대처럼 보이게 하고, 말은 둥근 토큰 위에 체력·마나 막대와 별을 올렸어요. 자원 칸은 빛나는 결정으로 바꿨어요.</p></div>
+    <div class="note"><b>헥스텍 색감</b><p>짙은 남색 바탕에 금색 테두리. 버튼과 HUD는 모서리를 깎은 모양이에요.</p></div>
+    <div class="note"><b>게임 규칙이 필요한 부분</b><p>레벨, 경험치 구매, 상점 확률은 지금 게임에 없는 규칙이라 모양만 넣었어요. 실제로 만들 때는 지금처럼 라운드마다 배치 수가 느는 방식으로 바꿔도 돼요.</p></div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const cost = (c) => `var(--c${c})`;
+  const art = {
+    숲: "linear-gradient(150deg,#3f7a4a,#16301f)", 불: "linear-gradient(150deg,#b4532c,#3a140c)",
+    물: "linear-gradient(150deg,#2f6fb0,#0f2440)", 달: "linear-gradient(150deg,#6b5aa8,#1e1638)", 돌: "linear-gradient(150deg,#7a7468,#26231e)",
+  };
+  const glyph = { pawn: "♟", knight: "♞", bishop: "♝", rook: "♜", queen: "♛", king: "♚" };
+  const token = (u) => `<div class="tok" style="--cost:${cost(u.c)};--art:${art[u.f]}">${glyph[u.p]}</div>`;
+
+  // 판 8x8: 위 4줄은 상대 쪽
+  const board = document.getElementById("board");
+  const res = new Set(["5-1", "2-2"]);
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+    const d = document.createElement("div");
+    d.className = `sq ${(x + y) % 2 ? "d" : "l"}${y < 4 ? " enemy" : ""}${res.has(`${x}-${y}`) ? " res" : ""}`;
+    board.appendChild(d);
+  }
+
+  // 판 위 말: (x, y)는 칸 좌표. 기울어진 판에 맞춰 화면 위치를 근사한다.
+  const mine = [
+    { x: 2, y: 5, p: "knight", c: 3, f: "숲", s: 2, hp: 1, mp: .3 },
+    { x: 4, y: 5, p: "knight", c: 2, f: "불", s: 1, hp: 1, mp: .6 },
+    { x: 3, y: 6, p: "rook", c: 2, f: "돌", s: 2, hp: 1, mp: 0 },
+    { x: 5, y: 7, p: "rook", c: 1, f: "물", s: 1, hp: 1, mp: .2 },
+    { x: 1, y: 7, p: "knight", c: 4, f: "달", s: 1, hp: 1, mp: .1 },
+  ];
+  const foes = [
+    { x: 3, y: 1, p: "bishop", c: 3, f: "달", s: 2, hp: 1, mp: .4 },
+    { x: 5, y: 2, p: "pawn", c: 1, f: "숲", s: 2, hp: 1, mp: 0 },
+  ];
+  const units = document.getElementById("units");
+  const place = (u, foe) => {
+    // 판: 너비 600, 아래 기준 38도 기울임. 위로 갈수록 좁고 짧아진다.
+    const t = (u.y + 1) / 8;                 // 0(위)~1(아래), 칸 아래쪽 경계
+    const k = 0.70 + 0.30 * t;               // 원근 축소
+    const top = 470 * (0.06 + 0.86 * Math.pow(t, 1.1)) - 8;
+    const left = 380 + ((u.x + .5) / 8 - .5) * 600 * k;
+    const el = document.createElement("div");
+    el.className = `u${foe ? " foe" : ""}`;
+    el.style.left = `${left}px`; el.style.top = `${top}px`; el.style.scale = String(k);
+    el.innerHTML = `<div class="stars">${"★".repeat(u.s)}</div><div class="bars"><div class="hp"><i style="width:${u.hp * 100}%"></i></div><div class="mp"><i style="width:${u.mp * 100}%"></i></div></div>${token(u)}`;
+    units.appendChild(el);
+  };
+  foes.forEach((u) => place(u, true));
+  mine.forEach((u) => place(u, false));
+
+  // 벤치
+  const bench = document.getElementById("bench");
+  const benchUnits = [{ p: "pawn", c: 1, f: "숲", s: 1 }, { p: "bishop", c: 2, f: "물", s: 1 }, null, { p: "knight", c: 3, f: "숲", s: 1 }, null, null, null, null];
+  for (const u of benchUnits) bench.insertAdjacentHTML("beforeend", `<div class="slot">${u ? `<div class="stars">${"★".repeat(u.s)}</div>${token(u)}` : ""}</div>`);
+
+  // 상점 카드
+  const shop = [
+    { n: "모슬링", p: "pawn", c: 1, f: "숲", t: ["폰", "숲"] },
+    { n: "라푸스", p: "bishop", c: 2, f: "물", t: ["비숍", "물"] },
+    { n: "오벨리온", p: "knight", c: 3, f: "숲", t: ["나이트", "숲"], owned: true },
+    { n: "제노사우로스", p: "rook", c: 1, f: "돌", t: ["룩", "돌"] },
+    { n: "마샬베르크", p: "king", c: 4, f: "달", t: ["킹", "달"] },
+  ];
+  const cards = document.getElementById("cards");
+  for (const s of shop) cards.insertAdjacentHTML("beforeend",
+    `<div class="card${s.owned ? " owned" : ""}" tabindex="0" style="--cost:${cost(s.c)};--art:${art[s.f]}"><div class="glyph">${glyph[s.p]}</div><div class="tr">${s.t.map((x) => `<span>${x}</span>`).join("")}</div><div class="foot"><span class="nm">${s.n}</span><span class="cost">◎${s.c}</span></div></div>`);
+
+  // 무대를 화면 폭에 맞춰 축소
+  const fit = document.getElementById("fit"), stage = document.getElementById("stage");
+  const resize = () => { const k = Math.min(1, fit.clientWidth / 1180); stage.style.transform = `scale(${k})`; fit.style.height = `${720 * k}px`; };
+  new ResizeObserver(resize).observe(fit); resize();
+})();
+</script>
