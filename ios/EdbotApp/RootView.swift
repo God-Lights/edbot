@@ -236,10 +236,14 @@ struct RoomView: View {
                 topBar(room)
                 content(room)
                     .frame(maxHeight: .infinity, alignment: .top)
+                    // 단계가 바뀔 때(준비 → 전투 → 결과) 부드럽게 바뀐다.
+                    .id(room.phase)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
                 if model.status == .reconnecting { Text("다시 연결하는 중...").foregroundStyle(Theme.warn) }
                 if let message = model.message { Text(message).foregroundStyle(Theme.warn) }
             }
             .padding(20)
+            .animation(.easeInOut(duration: 0.35), value: room.phase)
             .confirmationDialog("방을 닫을까요?", isPresented: $confirmClose, titleVisibility: .visible) {
                 Button("방 닫기", role: .destructive) { Task { await model.closeRoom(code: room.code) } }
                 Button("취소", role: .cancel) {}
@@ -262,6 +266,14 @@ struct RoomView: View {
                 .padding(.horizontal, 12).padding(.vertical, 6)
                 .background(Capsule().fill((player.id == model.myPlayerId ? Theme.mine : Theme.theirs).opacity(0.18)))
             }
+            Button { model.toggleSound() } label: {
+                Image(systemName: model.soundMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+            }
+            .buttonStyle(SecondaryButtonStyle())
+            Button { model.toggleMusic() } label: {
+                Image(systemName: model.musicOn ? "music.note" : "music.note.list")
+            }
+            .buttonStyle(SecondaryButtonStyle())
             Button { model.openGuide() } label: { Label("가이드", systemImage: "book") }.buttonStyle(SecondaryButtonStyle())
             if room.isHost == true {
                 Button { confirmClose = true } label: { Label("방 닫기", systemImage: "trash") }.buttonStyle(SecondaryButtonStyle())

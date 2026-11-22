@@ -6,11 +6,12 @@ import {
   absolutePosition, attackableEnemies, chebyshev, comparePerspective, enemiesOf, forward, moveDestinations, perspective,
 } from "./board";
 import {
-  BEAT_ENERGY_ATTACK, BEAT_ENERGY_HURT, addEffect, createUnit, damageTakenMultiplier, effectiveAtk, hasEffect, proc, pushEvent, queueHit,
+  BEAT_ENERGY_ATTACK, BEAT_ENERGY_HURT, addEffect, createUnit, damageTakenMultiplier, effectiveAtk, hasEffect, hasWeapon, proc, pushEvent, queueHit,
 } from "./core";
 import { ENERGY_MAX, STAR2_STATS, unitDef } from "./roster";
 import { activeSynergies, combineBonuses, neutralBonus } from "./synergy";
 import { BOARD_SIZE } from "./types";
+import { parseWeapon } from "./crafting";
 import { WEAPON_ATK } from "./weapons";
 import type { CombatResult, CombatState, CombatUnit, Placement, ResourceTile, Seat } from "./types";
 
@@ -47,15 +48,20 @@ export function createCombat(boards: [Placement[], Placement[]], tiles: Resource
       const k = placement.star === 2 ? STAR2_STATS : 1;
       const pawnHp = def.piece === "pawn" ? state.bonuses[seat].pawnHp : 1;
       const weapon = placement.weapon ?? null;
-      const maxHp = def.hp * k * pawnHp * (weapon === "titanium-shield" ? 1.15 : 1);
+      const parsed = weapon ? parseWeapon(weapon) : null;
+      const parts = parsed?.parts ?? [];
+      const power = parsed?.power ?? 1;
+      // 무기 효과는 낀 기본 무기마다 power배로 더한다. (기본 1, ★2 1.5, 융합 0.75씩)
+      const atkMult = parts.reduce((m, id) => m * (1 + ((WEAPON_ATK[id] ?? 1) - 1) * power), 1);
+      const maxHp = def.hp * k * pawnHp * (parts.includes("titanium-shield") ? 1 + 0.15 * power : 1);
       const unit = createUnit(state, {
-        defId: def.id, seat, star: placement.star, x, y, hp: maxHp, maxHp, atk: def.atk * k * (WEAPON_ATK[weapon ?? ""] ?? 1),
+        defId: def.id, seat, star: placement.star, x, y, hp: maxHp, maxHp, atk: def.atk * k * atkMult,
         energyMax: def.passive ? null : ENERGY_MAX[def.cost], piece: def.piece, summon: false, weapon,
       });
-      if (weapon === "titanium-shield") unit.dmgMult = 0.9;
-      if (weapon === "bit-dagger") unit.energyMult = 1.35;
-      if (weapon === "ancient-staff") {
-        unit.shield = maxHp * 0.25;
+      if (parts.includes("titanium-shield")) unit.dmgMult = 1 - 0.1 * power;
+      if (parts.includes("bit-dagger")) unit.energyMult = 1 + 0.35 * power;
+      if (parts.includes("ancient-staff")) {
+        unit.shield = maxHp * 0.25 * power;
         unit.shieldUntilBeat = 5;
       }
     }
@@ -121,7 +127,7 @@ function applyHits(state: CombatState): void {
     const target = state.units.find((u) => u.id === hit.targetId);
     if (!target || !target.alive) continue;
     // 안키오의 날개 쌍검: 공격과 능력을 4번에 1번 피한다
-    if ((hit.kind === "attack" || hit.kind === "ability") && target.weapon === "ankio-twinblades" && proc(target, "dodge", 0.25)) continue;
+    if ((hit.kind === "attack" || hit.kind === "ability") && hasWeapon(target, "ankio-twinblades") && proc(target, "dodge", 0.25 * target.weaponPower)) continue;
     let amount = hit.kind === "true" ? hit.amount : hit.amount * damageTakenMultiplier(state, target);
     if (target.shield > 0 && target.shieldUntilBeat >= state.beat && hit.kind !== "true") {
       const absorbed = Math.min(target.shield, amount);
@@ -136,7 +142,7 @@ function applyHits(state: CombatState): void {
     // 어둠의 낫: 준 피해의 25% 흡혈
     if (hit.sourceId && amount > 0) {
       const source = state.units.find((u) => u.id === hit.sourceId);
-      if (source && source.alive && source.weapon === "dark-scythe") source.hp = Math.min(source.maxHp, source.hp + amount * 0.35);
+      if (source && source.alive && hasWeapon(source, "dark-scythe")) source.hp = Math.min(source.maxHp, source.hp + amount * 0.35 * source.weaponPower);
     }
   }
   state.hits = [];
@@ -155,7 +161,7 @@ function resolveDeaths(state: CombatState): void {
     if (killer) {
       onKill(state, killer);
       // 에드코인 슬링: 처치할 때마다 골드 +1 (라운드당 최대 3)
-      if (killer.weapon === "edcoin-sling" && (killer.procs.gold ?? 0) < 3) {
+      if (hasWeapon(killer, "edcoin-sling") && (killer.procs.gold ?? 0) < Math.max(1, Math.round(3 * killer.weaponPower))) {
         killer.procs.gold = (killer.procs.gold ?? 0) + 1;
         state.goldBonus[killer.seat] += 1;
       }
@@ -164,38 +170,41 @@ function resolveDeaths(state: CombatState): void {
   }
 }
 
-/** 공격할 때 터지는 무기 효과들. */
+/** 공격할 때 터지는 무기 효과들. 낀 기본 무기마다 따로 계산하고, 확률은 무기 효과 배율(power)만큼 곱한다. */
 function weaponOnAttack(state: CombatState, unit: CombatUnit, target: CombatUnit, atk: number): void {
-  switch (unit.weapon) {
-    case "clawstone-axe":
-      // 5번 공격에 한 번 3초 출혈
-      if (proc(unit, "bleed", 0.2)) addEffect(target, { type: "dot", value: atk * 0.25, untilBeat: state.beat + 3 });
-      break;
-    case "edmium-blade":
-      if (proc(unit, "aspd", 0.25)) queueHit(state, { targetId: target.id, amount: atk, sourceId: unit.id, kind: "attack" });
-      break;
-    case "ankio-twinblades":
-      if (proc(unit, "aspd", 0.15)) queueHit(state, { targetId: target.id, amount: atk, sourceId: unit.id, kind: "attack" });
-      break;
-    case "redocean-trident": {
-      // 맞힌 적과 인접한 적 1명(체력이 낮은 쪽)에게 40%
-      const next = enemiesOf(state, unit)
-        .filter((e) => e.id !== target.id && chebyshev(e, target) === 1)
-        .sort((a, b) => a.hp - b.hp || a.id.localeCompare(b.id, "en", { numeric: true }))[0];
-      if (next) queueHit(state, { targetId: next.id, amount: atk * 0.4, sourceId: unit.id, kind: "attack" });
-      break;
-    }
-    case "chaos-staff":
-      if (proc(unit, "chaos", 0.34)) {
-        const turn = unit.procs.chaosTurn ?? 0;
-        unit.procs.chaosTurn = turn + 1;
-        if (turn % 3 === 0) addEffect(target, { type: "stun", value: 0, untilBeat: state.beat + 1 });
-        else if (turn % 3 === 1) addEffect(target, { type: "root", value: 0, untilBeat: state.beat + 3 });
-        else addEffect(target, { type: "dmgTaken", value: 1.2, untilBeat: state.beat + 3 });
+  const power = unit.weaponPower;
+  for (const part of unit.weaponParts) {
+    switch (part) {
+      case "clawstone-axe":
+        // 5번 공격에 한 번 3초 출혈
+        if (proc(unit, `${part}:bleed`, 0.2 * power)) addEffect(target, { type: "dot", value: atk * 0.25, untilBeat: state.beat + 3 });
+        break;
+      case "edmium-blade":
+        if (proc(unit, `${part}:aspd`, 0.25 * power)) queueHit(state, { targetId: target.id, amount: atk, sourceId: unit.id, kind: "attack" });
+        break;
+      case "ankio-twinblades":
+        if (proc(unit, `${part}:aspd`, 0.15 * power)) queueHit(state, { targetId: target.id, amount: atk, sourceId: unit.id, kind: "attack" });
+        break;
+      case "redocean-trident": {
+        // 맞힌 적과 인접한 적 1명(체력이 낮은 쪽)에게 40%
+        const next = enemiesOf(state, unit)
+          .filter((e) => e.id !== target.id && chebyshev(e, target) === 1)
+          .sort((a, b) => a.hp - b.hp || a.id.localeCompare(b.id, "en", { numeric: true }))[0];
+        if (next) queueHit(state, { targetId: next.id, amount: atk * 0.4 * power, sourceId: unit.id, kind: "attack" });
+        break;
       }
-      break;
-    default:
-      break;
+      case "chaos-staff":
+        if (proc(unit, `${part}:chaos`, 0.34 * power)) {
+          const turn = unit.procs[`${part}:turn`] ?? 0;
+          unit.procs[`${part}:turn`] = turn + 1;
+          if (turn % 3 === 0) addEffect(target, { type: "stun", value: 0, untilBeat: state.beat + 1 });
+          else if (turn % 3 === 1) addEffect(target, { type: "root", value: 0, untilBeat: state.beat + 3 });
+          else addEffect(target, { type: "dmgTaken", value: 1 + 0.2 * power, untilBeat: state.beat + 3 });
+        }
+        break;
+      default:
+        break;
+    }
   }
 }
 
@@ -295,7 +304,7 @@ export function stepCombat(state: CombatState): void {
     state.finished = true;
     state.survivors = [realAlive(state, 0), realAlive(state, 1)];
     // 비트코인 대검: 살아남으면 골드 +2
-    for (const u of state.units) if (u.alive && !u.summon && u.weapon === "bitcoin-greatsword") state.goldBonus[u.seat] += 2;
+    for (const u of state.units) if (u.alive && !u.summon && hasWeapon(u, "bitcoin-greatsword")) state.goldBonus[u.seat] += Math.round(2 * u.weaponPower);
     if (a === 0 && b === 0) state.winner = null;
     else if (a === 0) state.winner = 1;
     else if (b === 0) state.winner = 0;

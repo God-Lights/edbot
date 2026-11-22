@@ -19,12 +19,13 @@ import {
   submitPlacement,
 } from "./game";
 import type { ActionResult, GameState } from "./game";
+import type { ItemRef } from "./chess/crafting";
 import type { MatchInput } from "./ranking/store";
 import { createBattle, TICKS_PER_SECOND } from "./battle/core";
 import type { BattleState } from "./battle/core";
 import { activeSynergyIds } from "./synergy";
 import {
-  boardPlacements, bothDone, buy, buyMaterial, concedeGame, equip, smelt, unequip, createChessGame, deploy, finalRoster, finishRound, prepSeconds, reroll,
+  boardPlacements, bothDone, buy, buyMaterial, combineItems, concedeGame, equip, smelt, unequip, createChessGame, deploy, finalRoster, finishRound, prepSeconds, reroll,
   runRoundCombat, sell, setDone, startRound, toBench, COMBAT_LINGER_SECONDS,
 } from "./chess/game";
 import type { ChessGame, ChessResult } from "./chess/game";
@@ -892,6 +893,7 @@ const CHESS_MESSAGES: Record<string, string> = {
   no_material: "그 재료가 없다.",
   no_free_smelter: "빈 재련대가 없다.",
   no_weapon: "그 무기가 없다.",
+  invalid_recipe: "그 둘은 합칠 수 없다.",
 };
 
 export type ChessCommand =
@@ -902,6 +904,7 @@ export type ChessCommand =
   | { t: "smelt"; material: string }
   | { t: "equip"; weaponId: string; uid: string }
   | { t: "unequip"; uid: string }
+  | { t: "combine"; a: ItemRef; b: ItemRef }
   | { t: "deploy"; uid: string; col: number; row: number }
   | { t: "bench"; uid: string }
   | { t: "done" };
@@ -931,6 +934,7 @@ export function playerChess(
     case "smelt": result = smelt(chess, seat, command.material); break;
     case "equip": result = equip(chess, seat, command.weaponId, command.uid); break;
     case "unequip": result = unequip(chess, seat, command.uid); break;
+    case "combine": result = combineItems(chess, seat, command.a, command.b); break;
     case "deploy": result = deploy(chess, seat, command.uid, command.col, command.row); break;
     case "bench": result = toBench(chess, seat, command.uid); break;
     case "done":

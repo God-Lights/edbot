@@ -240,6 +240,8 @@ public struct ChessCatalog: Codable, Equatable, Sendable {
     public let synergies: [ChessSynergyInfo]
     public let materials: [ChessMaterialInfo]
     public let weapons: [ChessWeaponInfo]
+    /// 재료 조합표. 오래된 서버면 nil.
+    public let fusions: [ChessFusion]?
 }
 
 // MARK: 게스트 로그인과 관전 목록

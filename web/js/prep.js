@@ -1,5 +1,6 @@
 // 준비 단계 화면: 판, 대기석, 상점, 자원 패널. HTML 문자열을 만들고, 클릭/드래그는 main.js가 한꺼번에 처리한다.
 
+import { itemName } from "./crafting.js";
 import { S, conn, materialInfo, mySeat, synergyInfo, unitInfo, weaponInfo } from "./state.js";
 import {
   BOARD, COST_COLOR, DEPLOY_ROWS, PHASE_NAME, PIECE_COLOR, PIECE_NAME, RARITY_COLOR, RARITY_NAME, START_HP, countdown, esc, sellValue, starText,
@@ -10,8 +11,14 @@ export function token(defId, star, opts = {}) {
   const info = unitInfo(defId);
   const piece = info?.piece ?? "pawn";
   const border = opts.tint ?? COST_COLOR[info?.cost ?? 1];
-  const drag = opts.uid ? ` data-uid="${esc(opts.uid)}" draggable="true"` : "";
-  return `<div class="token${opts.selected ? " sel" : ""}" style="--pc:${PIECE_COLOR[piece]};--bc:${border}"${drag}>
+  const drag = opts.uid ? ` data-uid="${esc(opts.uid)}" data-drag="unit" draggable="true"` : "";
+  // 새로 생긴 기물은 튀어나오고(★2는 반짝), 무기가 새로 끼워진 기물은 번쩍인다.
+  let fx = "";
+  if (opts.uid && S.fx.phase === "prep") {
+    if (!S.fx.uids.has(opts.uid)) fx += star >= 2 ? " pop merge" : " pop";
+    else if (opts.armed && S.fx.weapons[opts.uid] !== opts.weapon) fx += " equipflash";
+  }
+  return `<div class="token${opts.selected ? " sel" : ""}${fx}" style="--pc:${PIECE_COLOR[piece]};--bc:${border}"${drag}>
     <span class="icon" style="--img:url(assets/pieces/${piece}.png)"></span>
     <span class="nm">${esc(info?.nameKo ?? defId)}</span>
     <span class="star">${starText(star)}</span>${opts.armed ? '<span class="armed" title="무기">🛡</span>' : ""}</div>`;
@@ -65,7 +72,7 @@ function boardHtml(chess, me, seat) {
         ? `<div class="tile ${unit ? "under" : ""}" style="--rc:${RARITY_COLOR[rarity]}"><i>◆</i>${unit ? "" : `<small>${esc(materialInfo(tile.material)?.nameKo ?? "")}</small>`}</div>`
         : "";
       html += `<div class="cell ${(col + row) % 2 ? "dark" : ""}" data-act="cell" data-drop="cell" data-col="${col}" data-row="${row}"${tile ? ` style="--rc:${RARITY_COLOR[rarity]}"` : ""}>${tileHtml}${
-        unit ? token(unit.defId, unit.star, { uid: unit.uid, selected: S.selUid === unit.uid, armed: !!unit.weapon }) : ""
+        unit ? token(unit.defId, unit.star, { uid: unit.uid, selected: S.selUid === unit.uid, armed: !!unit.weapon, weapon: unit.weapon }) : ""
       }</div>`;
     }
   }
@@ -75,7 +82,7 @@ function boardHtml(chess, me, seat) {
 function benchHtml(me) {
   return `<div class="bench">${me.bench
     .map((u, i) => `<div class="slot" data-act="bench-slot" data-drop="bench" data-slot="${i}">${
-      u ? token(u.defId, u.star, { uid: u.uid, selected: S.selUid === u.uid, armed: !!u.weapon }) : ""
+      u ? token(u.defId, u.star, { uid: u.uid, selected: S.selUid === u.uid, armed: !!u.weapon, weapon: u.weapon }) : ""
     }</div>`)
     .join("")}</div>`;
 }
@@ -83,13 +90,16 @@ function benchHtml(me) {
 // ---- 오른쪽 패널 ----
 
 function shopHtml(chess, me) {
+  const sig = me.shop.join("|");
+  // 상점이 통째로 새로 채워졌을 때(새로고침, 새 라운드)만 카드가 차례로 나타난다. 하나를 산 경우는 아니다.
+  const deal = S.fx.shop !== "" && S.fx.shop !== sig && me.shop.every(Boolean) ? " deal" : "";
   const cards = me.shop
     .map((id, slot) => {
       if (!id) return `<div class="shopcard sold">구매 완료</div>`;
       const info = unitInfo(id);
       const cost = info?.cost ?? 0;
       const off = me.gold < cost ? " dim" : "";
-      return `<button class="shopcard${off}" data-act="buy" data-slot="${slot}" style="--bc:${COST_COLOR[cost]}">
+      return `<button class="shopcard${off}${deal}" data-act="buy" data-slot="${slot}" style="--bc:${COST_COLOR[cost]};--i:${slot}">
         ${token(id, 1)}
         <span class="si"><b>${esc(info?.nameKo ?? id)} <em style="color:${PIECE_COLOR[info?.piece]}">${PIECE_NAME[info?.piece] ?? ""}</em></b>
         <small>${esc(info?.abilityText ?? "")}</small></span><span class="cost" style="background:${COST_COLOR[cost]}40">${cost}</span></button>`;
@@ -101,6 +111,8 @@ function shopHtml(chess, me) {
     <button class="btn sec wide" data-act="reroll"${me.gold < me.rerollCost ? " disabled" : ""}>⟳ 새로고침 (${me.rerollCost}골드)</button>
     <div class="odds">등장 확률: ${odds}</div></div>`;
 }
+
+const itemLabel = (item) => itemName(item, S.catalog);
 
 function resourceHtml(chess, me) {
   const materials = Object.entries(me.materials).filter(([, n]) => n > 0).sort();
@@ -121,28 +133,80 @@ function resourceHtml(chess, me) {
         <em>${me.marketBought ? "구매함" : `${item.price}골드`}</em></button>`;
     });
   }
+  const itemCount = materials.length + weapons.length;
+  if (itemCount) {
+    html += `<div class="combinebar"><button class="btn sec${S.combineMode ? " on" : ""}" data-act="combine-mode">⚗ 조합${S.combineMode ? " 중 (둘을 차례로 누르세요)" : ""}</button>
+      <button class="btn sec" data-act="guide" data-tab="recipes">📜 조합 도감</button></div>
+      <div class="combine-hint" id="combine-hint">${S.combineFirst ? `<b>${esc(itemLabel(S.combineFirst))}</b>와(과) 합칠 아이템을 누르세요` : "아이템을 다른 아이템 위로 끌어다 놓으면 합쳐져요 (재료+재료, 무기+무기, 무기+원재료)"}</div>`;
+  }
+  const mode = S.combineMode;
+  const first = S.combineFirst;
+  const chipClass = (kind, id, extra = "") => `chip${extra}${S.fx.items && !S.fx.items.has(`${kind}:${id}`) ? " pop" : ""}${first && first.kind === kind && first.id === id ? " on" : ""}`;
   if (materials.length) {
-    html += `<div class="sub">재료 · 누르면 재련대에 넣어요</div><div class="chips">${materials
+    const usable = free || mode;
+    html += `<div class="sub">재료 · 누르면 재련, <b>재련대로</b> 끌어 놓아도 돼요 (다른 재료 위로 끌면 <b>조합</b>)</div><div class="chips">${materials
       .map(([id, n]) => {
         const r = materialInfo(id)?.rarity ?? "common";
-        return `<button class="chip${free ? "" : " dim"}" style="--rc:${RARITY_COLOR[r]}" data-act="smelt" data-id="${esc(id)}"${free ? "" : " disabled"}>${esc(materialInfo(id)?.nameKo ?? id)} ×${n}</button>`;
+        return `<button class="${chipClass("material", id, usable ? "" : " dim")}" style="--rc:${RARITY_COLOR[r]}" data-act="smelt" data-id="${esc(id)}" data-kind="material" data-drag="material" data-drop="combine" draggable="true"${usable ? "" : " disabled"}>${esc(materialInfo(id)?.nameKo ?? id)} ×${n}</button>`;
       })
       .join("")}</div>`;
   }
   html += `<div class="smelters">${me.smelters
-    .map((w, i) => `<div><small>재련대 ${i + 1}</small><b>${w ? "⚒ " + esc(weaponInfo(w)?.nameKo ?? w) : "비어 있음"}</b></div>`)
+    .map((w, i) => `<div class="smelter${w ? " busy" : ""}" data-drop="smelter"><small>재련대 ${i + 1}</small><b>${w ? "⚒ " + esc(weaponInfo(w)?.nameKo ?? w) : "비어 있음"}</b></div>`)
     .join("")}</div>`;
   if (me.smelters.some(Boolean)) html += `<div class="sub tiny">재련 중인 무기는 다음 라운드 시작에 완성돼요.</div>`;
+  if (!weapons.length && me.board.some((u) => u.weapon)) html += `<div class="chips emptybox" data-drop="inventory">🛡 무기를 뺄 기물을 여기로 끌어다 놓아요</div>`;
   if (weapons.length) {
-    html += `<div class="sub">무기 · 누른 뒤 기물을 누르면 껴요</div><div class="chips">${weapons
+    html += `<div class="sub">무기 · <b>기물 위로 끌어다</b> 놓으면 껴요 (누른 뒤 기물을 눌러도 돼요)</div><div class="chips" data-drop="inventory">${weapons
       .map(([id, n]) => {
         const r = weaponInfo(id)?.rarity ?? "common";
-        return `<button class="chip${S.selWeapon === id ? " on" : ""}" style="--rc:${RARITY_COLOR[r]}" data-act="pick-weapon" data-id="${esc(id)}">${esc(weaponInfo(id)?.nameKo ?? id)} ×${n}</button>`;
+        return `<button class="${chipClass("weapon", id, S.selWeapon === id ? " on" : "")}" style="--rc:${RARITY_COLOR[r]}" data-act="pick-weapon" data-id="${esc(id)}" data-kind="weapon" data-drag="weapon" data-drop="combine" draggable="true">${esc(weaponInfo(id)?.nameKo ?? id)} ×${n}</button>`;
       })
       .join("")}</div>`;
     if (S.selWeapon) html += `<div class="sub warn">${esc(weaponInfo(S.selWeapon)?.text ?? "")}</div>`;
   }
   return html + "</div>";
+}
+
+const RING_R = 38;
+const RING_C = 2 * Math.PI * RING_R;
+
+/** 판에 올린 기물 수 / 올릴 수 있는 수를 둥근 막대로, 가운데에 코인(골드)을 보여 준다. */
+function ringHtml(count, cap, gold) {
+  const ratio = cap > 0 ? Math.min(1, count / cap) : 0;
+  const prev = S.fx.ring ?? ratio;
+  const bump = S.fx.gold != null && S.fx.gold !== gold ? " bump" : "";
+  return `<div class="ringbox${count >= cap ? " full" : ""}" title="판에 올린 기물 ${count} / ${cap}">
+    <svg viewBox="0 0 100 100"><circle class="trk" cx="50" cy="50" r="${RING_R}"/>
+      <circle class="prg" cx="50" cy="50" r="${RING_R}" stroke-dasharray="${RING_C.toFixed(2)}" style="--from:${(RING_C * (1 - prev)).toFixed(2)};--to:${(RING_C * (1 - ratio)).toFixed(2)}"/></svg>
+    <div class="mid${bump}"><span class="coin">🪙</span><b>${gold}</b></div>
+    <div class="cap">판 ${count}/${cap}</div></div>`;
+}
+
+const SYN_PIECES = ["king", "queen", "rook", "bishop", "knight", "pawn"];
+
+/** 판 위의 기물로 모은 시너지: 켜진 것은 밝게, 모으는 중인 것은 진행도(예: 1/2)와 함께 */
+function synergyHtml(me) {
+  const seen = new Set();
+  const counts = {};
+  for (const u of me.board) {
+    if (seen.has(u.defId)) continue;
+    seen.add(u.defId);
+    const piece = unitInfo(u.defId)?.piece;
+    if (piece) counts[piece] = (counts[piece] ?? 0) + 1;
+  }
+  const chips = SYN_PIECES.filter((p) => counts[p]).map((p) => {
+    const th = p === "pawn" ? [2, 4] : [2, 3];
+    const n = counts[p];
+    const tier = th.filter((t) => n >= t).length;
+    const need = tier >= 2 ? th[1] : th[tier];
+    const shown = synergyInfo(`${p}-${tier || 1}`);
+    const detail = tier ? shown?.text : `${need - n}명 더 모으면 ${shown?.text ?? ""}`;
+    return `<div class="synchip${tier ? " on" : ""}${tier >= 2 ? " max" : ""}" style="--pc:${PIECE_COLOR[p]}" title="${esc(detail)}">
+      <span class="gicon" style="--pc:${PIECE_COLOR[p]};--img:url(assets/pieces/${p}.png)"></span>
+      <span><b>${PIECE_NAME[p]} ${n}/${need}</b><small>${esc(detail)}</small></span></div>`;
+  });
+  return chips.length ? chips.join("") : `<div class="sub">같은 기물(킹·룩·비숍...)을 2명 이상 올리면 시너지가 켜져요.</div>`;
 }
 
 export function findUnit(me, uid) {
@@ -198,9 +262,6 @@ export function prepView(room) {
   const me = chess?.me;
   const seat = mySeat();
   if (!chess || !me || seat == null) return `<div class="center-msg">불러오는 중...</div>`;
-  const synergies = me.synergies
-    .map((id) => `<div><b>🔗 ${esc(synergyInfo(id)?.nameKo ?? id)}</b><small>${esc(synergyInfo(id)?.text ?? "")}</small></div>`)
-    .join("");
   const canAuto = me.bench.some(Boolean) && me.board.length < chess.deployCap;
   const opp = chess.opponent;
   const step = showCoach(chess) ? coachStep(chess, me).n : 0;
@@ -216,12 +277,12 @@ export function prepView(room) {
         <div class="sub">대기석</div>${benchHtml(me)}
       </div>
       <div class="right">
-        <div class="panel gold"><b>🪙 ${me.gold}</b><span class="sub">다음 라운드 +${me.nextIncome}</span></div>
+        <div class="panel topstat">${ringHtml(me.board.length, chess.deployCap, me.gold)}
+          <div class="synbox"><div class="sub">시너지 · 다음 라운드 🪙 +${me.nextIncome}</div>${synergyHtml(me)}</div></div>
         ${shopHtml(chess, me)}
         <div class="sellzone" data-drop="sell">🗑 여기로 끌어서 팔기</div>
         ${resourceHtml(chess, me)}
         ${selectedHtml(me)}
-        ${synergies ? `<div class="panel syn">${synergies}</div>` : ""}
         <button class="btn primary wide${step === 4 ? " hl" : ""}" data-act="done"${me.done ? " disabled" : ""}>${me.done ? "준비 완료 · 상대를 기다리는 중" : "준비 끝"}</button>
       </div>
     </div>`;

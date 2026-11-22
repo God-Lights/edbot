@@ -2,6 +2,7 @@
 
 import { api } from "./api.js";
 import { Connection } from "./conn.js";
+import { weaponView } from "./crafting.js";
 import { errorText } from "./util.js";
 
 const load = (key, fallback = "") => {
@@ -33,6 +34,11 @@ export const S = {
   creating: false,
   /** 빠른 대전 줄서기: null | { ticket, startedAt, waiting } */
   quick: null,
+  /** 탭으로 조합하는 방식: 켜 두면 아이템 둘을 차례로 눌러 합친다. first는 먼저 누른 아이템. */
+  combineMode: false,
+  combineFirst: null,
+  /** 직전 화면의 값. 애니메이션(진행 링, 골드, 새 기물)과 효과음이 "무엇이 바뀌었나"를 알아내는 데 쓴다. */
+  fx: { ring: null, gold: null, uids: new Set(), weapons: {}, shop: "", phase: "", tick: -1, items: null },
   /** 게스트 로그인 (학번 + 이름). 기억해 둔다. */
   guest: { studentId: load("edbot.guestId"), name: load("edbot.guestName") },
   guestCode: "",
@@ -71,7 +77,8 @@ export const me = () => S.room?.players.find((p) => p.id === S.myId) ?? null;
 export const mySeat = () => me()?.seat ?? null;
 export const unitInfo = (id) => S.catalog?.units.find((u) => u.id === id);
 export const materialInfo = (id) => S.catalog?.materials.find((m) => m.id === id);
-export const weaponInfo = (id) => S.catalog?.weapons.find((w) => w.id === id);
+/** 기본 무기뿐 아니라 ★2(`id*`)·융합(`a+b`) 무기도 이름과 설명을 돌려준다. */
+export const weaponInfo = (id) => weaponView(id, S.catalog) ?? undefined;
 export const synergyInfo = (id) => S.catalog?.synergies.find((s) => s.id === id);
 
 // ---- 연결 ----
@@ -170,6 +177,7 @@ export const act = {
   surrender: () => send({ t: "surrender" }),
   market: (slot) => send({ t: "market", slot }),
   smelt: (material) => send({ t: "smelt", material }),
+  combine: (a, b) => send({ t: "combine", a, b }),
   equip: (weaponId, uid) => { S.selWeapon = null; send({ t: "equip", weaponId, uid }); },
   unequip: (uid) => send({ t: "unequip", uid }),
 };

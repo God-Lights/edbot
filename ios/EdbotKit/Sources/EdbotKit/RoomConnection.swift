@@ -132,6 +132,7 @@ public actor RoomConnection {
     public func sendMarket(slot: Int) async -> Bool { await send(MessageCodec.market(slot: slot)) }
     public func sendSmelt(_ material: String) async -> Bool { await send(MessageCodec.smelt(material)) }
     public func sendEquip(_ weaponId: String, uid: String) async -> Bool { await send(MessageCodec.equip(weaponId, uid: uid)) }
+    public func sendCombine(_ a: ChessItem, _ b: ChessItem) async -> Bool { await send(MessageCodec.combine(a, b)) }
     public func sendUnequip(_ uid: String) async -> Bool { await send(MessageCodec.unequip(uid)) }
     public func sendDone() async -> Bool { await send(MessageCodec.done()) }
     public func sendSurrender() async -> Bool { await send(MessageCodec.surrender()) }

@@ -284,6 +284,7 @@ export class Room extends DurableObject<Env> {
       case "smelt":
       case "equip":
       case "unequip":
+      case "combine":
       case "deploy":
       case "bench":
       case "done":

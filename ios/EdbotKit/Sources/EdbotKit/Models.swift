@@ -503,6 +503,7 @@ public enum ErrorCode {
     public static let noWeapon = "no_weapon"
     public static let spectateUnavailable = "spectate_unavailable"
     public static let roomClosed = "room_closed"
+    public static let invalidRecipe = "invalid_recipe"
     public static let notInZone = "not_in_zone"
     public static let alreadyEquipping = "already_equipping"
     public static let alreadyEquipped = "already_equipped"
