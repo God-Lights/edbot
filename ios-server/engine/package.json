@@ -1,0 +1,6 @@
+{
+  "name": "commander-ios-server-engine",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "bun build.ts", "test": "bun build.ts && bun test" }
+}

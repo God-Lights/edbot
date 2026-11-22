@@ -296,3 +296,10 @@
 - **자동 찾기**: 서버가 Bonjour(`_commander._tcp`, mDNS)로 알린다. 필요한 만큼만 구현한 작은 응답기(`local-server/src/mdns.ts`): 서비스 질문에 PTR와 SRV·TXT·A로 답하고, 켤 때 한 번 알린다. TXT에 `name, ip, port, ed, proto`를 실어서 앱이 주소를 따로 풀지 않아도 된다. `--no-discovery`로 끈다. 포트를 못 쓰면 조용히 건너뛴다.
 - 앱은 `NWBrowser`로 찾아서 서버 입력칸 아래에 눌러 고르는 목록으로 보여 준다(로컬 네트워크 권한 안내문 필요). 웹은 브라우저가 Bonjour를 못 쓰므로 `/connect`의 주소를 연다.
 - 한계: 같은 와이파이 안에서만 된다(기기 간 격리가 켜진 공용 와이파이는 막힌다). 인터넷 건너편 서버는 주소를 직접 입력한다.
+
+## 28. iOS 서버 앱 (진행 중): 엔진 묶음
+- 앱은 Swift가 접속(HTTP·WebSocket)과 파일 저장을 맡고, 서버 엔진은 **숨은 웹뷰(WKWebView)** 안에서 돌린다. 웹뷰에는 `Request`·`Response`·`URL`·`crypto`가 이미 있어서 따로 채울 것이 거의 없다(JavaScriptCore만 쓰면 이걸 전부 만들어야 한다).
+- `ios-server/engine/`: `bun build.ts`가 서버 엔진과 로컬 서버의 저장 코드를 `dist/engine.js` 한 파일(약 165KB)로 묶는다. `CommanderEngine.start({host, files, name, edition})`가 엔진을 만들고, 앱은 `fetch(요청)`, `wsMessage`, `wsClose`로 요청을 넘긴다. 엔진이 앱에 알릴 것(파일 변경, 소켓 보내기·닫기, 로그)은 `host.post`로 간다.
+- **파일 시스템 추상화**(`local-server/src/runtime/fs.ts`): 저장 코드는 `Fs`만 쓴다. 데스크톱은 `nodeFs`, iOS는 `MemFs`(시작할 때 파일을 통째로 받아 메모리에 두고, 바뀐 것을 순서대로 앱에 넘겨 파일에 쓰게 한다). 바닐라/엑스퍼트는 시작 옵션(`edition`)이고, 엑스퍼트는 `plugins/`의 팩을 같은 방식으로 읽는다.
+- 시험(`engine.test.ts`): 번들을 Node 전역(`process`, `Buffer`, `require`)이 없는 환경에서 실행해서 서버 정보·도감, 엑스퍼트 팩 적용과 바닐라의 무시, 두 사람이 한 판 해서 전적이 파일 변경으로 넘어가고 다시 시작해도 남는 것을 확인한다.
+- 다음: (2) Swift 접속 받기(`NWListener` + 웹 화면 서빙 + 웹뷰 다리와 파일 저장), (3) 서버 관리 화면(바닐라/엑스퍼트 스위치, 주소·QR, Bonjour 알림, 전적).

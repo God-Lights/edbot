@@ -8,7 +8,8 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, networkInterfaces } from "node:os";
 import { dirname, join, normalize, resolve, sep } from "node:path";
-import { JsonRankingStore, acquireLock } from "./runtime/json-store";
+import { JsonRankingStore } from "./runtime/json-store";
+import { acquireLock } from "./runtime/lock";
 import { ObjectNamespace } from "./runtime/objects";
 import { installWebSocketGlobals, upgradeTarget } from "./runtime/websocket";
 import type { ServerSocket } from "./runtime/websocket";

@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { appendFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { JsonRankingStore, acquireLock, rebuildPlayers } from "./json-store";
+import { JsonRankingStore, rebuildPlayers } from "./json-store";
+import { acquireLock } from "./lock";
 import type { MatchInput } from "../../../server/src/ranking/store";
 
 let root: string;
