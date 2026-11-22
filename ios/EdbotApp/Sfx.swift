@@ -11,6 +11,7 @@ final class Sfx {
         case click, buy, sell, place, ready, hit, ability, death, promote, mine
         case roundWin, roundLose, win, lose
         case pickup, drop, equip, smelt, combine, merge, full, roundStart, combatStart, tick, suddenDeath
+        case ghost, surface
     }
 
     private enum Wave { case sine, triangle, square, saw }
@@ -246,6 +247,10 @@ final class Sfx {
         case .combatStart:
             return ([Note(freq: 90, dur: 0.18, vol: 0.1, slide: -40), Note(freq: 90, dur: 0.18, vol: 0.1, slide: -40, delay: 0.2)], [Burst(dur: 0.1, vol: 0.04, delay: 0.2)])
         case .tick: return ([Note(freq: 1000, dur: 0.03, wave: .square, vol: 0.025)], [])
+        case .ghost: return ([Note(freq: 660, dur: 0.22, vol: 0.05, slide: -380), Note(freq: 330, dur: 0.3, wave: .triangle, vol: 0.03, slide: 220, delay: 0.08)], [])
+        case .surface:
+            return ([Note(freq: 220, dur: 0.2, vol: 0.06, slide: 700)]
+                    + ([660, 880, 1175] as [Double]).enumerated().map { Note(freq: $0.element, dur: 0.14, wave: .triangle, vol: 0.05, delay: 0.12 + Double($0.offset) * 0.05) }, [])
         case .suddenDeath: return ([Note(freq: 110, dur: 0.5, wave: .saw, vol: 0.05), Note(freq: 116, dur: 0.5, wave: .saw, vol: 0.04)], [])
         }
     }

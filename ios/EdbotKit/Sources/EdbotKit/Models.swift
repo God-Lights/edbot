@@ -448,6 +448,8 @@ public struct RoomSnapshot: Codable, Equatable, Sendable {
     public let chess: ChessSnapshot?
     /// 결과 단계에서만 있다.
     public let result: ResultSnapshot?
+    /// 무한 모드(뫼비우스 규칙) 방. 오래된 서버면 nil.
+    public var mobius: Bool? = nil
 
     public func player(id: String?) -> PublicPlayer? {
         guard let id else { return nil }

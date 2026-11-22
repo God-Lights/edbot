@@ -156,7 +156,7 @@ struct ChessHeader: View {
             HStack(spacing: compact ? 10 : 18) {
                 HpPill(name: mine, hp: chess.me?.hp ?? 0, color: Theme.mine, width: compact ? 130 : 170)
                 VStack(spacing: 2) {
-                    Text("라운드 \(chess.round) / \(chess.maxRounds)").font(.headline)
+                    Text("라운드 \(chess.round) / \(chess.maxRounds)\(room.mobius == true ? " 🌀" : "")").font(.headline)
                     TimelineView(.periodic(from: .now, by: 0.5)) { context in
                         Text("\(Labels.phaseName(room.phase)) \(Labels.countdown(model.remainingMs(now: context.date)))")
                             .font(.subheadline.monospacedDigit())
@@ -318,6 +318,17 @@ struct ChessPrepView: View {
                             .frame(width: cell, height: cell)
                     }
                 }
+            }
+        }
+        .overlay {
+            // 무한 모드: 판 양쪽 끝의 보랏빛(이어져 있다는 표시)
+            if room.mobius == true {
+                HStack(spacing: 0) {
+                    LinearGradient(colors: [Theme.accent.opacity(0.5), .clear], startPoint: .leading, endPoint: .trailing).frame(width: cell * 0.5)
+                    Spacer(minLength: 0)
+                    LinearGradient(colors: [Theme.accent.opacity(0.5), .clear], startPoint: .trailing, endPoint: .leading).frame(width: cell * 0.5)
+                }
+                .allowsHitTesting(false)
             }
         }
         .coachHighlight(showCoach && coachStep(me).n == 2)
@@ -999,13 +1010,16 @@ struct ChessArena: View {
             let position: Double = playbackPosition(now: context.date)
             GeometryReader { geo in
                 let cell: CGFloat = min(geo.size.width, geo.size.height) / CGFloat(chessBoardSize)
+                let frontCells: Set<Int> = frontCellSet(position: position)
                 ZStack(alignment: .topLeading) {
                     background(cell)
+                    seamEdges(cell)
                     tilesLayer(position: position, cell: cell)
                     effects(position: position, cell: cell)
                     ringsLayer(position: position, cell: cell)
+                    cloneLinks(position: position, cell: cell)
                     ForEach(combat.units.indices, id: \.self) { index in
-                        unitView(index, position: position, cell: cell)
+                        unitView(index, position: position, cell: cell, frontCells: frontCells)
                     }
                     floatsLayer(position: position, cell: cell)
                     banner(position: position)
@@ -1038,6 +1052,7 @@ struct ChessArena: View {
             }
             ForEach(combat.events.indices, id: \.self) { index in
                 mineFloat(combat.events[index], position: position, cell: cell)
+                seamFloat(combat.events[index], position: position, cell: cell)
             }
         }
         .allowsHitTesting(false)
@@ -1076,20 +1091,36 @@ struct ChessArena: View {
         }
     }
 
-    /// 능력이 발동하면 그 기물 둘레에 보라색 고리가 퍼져 나간다.
+    /// 무한 모드의 일: 이음매 이동(👻), 웜홀 상승, 분신 생김, 석화를 그 기물 위에 글자로 띄운다.
+    @ViewBuilder
+    private func seamFloat(_ event: ChessEvent, position: Double, cell: CGFloat) -> some View {
+        let age: Double = position - Double(event.beat - 1)
+        let label: String? = ["ghost": "👻", "surface": "↑ 웜홀", "clone": "분신!", "stone": "🗿 석화"][event.kind]
+        if let label, age >= 0, age < 1, let unit = combat.frameUnit(beat: event.beat - 1, index: event.unit) ?? combat.frameUnit(beat: event.beat, index: event.unit) {
+            let point = display(x: unit.x, y: unit.y)
+            Text(label)
+                .font(.system(size: max(11, cell * 0.24), weight: .heavy))
+                .foregroundStyle(event.kind == "surface" ? Color(red: 0.35, green: 0.8, blue: 0.75) : Color(red: 0.9, green: 0.75, blue: 0.95))
+                .shadow(color: .black, radius: 2)
+                .opacity(1 - age)
+                .position(x: (point.x + 0.5) * cell, y: (point.y + 0.1 - age * 0.45) * cell)
+        }
+    }
+
+    /// 능력이 발동하면 그 기물 둘레에 보라색 고리가 퍼져 나간다. 웜홀로 올라오면 청록색 고리다.
     private func ringsLayer(position: Double, cell: CGFloat) -> some View {
         let k: Int = Int(position.rounded(.down))
         let age: Double = position - Double(k)
         let active: [ChessEvent] = position >= Double(combat.beats)
             ? []
-            : combat.events.filter { $0.beat == k + 1 && $0.kind == "ability" }
+            : combat.events.filter { $0.beat == k + 1 && ($0.kind == "ability" || $0.kind == "surface") }
         return ZStack {
             ForEach(active.indices, id: \.self) { index in
                 if let unit = combat.frameUnit(beat: k, index: active[index].unit) {
                     let p = display(x: unit.x, y: unit.y)
                     let size: CGFloat = cell * CGFloat(0.5 + 1.3 * age)
                     Circle()
-                        .stroke(Theme.accent, lineWidth: 3)
+                        .stroke(active[index].kind == "surface" ? Color(red: 0.35, green: 0.8, blue: 0.75) : Theme.accent, lineWidth: 3)
                         .frame(width: size, height: size)
                         .opacity(max(0, 1 - age / 0.7))
                         .position(x: (p.x + 0.5) * cell, y: (p.y + 0.5) * cell)
@@ -1129,6 +1160,8 @@ struct ChessArena: View {
             case "death": model.play(.death)
             case "promote": model.play(.promote)
             case "mine": model.play(.mine)
+            case "ghost": model.play(.ghost)
+            case "surface": model.play(.surface)
             default: break
             }
         }
@@ -1148,7 +1181,7 @@ struct ChessArena: View {
                 last += 1
                 playBeatSounds(last)
             }
-            if k + 1 >= 20, position < Double(combat.beats), !suddenDone {
+            if k + 1 >= combat.suddenDeathBeat, position < Double(combat.beats), !suddenDone {
                 suddenDone = true
                 model.play(.suddenDeath)
             }
@@ -1192,8 +1225,56 @@ struct ChessArena: View {
         }
     }
 
+    /// 앞면 기물이 서 있는 칸(번호 = y * 8 + x). 같은 칸의 유령을 살짝 비켜 그리려고 모아 둔다.
+    private func frontCellSet(position: Double) -> Set<Int> {
+        guard combat.mobius == true else { return [] }
+        var cells = Set<Int>()
+        for index in combat.units.indices {
+            if let f = combat.interpolated(position: position, index: index), f.alive, !f.ghost {
+                cells.insert(Int(f.y.rounded()) * chessBoardSize + Int(f.x.rounded()))
+            }
+        }
+        return cells
+    }
+
+    /// 무한 모드: 판 양쪽 끝의 보랏빛. 왼쪽 끝과 오른쪽 끝이 이어져 있다는 표시다.
     @ViewBuilder
-    private func unitView(_ index: Int, position: Double, cell: CGFloat) -> some View {
+    private func seamEdges(_ cell: CGFloat) -> some View {
+        if combat.mobius == true {
+            let width: CGFloat = cell * CGFloat(chessBoardSize) * 0.07
+            let total: CGFloat = cell * CGFloat(chessBoardSize)
+            HStack(spacing: 0) {
+                LinearGradient(colors: [Theme.accent.opacity(0.55), .clear], startPoint: .leading, endPoint: .trailing).frame(width: width)
+                Spacer(minLength: 0)
+                LinearGradient(colors: [Theme.accent.opacity(0.55), .clear], startPoint: .trailing, endPoint: .leading).frame(width: width)
+            }
+            .frame(width: total, height: total)
+            .allowsHitTesting(false)
+        }
+    }
+
+    /// 분신과 본체를 잇는 보랏빛 점선
+    private func cloneLinks(position: Double, cell: CGFloat) -> some View {
+        let links: [(body: Int, clone: Int)] = combat.events.filter { $0.kind == "clone" }.map { ($0.unit, $0.target) }
+        return ZStack {
+            ForEach(links.indices, id: \.self) { n in
+                if let a = combat.interpolated(position: position, index: links[n].body), a.alive,
+                   let b = combat.interpolated(position: position, index: links[n].clone), b.alive {
+                    let pa = display(x: a.x, y: a.y)
+                    let pb = display(x: b.x, y: b.y)
+                    Path { path in
+                        path.move(to: CGPoint(x: (pa.x + 0.5) * cell, y: (pa.y + 0.5) * cell))
+                        path.addLine(to: CGPoint(x: (pb.x + 0.5) * cell, y: (pb.y + 0.5) * cell))
+                    }
+                    .stroke(Theme.accent.opacity(0.55), style: StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+                }
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    @ViewBuilder
+    private func unitView(_ index: Int, position: Double, cell: CGFloat, frontCells: Set<Int>) -> some View {
         let unit = combat.units[index]
         if let frame = combat.interpolated(position: position, index: index), frame.alive {
             let point = display(x: frame.x, y: frame.y)
@@ -1206,10 +1287,37 @@ struct ChessArena: View {
             // 맞은 직후에는 번쩍이고, 공격할 때는 대상 쪽으로 몸을 내민다.
             let age: Double = position - Double(k)
             let flash: Double = (hpDelta(beat: k, index: index) <= -1 && age < 0.3) ? (1 - age / 0.3) : 0
+            // 무한 모드의 유령: 반투명, 점선, 살짝 떠 있다. 같은 칸에 앞면 기물이 있으면 왼쪽 위 뒤로 비켜 선다.
+            let ghost: Bool = frame.ghost
+            let stacked: Bool = ghost && frontCells.contains(Int(frame.y.rounded()) * chessBoardSize + Int(frame.x.rounded()))
+            let bob: CGFloat = ghost && !stacked ? CGFloat(sin(position * 3.2 + Double(index))) * cell * 0.04 : 0
+            let open: Bool = ghost && frame.gauge >= chessWormholeBeats
             ZStack(alignment: .bottom) {
                 ChessToken(defId: unit.defId, star: unit.star, tint: unit.seat == seat ? Theme.mine : Theme.theirs, armed: unit.weapon != nil, weaponId: unit.weapon)
                     .brightness(flash * 0.6)
+                    .opacity(ghost ? 0.5 : 1)
+                    .overlay {
+                        if ghost {
+                            RoundedRectangle(cornerRadius: side * 0.2, style: .continuous)
+                                .strokeBorder(Theme.accent.opacity(0.9), style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
+                        }
+                    }
+                    .shadow(color: ghost ? Theme.accent.opacity(0.7) : .clear, radius: ghost ? 5 : 0)
+                    .scaleEffect(stacked ? 0.88 : 1)
+                    .offset(x: stacked ? -side * 0.14 : 0, y: stacked ? -side * 0.14 : bob)
                     .offset(lungeOffset(index: index, position: position, cell: cell))
+                if ghost {
+                    Circle()
+                        .trim(from: 0, to: min(1, Double(frame.gauge) / Double(chessWormholeBeats)))
+                        .stroke(Color(red: 0.35, green: 0.8, blue: 0.75), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .shadow(color: open ? Color(red: 0.35, green: 0.8, blue: 0.75) : .clear, radius: open ? 5 : 0)
+                        .opacity(open ? 0.6 + 0.4 * abs(sin(position * 4)) : 1)
+                        .frame(width: side, height: side)
+                        .frame(maxHeight: .infinity, alignment: .center)
+                    Text("👻").font(.system(size: max(9, cell * 0.26)))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
                 VStack(spacing: 1) {
                     if frame.shield > 0 {
                         Capsule().fill(Color.white.opacity(0.8)).frame(width: side * 0.8, height: 3)
@@ -1221,11 +1329,13 @@ struct ChessArena: View {
                     .frame(width: side * 0.8, height: 5)
                 }
                 .padding(.bottom, 2)
+                .opacity(ghost ? 0.6 : 1)
             }
             .frame(width: side, height: side)
             .scaleEffect(dying ? 0.55 + 0.45 * fade : 1)
-            .opacity(fade)
+            .opacity(fade * frame.fade)
             .position(x: (point.x + 0.5) * cell, y: (point.y + 0.5) * cell)
+            .zIndex(ghost ? 1 : 2)
         }
     }
 

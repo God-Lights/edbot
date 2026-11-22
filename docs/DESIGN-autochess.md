@@ -248,3 +248,6 @@
 - iPad/iPhone: `ios/EdbotApp/Resources/Music/*.mp3`(같은 파일), `Sfx.swift`의 `setScene`, `AppModel.musicScene`.
 - 원본 mp3(각 약 5MB, 3분 40초)는 앨범 이미지를 빼고 128kbps로 다시 인코딩해서 각 약 3.5MB. 곡 배정은 이름과 음량 분석으로 정했다(직접 들어 보고 바꾸려면 두 `musicScene` 함수만 고치면 된다).
 - 합성 배경 음악(아르페지오)은 없어졌다.
+
+### 21.6 iPad / iPhone 표시
+웹과 같은 구성이다. `ChessFrameUnit`(`ghost`, `gauge`, `fade`)과 `ChessCombatSnapshot.interpolated`가 flags를 읽고 이음매를 넘는 박자는 사라졌다 나타나게 잇는다. `ChessArena`가 유령(반투명·점선·👻·보랏빛 그림자, 앞면 기물과 같은 칸이면 왼쪽 위 뒤로 비켜 섬), 웜홀 고리, 분신 점선, 이음매 가장자리, `👻`·`↑ 웜홀`·`분신!`·`🗿 석화` 글자와 소리를 그린다. 로비에 "🌀 무한 모드로 만들기" 스위치(기억함)와 "🌀 무한 대전"(`ADMX`), 방 대기·게임 헤더에 🌀 표시, 가이드 "무한 모드" 탭. `ApiClient.createRoom(guest:mobius:)`.

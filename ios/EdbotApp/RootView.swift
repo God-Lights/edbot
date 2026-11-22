@@ -146,6 +146,9 @@ struct LobbyView: View {
         @Bindable var model = model
         let cols: [GridItem] = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
         return VStack(spacing: compact ? 6 : 12) {
+            Toggle("🌀 무한 모드로 만들기", isOn: $model.createMobius)
+                .font(.subheadline)
+                .tint(Theme.accent)
             Button { model.createRoomAndJoin() } label: {
                 Text(model.isCreatingRoom ? "방을 만드는 중..." : "방 만들기").frame(maxWidth: .infinity)
             }
@@ -182,6 +185,10 @@ struct LobbyView: View {
                 .buttonStyle(SecondaryButtonStyle())
                 Button { model.join(code: "ADMF") } label: {
                     Label("전체 대전", systemImage: "cpu.fill").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                Button { model.join(code: "ADMX") } label: {
+                    Label("🌀 무한 대전", systemImage: "cpu").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(SecondaryButtonStyle())
             }
@@ -325,6 +332,11 @@ struct LobbyRoomView: View {
             VStack(spacing: 6) {
                 Text("방 코드").font(.callout).foregroundStyle(.secondary)
                 Text(room.code).font(.system(size: vSize == .compact ? 44 : 72, weight: .heavy, design: .monospaced)).foregroundStyle(Theme.silver)
+                if room.mobius == true {
+                    Text("🌀 무한 모드").font(.caption.bold())
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Capsule().fill(Theme.accent.opacity(0.3)))
+                }
             }
             if room.players.count < 2 {
                 Text("상대를 기다리는 중... 방 코드를 알려 주세요.").foregroundStyle(.secondary)

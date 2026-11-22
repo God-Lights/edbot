@@ -19,8 +19,10 @@ public struct ApiClient: Sendable {
 
     /// 새 방을 만들고 4자리 방 코드를 돌려준다.
     /// guest가 true면 게스트 방(학번 + 이름으로 들어올 수 있고 전적이 남지 않는 방)을 만든다.
-    public func createRoom(guest: Bool = false) async throws -> String {
-        let (data, status) = try await http.send(Http.request(baseURL, guest ? "/api/rooms?guest=1" : "/api/rooms", method: "POST", token: authToken))
+    /// mobius가 true면 무한 모드(앞면·밑면, 이음매, 웜홀이 있는 뫼비우스 규칙) 방을 만든다.
+    public func createRoom(guest: Bool = false, mobius: Bool = false) async throws -> String {
+        let query: String = [guest ? "guest=1" : nil, mobius ? "mobius=1" : nil].compactMap { $0 }.joined(separator: "&")
+        let (data, status) = try await http.send(Http.request(baseURL, query.isEmpty ? "/api/rooms" : "/api/rooms?\(query)", method: "POST", token: authToken))
         if status == 401 { throw ApiError.unauthorized }
         guard (200..<300).contains(status) else { throw ApiError.status(status) }
         guard let room = try? JSONDecoder().decode(CreatedRoom.self, from: data), !room.code.isEmpty else {
