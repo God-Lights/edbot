@@ -1,7 +1,7 @@
 // 밸런스 측정: 봇이 무작위로 팀을 만들어 서로 싸우게 하고 캐릭터와 시너지의 승률을 센다.
 // 같은 예산(골드)으로 만든 팀끼리 싸우므로 "비싼 캐릭터가 이긴다"가 아니라 "가격 대비 강한가"를 본다.
 
-import { ROSTER, unitDef } from "./roster";
+import { roster, unitDef } from "./roster";
 import { ALL_SYNERGIES, activeSynergies } from "./synergy";
 import { runCombat } from "./sim";
 import type { Placement, UnitDef } from "./types";
@@ -34,7 +34,7 @@ export interface TeamSpec {
  * 예산 안에서 기물 cap개 이하를 무작위로 뽑는다. 같은 캐릭터는 한 번만(★1). 가능한 한 예산을 다 쓴다.
  */
 export function randomTeam(rng: () => number, budget: number, cap: number): TeamSpec {
-  const order = shuffle(ROSTER, rng);
+  const order = shuffle(roster(), rng);
   const units: TeamSpec["units"] = [];
   let spent = 0;
   for (const def of order) {
@@ -113,7 +113,7 @@ export interface BalanceReport {
 
 export function runBalance(options: BalanceOptions): BalanceReport {
   const rng = makeRng(options.seed);
-  const stats = new Map<string, UnitStat>(ROSTER.map((d) => [d.id, { defId: d.id, games: 0, wins: 0, draws: 0 }]));
+  const stats = new Map<string, UnitStat>(roster().map((d) => [d.id, { defId: d.id, games: 0, wins: 0, draws: 0 }]));
   const synergy = new Map<string, { games: number; wins: number }>(ALL_SYNERGIES.map((s) => [s.id, { games: 0, wins: 0 }]));
   let draws = 0;
   let sudden = 0;

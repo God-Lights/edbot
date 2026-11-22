@@ -9,6 +9,7 @@ struct CommanderApp: App {
             RootView()
                 .environment(model)
                 .preferredColorScheme(.dark)
+                .onOpenURL { url in model.openConnectLink(url) }
         }
     }
 }

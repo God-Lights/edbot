@@ -8,5 +8,8 @@
     "dev": "bun --preload ./src/runtime/plugin.ts src/main.ts",
     "build": "bun build.ts",
     "smoke": "bun scripts/smoke.ts"
+  },
+  "dependencies": {
+    "qrcode-generator": "^2.0.4"
   }
 }

@@ -207,6 +207,8 @@ public struct ChessRoundSummary: Codable, Equatable, Sendable {
 public struct ChessSnapshot: Codable, Equatable, Sendable {
     public let round: Int
     public let maxRounds: Int
+    /// 시작 체력(체력 막대의 기준). 오래된 서버면 nil이고 30으로 본다.
+    public var startHp: Int? = nil
     public let deployCap: Int
     /// 가격별 등장 확률(%) [1골드, 2골드, 3골드, 4골드]
     public let shopOdds: [Int]
@@ -273,6 +275,8 @@ public struct ChessCatalog: Codable, Equatable, Sendable {
     public let weapons: [ChessWeaponInfo]
     /// 재료 조합표. 오래된 서버면 nil.
     public let fusions: [ChessFusion]?
+    /// 규칙 묶음 이름(공식이면 "official"). 오래된 서버면 nil.
+    public let ruleset: String?
 }
 
 // MARK: 게스트 로그인과 관전 목록

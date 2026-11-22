@@ -1,10 +1,12 @@
-import { ROSTER } from "./chess/roster";
-import { MARKET_PRICE, MATERIALS, WEAPONS as CHESS_WEAPONS } from "./chess/weapons";
-import { HYBRID_POWER, MATERIAL_FUSIONS, STAR_POWER } from "./chess/crafting";
+import { roster } from "./chess/roster";
+import { MARKET_PRICE, materials, weapons as chessWeapons } from "./chess/weapons";
+import { HYBRID_POWER, STAR_POWER, fusions } from "./chess/crafting";
 import { ALL_SYNERGIES } from "./chess/synergy";
 import { CHARACTERS } from "./characters";
 import { AuthStore } from "./auth-store";
 import { USER_HEADER, authMode, authRequired, authStore, bearerToken, identify, loginRedirectUrl } from "./auth";
+import { ensureContent } from "./content-load";
+import { currentRuleset } from "./chess/content";
 import { serverInfo } from "./server-info";
 import type { AuthEnv } from "./auth";
 import { loadSourceJson } from "./sidestore";
@@ -92,6 +94,7 @@ export default {
     const url = new URL(request.url);
     const parts = url.pathname.split("/").filter(Boolean);
     const origin = url.origin;
+    ensureContent(env); // 이 서버가 엑스퍼트면 배포에 담긴 콘텐츠 팩을 적용한다(한 번만)
     const enabled = authRequired(env);
 
     if (request.method === "OPTIONS") {
@@ -295,15 +298,17 @@ export default {
     // GET /api/chess -> 체스판 자동 전투의 캐릭터 20명과 기물 시너지.
     if (request.method === "GET" && parts.length === 2 && parts[0] === "api" && parts[1] === "chess") {
       return json({
-        units: ROSTER.map(({ id, nameKo, piece, faction, cost, role, hp, atk, abilityText, passive }) => ({
+        units: roster().map(({ id, nameKo, piece, faction, cost, role, hp, atk, abilityText, passive }) => ({
           id, nameKo, piece, faction, cost, role, hp, atk, abilityText, passive,
         })),
         synergies: ALL_SYNERGIES.map(({ id, piece, need, tier, nameKo, text }) => ({ id, piece, need, tier, nameKo, text })),
-        materials: MATERIALS.map((m) => ({ ...m, price: MARKET_PRICE[m.rarity] })),
-        weapons: CHESS_WEAPONS,
+        materials: materials().map((m) => ({ ...m, price: MARKET_PRICE[m.rarity] })),
+        weapons: chessWeapons(),
         // 조합: 재료 조합표(재료 둘 -> 한 단계 위 재료)와 무기 조합의 효과 배율
-        fusions: MATERIAL_FUSIONS,
+        fusions: fusions(),
         crafting: { starPower: STAR_POWER, hybridPower: HYBRID_POWER },
+        // 규칙 묶음 이름: 클라이언트가 도감을 다시 받아야 하는지 알 수 있다. (공식이면 "official")
+        ruleset: currentRuleset(),
       });
     }
 

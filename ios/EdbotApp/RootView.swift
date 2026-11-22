@@ -58,7 +58,7 @@ struct LobbyView: View {
                 Image(systemName: local ? "server.rack" : "testtube.2")
                 Text("\(local ? "로컬 서버" : "개발 서버") · \(info.name)").font(.subheadline.bold())
                 if info.edition == "expert" {
-                    Text("엑스퍼트").font(.caption2.bold())
+                    Text(info.packs.isEmpty ? "엑스퍼트" : "엑스퍼트 · 팩 \(info.packs.count)개").font(.caption2.bold())
                         .padding(.horizontal, 8).padding(.vertical, 2)
                         .background(Capsule().fill(Theme.accent.opacity(0.35)))
                 }
@@ -249,6 +249,8 @@ struct LobbyView: View {
         .panel(padding: compact ? 8 : 16)
     }
 
+    @State private var discovery = ServerDiscovery()
+
     private var serverCard: some View {
         @Bindable var model = model
         return VStack(alignment: .leading, spacing: 6) {
@@ -258,7 +260,24 @@ struct LobbyView: View {
                 .autocorrectionDisabled()
                 .keyboardType(.URL)
                 .textFieldStyle(.roundedBorder)
+            if !discovery.servers.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(discovery.servers) { found in
+                            Button {
+                                model.serverText = found.urlText
+                            } label: {
+                                Label(found.expert ? "\(found.name) · 엑스퍼트" : found.name, systemImage: "wifi")
+                                    .font(.caption.bold()).lineLimit(1)
+                            }
+                            .buttonStyle(SecondaryButtonStyle())
+                        }
+                    }
+                }
+            }
         }
+        .onAppear { discovery.start() }
+        .onDisappear { discovery.stop() }
         .panel(padding: compact ? 8 : 12)
     }
 }

@@ -120,6 +120,13 @@ final class AppModel {
         refreshServerInfo()
     }
 
+    /// QR이나 링크(commander://connect?url=...)로 받은 서버를 입력칸에 채운다.
+    func openConnectLink(_ link: URL) {
+        guard let parsed = ConnectLink(link) else { return }
+        serverText = parsed.serverURL.absoluteString
+        serverChanged()
+    }
+
     /// 서버 입력칸이 바뀌었다: 그 서버의 토큰으로 바꾸고, 서버 정보를 다시 읽는다. (입력 중에는 잠깐 기다린다)
     func serverChanged() {
         loginTask?.cancel()
@@ -127,6 +134,7 @@ final class AppModel {
         user = nil
         authToken = tokens.load()
         serverInfo = nil
+        clearChessCatalog()
         refreshServerInfo(after: 0.6)
     }
 
@@ -274,6 +282,11 @@ final class AppModel {
         guard let connection else { return }
         play(.combine)
         Task { await connection.sendCombine(a, b) }
+    }
+
+    /// 서버가 바뀌면 그 서버의 말·재료·무기 목록(팩 포함)이 다르다. 비워 두면 다음에 다시 읽는다.
+    private func clearChessCatalog() {
+        chessUnits = []; chessSynergies = []; chessMaterials = []; chessWeapons = []; chessFusions = []
     }
 
     private func loadChess(from url: URL) {

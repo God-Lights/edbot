@@ -14,7 +14,8 @@ import { ENERGY_MAX, STAR2_STATS, unitDef } from "./roster";
 import { activeSynergies, combineBonuses, neutralBonus } from "./synergy";
 import { BOARD_SIZE } from "./types";
 import { parseWeapon } from "./crafting";
-import { WEAPON_ATK } from "./weapons";
+import { activeContent } from "./content";
+import { weaponAtk } from "./weapons";
 import type { CombatOptions, CombatResult, CombatState, CombatUnit, Placement, ResourceTile, Seat } from "./types";
 
 /** 이 박자부터 모든 기물이 점점 커지는 피해를 받는다(돌발 사망). */
@@ -65,14 +66,19 @@ export function createCombat(boards: [Placement[], Placement[]], tiles: Resource
       const parts = parsed?.parts ?? [];
       const power = parsed?.power ?? 1;
       // 무기 효과는 낀 기본 무기마다 power배로 더한다. (기본 1, ★2 1.5, 융합 0.75씩)
-      const atkMult = parts.reduce((m, id) => m * (1 + ((WEAPON_ATK[id] ?? 1) - 1) * power), 1);
-      const maxHp = def.hp * k * pawnHp * (parts.includes("titanium-shield") ? 1 + 0.15 * power : 1);
+      const atkMult = parts.reduce((m, id) => m * (1 + (weaponAtk(id) - 1) * power), 1);
+      // 콘텐츠 팩이 만든 무기의 능력치(체력·받는 피해·에너지 충전)도 같은 방식으로 power배로 더한다. 공식 무기는 영향이 없다.
+      const extra = (key: "hp" | "dmgTaken" | "energy"): number =>
+        parts.reduce((m, id) => m * (1 + ((activeContent()?.weaponStats[id]?.[key] ?? 1) - 1) * power), 1);
+      const maxHp = def.hp * k * pawnHp * (parts.includes("titanium-shield") ? 1 + 0.15 * power : 1) * extra("hp");
       const unit = createUnit(state, {
         defId: def.id, seat, star: placement.star, x, y, hp: maxHp, maxHp, atk: def.atk * k * atkMult,
         energyMax: def.passive ? null : ENERGY_MAX[def.cost], piece: def.piece, summon: false, weapon,
       });
       if (parts.includes("titanium-shield")) unit.dmgMult = 1 - 0.1 * power;
       if (parts.includes("bit-dagger")) unit.energyMult = 1 + 0.35 * power;
+      unit.dmgMult *= extra("dmgTaken");
+      unit.energyMult *= extra("energy");
       if (parts.includes("ancient-staff")) {
         unit.shield = maxHp * 0.25 * power;
         unit.shieldUntilBeat = 5;

@@ -2,7 +2,7 @@
 //
 //   bun build.ts                               (지금 컴퓨터용)
 //   bun build.ts --target bun-windows-x64      (윈도우용 .exe. 다른 OS에서도 만들 수 있다)
-//   bun build.ts --edition expert              (엑스퍼트 서버: 이름만 구분한다. 플러그인은 다음 단계)
+//   bun build.ts --edition expert              (엑스퍼트 서버: plugins/ 폴더의 콘텐츠 팩을 읽는다. 바닐라에는 그 코드가 아예 없다)
 //
 // target: bun-windows-x64, bun-linux-x64, bun-darwin-arm64, bun-darwin-x64 ...
 
@@ -48,6 +48,15 @@ const result = await Bun.build({
   minify: true,
   define: { "process.env.COMMANDER_EDITION": JSON.stringify(edition) },
   plugins: [
+    {
+      // 바닐라는 콘텐츠 팩을 읽는 코드를 아예 넣지 않는다. 서버 엔진(server/src)이 부르는 content-load 와 main.ts의 plugins 를 빈 것으로 바꾼다.
+      name: "vanilla-has-no-plugins",
+      setup(build) {
+        if (edition !== "vanilla") return;
+        build.onResolve({ filter: /(^|\/)content-load$/ }, () => ({ path: join(root, "src", "runtime", "vanilla", "content-load.ts") }));
+        build.onResolve({ filter: /^\.\/plugins$/ }, () => ({ path: join(root, "src", "runtime", "vanilla", "plugins.ts") }));
+      },
+    },
     {
       name: "cloudflare-workers-shim",
       setup(build) {

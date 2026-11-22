@@ -118,9 +118,10 @@ private struct HpPill: View {
     let hp: Int
     let color: Color
     var width: CGFloat = 170
+    var maxHp: Int = chessStartHp
 
     var body: some View {
-        let ratio: Double = min(1, max(0, Double(hp) / Double(chessStartHp)))
+        let ratio: Double = min(1, max(0, Double(hp) / Double(max(1, maxHp))))
         VStack(alignment: .leading, spacing: 3) {
             HStack {
                 Text(name).font(.caption.bold()).lineLimit(1)
@@ -154,7 +155,7 @@ struct ChessHeader: View {
         let compact: Bool = vSize == .compact
         VStack(spacing: 6) {
             HStack(spacing: compact ? 10 : 18) {
-                HpPill(name: mine, hp: chess.me?.hp ?? 0, color: Theme.mine, width: compact ? 130 : 170)
+                HpPill(name: mine, hp: chess.me?.hp ?? 0, color: Theme.mine, width: compact ? 130 : 170, maxHp: chess.startHp ?? chessStartHp)
                 VStack(spacing: 2) {
                     (room.mobius == true
                          ? Text("라운드 \(chess.round) / \(chess.maxRounds) \(Image(systemName: "infinity"))")
@@ -166,7 +167,7 @@ struct ChessHeader: View {
                     }
                 }
                 .frame(minWidth: compact ? 90 : 130)
-                HpPill(name: theirs, hp: chess.opponent?.hp ?? 0, color: Theme.theirs, width: compact ? 130 : 170)
+                HpPill(name: theirs, hp: chess.opponent?.hp ?? 0, color: Theme.theirs, width: compact ? 130 : 170, maxHp: chess.startHp ?? chessStartHp)
                 Spacer()
                 Button { confirmSurrender = true } label: { Label("항복", systemImage: "flag") }
                     .buttonStyle(SecondaryButtonStyle())

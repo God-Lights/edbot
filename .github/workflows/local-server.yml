@@ -8,6 +8,7 @@ on:
     paths:
       - "local-server/**"
       - "server/src/**"
+      - "server/packs/**"
       - "server/migrations/**"
       - "web/**"
       - ".github/workflows/local-server.yml"
@@ -34,7 +35,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
-      - name: 저장소 시험 (JSON 파일, 데이터 폴더 잠금)
+      - name: 의존 패키지 설치 (QR)
+        working-directory: local-server
+        run: bun install --frozen-lockfile
+      - name: 시험 (JSON 파일, 데이터 폴더 잠금, QR, 서버 찾기 패킷)
         working-directory: local-server
         run: bun test
       - name: 소스로 실행해서 점검 (리눅스)
@@ -43,12 +47,39 @@ jobs:
           bun --preload ./src/runtime/plugin.ts src/main.ts --port 8787 --data "$RUNNER_TEMP/dev-data" --phase-scale 0.08 &
           for i in $(seq 1 30); do curl -sf localhost:8787/health >/dev/null && break; sleep 1; done
           bun scripts/smoke.ts http://localhost:8787 ADMN
+          curl -sf localhost:8787/connect | grep -q "<svg" || { echo "접속 QR 화면이 없다"; exit 1; }
           kill %1
+      - name: "엑스퍼트로 소스 실행 - 팩 적용과 바닐라의 무시 점검"
+        working-directory: local-server
+        run: |
+          d="$RUNNER_TEMP/expert-data"; mkdir -p "$d/plugins"
+          cp ../server/packs/example-pack.json "$d/plugins/example-pack.json"
+          COMMANDER_EDITION=expert bun --preload ./src/runtime/plugin.ts src/main.ts --port 8788 --data "$d" --phase-scale 0.08 &
+          for i in $(seq 1 30); do curl -sf localhost:8788/health >/dev/null && break; sleep 1; done
+          curl -s localhost:8788/api/server | tee "$RUNNER_TEMP/info.json"; echo
+          grep -q '"id":"example"' "$RUNNER_TEMP/info.json" || { echo "팩이 목록에 없다"; exit 1; }
+          curl -s localhost:8788/api/chess | grep -q "example:moon-guard" || { echo "새 캐릭터가 도감에 없다"; exit 1; }
+          bun scripts/smoke.ts http://localhost:8788 ADMN
+          kill %1
+          # 바닐라는 같은 폴더의 팩을 무시한다.
+          bun --preload ./src/runtime/plugin.ts src/main.ts --port 8789 --data "$d" --phase-scale 0.08 &
+          for i in $(seq 1 30); do curl -sf localhost:8789/health >/dev/null && break; sleep 1; done
+          curl -s localhost:8789/api/chess | grep -q "example:moon-guard" && { echo "바닐라가 팩을 읽었다"; exit 1; } || echo "바닐라는 팩을 무시했다"
+          kill %2
       - name: 윈도우용 .exe 와 리눅스용 실행파일 만들기
         working-directory: local-server
         run: |
           bun build.ts --target bun-windows-x64
+          bun build.ts --edition expert --target bun-windows-x64
           bun build.ts
+          bun build.ts --edition expert
+          ls -la dist
+          # 바닐라 실행파일에는 플러그인을 읽는 코드가 없어야 하고, 엑스퍼트에는 있어야 한다.
+          v=$(grep -a -c "__COMMANDER_PLUGIN_LOADER__" dist/commander-server.exe || true)
+          e=$(grep -a -c "__COMMANDER_PLUGIN_LOADER__" dist/commander-server-expert.exe || true)
+          echo "표지: 바닐라=$v 엑스퍼트=$e"
+          [ "$v" = "0" ] || { echo "바닐라에 플러그인 코드가 들어 있다"; exit 1; }
+          [ "$e" != "0" ] || { echo "엑스퍼트에 플러그인 코드가 없다"; exit 1; }
           sha256sum dist/* | tee dist/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
@@ -127,3 +158,22 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "불러오기 실패" }
           if (-not (Test-Path "$dir/other-data/data/players.json")) { throw "불러온 데이터가 없다" }
           Write-Host "내보내기와 불러오기가 된다."
+          # 엑스퍼트 exe: plugins 폴더의 팩이 적용된다
+          Copy-Item dist/commander-server-expert.exe $dir
+          $edir = Join-Path $env:RUNNER_TEMP "expert-test"
+          New-Item -ItemType Directory -Force "$edir/plugins" | Out-Null
+          Copy-Item server/packs/example-pack.json "$edir/plugins/example-pack.json"
+          $p = Start-Process -FilePath "$dir/commander-server-expert.exe" -ArgumentList "--port","8790","--data","$edir" -WorkingDirectory $dir -PassThru -RedirectStandardOutput "$dir/out5.log" -RedirectStandardError "$dir/err5.log"
+          $info = $null
+          for ($i = 0; $i -lt 30; $i++) {
+            try { $info = Invoke-RestMethod http://localhost:8790/api/server; break } catch { Start-Sleep -Seconds 1 }
+          }
+          $chess = (Invoke-WebRequest http://localhost:8790/api/chess -UseBasicParsing).Content
+          $connect = (Invoke-WebRequest http://localhost:8790/connect -UseBasicParsing).Content
+          Stop-Process -Id $p.Id -Force
+          Get-Content "$dir/out5.log" -ErrorAction SilentlyContinue
+          if ($null -eq $info -or $info.edition -ne "expert") { throw "엑스퍼트 exe가 엑스퍼트로 보이지 않는다" }
+          if (@($info.packs).Count -lt 1) { throw "엑스퍼트 exe에 팩이 적용되지 않았다" }
+          if (-not $chess.Contains("example:moon-guard")) { throw "새 캐릭터가 도감에 없다" }
+          if (-not $connect.Contains("<svg")) { throw "접속 QR 화면이 없다" }
+          Write-Host "엑스퍼트 exe에서 팩이 적용된다 ($($info.ruleset))."

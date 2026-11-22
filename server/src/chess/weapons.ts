@@ -1,6 +1,8 @@
 // 자원 시스템: 재료 13종과 무기 13종. 설계: docs/DESIGN-autochess.md 9장.
 // 확률 효과(출혈, 회피 등)는 난수가 아니라 "쌓였다가 터지는" 방식이라서 전투가 언제나 같은 결과를 낸다.
 
+import { activeContent } from "./content";
+
 export type Rarity = "common" | "uncommon" | "rare" | "legendary";
 
 export interface MaterialDef {
@@ -54,13 +56,20 @@ export const WEAPONS: readonly WeaponDef[] = [
   W("digital-miner-pouch", "디지털 채굴기 포대", "digital-miner", "legendary", "공격 +20%, 매 라운드 시작 때 비트 1개 생성"),
 ];
 
-export const materialDef = (id: string): MaterialDef | undefined => MATERIALS.find((m) => m.id === id);
-export const weaponDef = (id: string): WeaponDef | undefined => WEAPONS.find((w) => w.id === id);
+/** 지금 적용된 재료·무기(공식 + 팩). 팩이 없으면 MATERIALS·WEAPONS와 같다. */
+export const materials = (): readonly MaterialDef[] => activeContent()?.materials ?? MATERIALS;
+export const weapons = (): readonly WeaponDef[] => activeContent()?.weapons ?? WEAPONS;
+
+export const materialDef = (id: string): MaterialDef | undefined => materials().find((m) => m.id === id);
+export const weaponDef = (id: string): WeaponDef | undefined => weapons().find((w) => w.id === id);
 
 /** 광물 시장 가격. 전설은 팔지 않는다. */
 export const MARKET_PRICE: Record<Rarity, number | null> = { common: 3, uncommon: 5, rare: 8, legendary: null };
 
-/** 무기가 주는 공격력 배율 */
+/** 공식 무기가 주는 공격력 배율 */
 export const WEAPON_ATK: Record<string, number> = {
   "clawstone-axe": 1.15, "edcoin-sling": 1.1, "bitcoin-greatsword": 1.4, "digital-miner-pouch": 1.2,
 };
+
+/** 무기의 공격력 배율: 팩이 만든 무기는 팩의 값, 공식 무기는 위 표 */
+export const weaponAtk = (id: string): number => activeContent()?.weaponStats[id]?.atk ?? WEAPON_ATK[id] ?? 1;

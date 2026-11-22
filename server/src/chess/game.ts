@@ -1,14 +1,15 @@
 // 체스판 자동 전투의 게임 규칙: 상점, 경제, 공용 풀, ★2 합성, 라운드. Cloudflare에 의존하지 않는 순수 함수다.
 // 설계: docs/DESIGN-autochess.md 3, 4, 6장.
 
-import { POOL_COPIES, ROSTER, unitDef } from "./roster";
+import { activeContent, currentRuleset, rules } from "./content";
+import { roster, unitDef } from "./roster";
 import { recordCombat } from "./sim";
 import type { CombatRecording } from "./sim";
 import type { Placement, ResourceTile, Seat } from "./types";
 import { combine } from "./crafting";
 import type { ItemRef } from "./crafting";
 import { parseWeapon } from "./crafting";
-import { MARKET_PRICE, MATERIALS, materialDef } from "./weapons";
+import { MARKET_PRICE, materialDef, materials } from "./weapons";
 import type { Rarity } from "./weapons";
 
 export const START_HP = 30;
@@ -105,6 +106,8 @@ export interface ChessGame {
   lite: boolean;
   /** 무한 모드: 전투를 뫼비우스 규칙으로 한다. */
   mobius: boolean;
+  /** 이 판을 시작할 때의 규칙 묶음 이름. 서버의 콘텐츠 팩이 바뀐 뒤에는 옛 판을 이어 가지 않는다. 예전 판에는 없다("official"). */
+  ruleset?: string;
   round: number;
   rngState: number;
   nextUid: number;
@@ -151,7 +154,7 @@ function nextRandom(game: ChessGame): number {
 // ---- 만들기 ----
 
 function emptyPlayer(seat: Seat): ChessPlayer {
-  return { seat, hp: START_HP, gold: START_GOLD, shop: Array(SHOP_SIZE).fill(null), bench: Array(BENCH_SIZE).fill(null), board: [], done: false,
+  return { seat, hp: rules().startHp, gold: rules().startGold, shop: Array(SHOP_SIZE).fill(null), bench: Array(BENCH_SIZE).fill(null), board: [], done: false,
     materials: {}, weapons: {}, smelters: Array(SMELTER_COUNT).fill(null), marketBought: false };
 }
 
@@ -161,9 +164,13 @@ export const LITE_IDS: readonly string[] = [
   "lappus", "for-the-more", "raufaino", "obelion", "marshal-berg",
 ];
 
+/** 지금 적용된 입문 모드 캐릭터 목록(공식 + 팩이 lite로 표시한 캐릭터) */
+export const liteIds = (): readonly string[] => activeContent()?.liteIds ?? LITE_IDS;
+
 export function createChessGame(seed: number, lite = false, mobius = false): ChessGame {
   const pool: Record<string, number> = {};
-  for (const def of ROSTER) if (!lite || LITE_IDS.includes(def.id)) pool[def.id] = POOL_COPIES[def.cost];
+  const lites = liteIds();
+  for (const def of roster()) if (!lite || lites.includes(def.id)) pool[def.id] = rules().poolCopies[def.cost];
   return {
     resources: !lite,
     history: [],
@@ -171,6 +178,7 @@ export function createChessGame(seed: number, lite = false, mobius = false): Che
     market: [],
     lite,
     mobius,
+    ruleset: currentRuleset(),
     round: 0,
     rngState: seed | 0,
     nextUid: 1,
@@ -186,9 +194,9 @@ export function createChessGame(seed: number, lite = false, mobius = false): Che
 // ---- 규칙 값 ----
 
 /** 판에 올릴 수 있는 기물 수: 1라운드 3, 이후 +1, 최대 7 */
-export const deployCap = (round: number): number => Math.min(MAX_DEPLOY, Math.max(3, round + 2));
+export const deployCap = (round: number): number => Math.min(rules().maxDeploy, Math.max(3, round + 2));
 
-export const interest = (gold: number): number => Math.min(MAX_INTEREST, Math.floor(gold / 10));
+export const interest = (gold: number): number => Math.min(rules().maxInterest, Math.floor(gold / 10));
 
 /** 상점의 가격별 등장 확률(%) [1골드, 2골드, 3골드, 4골드]. 라운드가 갈수록 비싼 캐릭터가 늘어난다. */
 export function shopOdds(round: number, lite = false): [number, number, number, number] {
@@ -202,11 +210,11 @@ export function shopOdds(round: number, lite = false): [number, number, number, 
 export function rerollCost(player: ChessPlayer): number {
   // 리치몬드가 판에 있으면 새로고침 -1골드(최소 1)
   const richmond = player.board.some((u) => u.defId === "richmond");
-  return Math.max(1, REROLL_COST - (richmond ? 1 : 0));
+  return Math.max(1, rules().rerollCost - (richmond ? 1 : 0));
 }
 
 export function prepSeconds(round: number): number {
-  return round === 1 ? FIRST_PREP_SECONDS : PREP_SECONDS;
+  return round === 1 ? rules().firstPrepSeconds : rules().prepSeconds;
 }
 
 // ---- 상점과 풀 ----
@@ -217,7 +225,7 @@ function returnShopToPool(game: ChessGame, player: ChessPlayer): void {
 }
 
 function drawFromPool(game: ChessGame, cost: 1 | 2 | 3 | 4): string | null {
-  const candidates = ROSTER.filter((d) => d.cost === cost && (game.pool[d.id] ?? 0) > 0);
+  const candidates = roster().filter((d) => d.cost === cost && (game.pool[d.id] ?? 0) > 0);
   if (candidates.length === 0) return null;
   const total = candidates.reduce((sum, d) => sum + (game.pool[d.id] ?? 0), 0);
   let roll = nextRandom(game) * total;
@@ -264,8 +272,8 @@ function rollRarity(game: ChessGame, includeLegendary: boolean): Rarity {
 
 function rollMaterial(game: ChessGame, includeLegendary: boolean, exclude: string[] = []): string {
   const rarity = rollRarity(game, includeLegendary);
-  const options = MATERIALS.filter((m) => m.rarity === rarity && !exclude.includes(m.id));
-  const pool = options.length > 0 ? options : MATERIALS.filter((m) => m.rarity === rarity);
+  const options = materials().filter((m) => m.rarity === rarity && !exclude.includes(m.id));
+  const pool = options.length > 0 ? options : materials().filter((m) => m.rarity === rarity);
   return pool[Math.floor(nextRandom(game) * pool.length) % pool.length]!.id;
 }
 
@@ -310,7 +318,7 @@ export function startRound(game: ChessGame): void {
       if (pouches > 0) player.materials.bit = (player.materials.bit ?? 0) + pouches;
       player.marketBought = false;
     }
-    player.gold += BASE_INCOME + interest(player.gold);
+    player.gold += rules().baseIncome + interest(player.gold);
     player.done = false;
     rollShop(game, player);
   }
@@ -576,7 +584,7 @@ export function finishRound(game: ChessGame): void {
   if (a <= 0 || b <= 0) {
     // 둘 다 0 이하면 체력이 더 많이 남은 쪽, 같으면 라운드 승수가 많은 쪽, 그래도 같으면 무승부
     game.over = { winner: decide(game, a, b), reason: "hp" };
-  } else if (game.round >= MAX_ROUNDS) {
+  } else if (game.round >= rules().maxRounds) {
     game.over = { winner: decide(game, a, b), reason: "rounds" };
   }
 }

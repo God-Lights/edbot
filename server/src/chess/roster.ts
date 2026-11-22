@@ -1,9 +1,10 @@
 // 체스판 자동 전투의 캐릭터 20명. 설계: docs/DESIGN-autochess.md 7장.
 // 숫자는 가격별 기준값에 역할 배율을 곱해서 정하고, 시뮬레이션으로 조정한다.
 
+import { OFFICIAL_RULES, activeContent } from "./content";
 import type { AbilityId, Piece, Role, UnitDef } from "./types";
 
-const BASE: Record<1 | 2 | 3 | 4, { hp: number; atk: number; energy: number }> = {
+export const BASE: Record<1 | 2 | 3 | 4, { hp: number; atk: number; energy: number }> = {
   1: { hp: 500, atk: 45, energy: 60 },
   2: { hp: 650, atk: 55, energy: 80 },
   3: { hp: 850, atk: 70, energy: 100 },
@@ -14,7 +15,7 @@ const BASE: Record<1 | 2 | 3 | 4, { hp: number; atk: number; energy: number }> =
 export const ATK_SCALE = 2.5;
 
 /** 역할이 체력과 공격에 주는 배율 */
-const ROLE: Record<Role, { hp: number; atk: number }> = {
+export const ROLE: Record<Role, { hp: number; atk: number }> = {
   탱커: { hp: 1.25, atk: 0.8 },
   딜러: { hp: 0.85, atk: 1.2 },
   서포터: { hp: 0.9, atk: 0.8 },
@@ -25,7 +26,7 @@ const ROLE: Record<Role, { hp: number; atk: number }> = {
 };
 
 /** 기물이 체력과 공격에 주는 보정 (체스판에서 기물마다 움직임의 자유가 달라서, 밸런스 측정으로 맞춘다) */
-const PIECE_TUNING: Record<Piece, { hp: number; atk: number }> = {
+export const PIECE_TUNING: Record<Piece, { hp: number; atk: number }> = {
   king: { hp: 1, atk: 1 },
   queen: { hp: 0.9, atk: 0.8 },
   rook: { hp: 1.1, atk: 1.15 },
@@ -42,7 +43,7 @@ const TWEAKS: Record<string, { hp?: number; atk?: number }> = {
   "nut-wolf": { atk: 1.1 },
 };
 
-function def(
+export function def(
   id: string, nameKo: string, piece: Piece, faction: string, cost: 1 | 2 | 3 | 4, role: Role,
   ability: AbilityId, abilityText: string, passive = false,
 ): UnitDef {
@@ -81,10 +82,14 @@ export const ROSTER: readonly UnitDef[] = [
 export const ENERGY_MAX: Record<1 | 2 | 3 | 4, number> = { 1: BASE[1].energy, 2: BASE[2].energy, 3: BASE[3].energy, 4: BASE[4].energy };
 
 /** 공용 풀의 가격별 복사본 수 */
-export const POOL_COPIES: Record<1 | 2 | 3 | 4, number> = { 1: 9, 2: 8, 3: 6, 4: 5 };
+export const POOL_COPIES: Record<1 | 2 | 3 | 4, number> = OFFICIAL_RULES.poolCopies;
+
+/** 지금 적용된 캐릭터 목록(공식 + 팩). 팩이 없으면 ROSTER와 같다. */
+export const roster = (): readonly UnitDef[] => activeContent()?.units ?? ROSTER;
 
 export function unitDef(id: string): UnitDef | undefined {
-  return ROSTER.find((d) => d.id === id);
+  const content = activeContent();
+  return content ? content.unitMap.get(id) : ROSTER.find((d) => d.id === id);
 }
 
 /** ★2의 능력치 배율 */

@@ -12,6 +12,8 @@ import { JsonRankingStore, acquireLock } from "./runtime/json-store";
 import { ObjectNamespace } from "./runtime/objects";
 import { installWebSocketGlobals, upgradeTarget } from "./runtime/websocket";
 import type { ServerSocket } from "./runtime/websocket";
+import { connectLink, connectPage, qrTerminal } from "./connect";
+import { startMdns } from "./mdns";
 import packageInfo from "../package.json" with { type: "json" };
 
 installWebSocketGlobals();
@@ -123,6 +125,13 @@ if (subcommand === "export" || subcommand === "import") {
 
 // ---- Cloudflare가 주던 것들 ----
 
+// 엑스퍼트 서버만 plugins/ 의 콘텐츠 팩을 읽는다. 바닐라 실행파일에서는 이 분기와 plugins.ts 가 빌드에서 빠진다.
+let pluginReport: { accepted: Array<{ id: string; name: string; version: string }>; rejected: Array<{ id: string; errors: string[] }>; notes: string[]; ruleset: string } | null = null;
+if (process.env.COMMANDER_EDITION === "expert") {
+  const { loadPlugins } = await import("./plugins");
+  pluginReport = loadPlugins(dataDir);
+}
+
 const serverName = option("name", "내 컴퓨터 서버");
 const env: Record<string, unknown> = {
   STORE: store,
@@ -175,6 +184,10 @@ const server = Bun.serve<SocketData>({
   idleTimeout: 120,
   async fetch(request, srv) {
     const url = new URL(request.url);
+    if (request.method === "GET" && url.pathname === "/connect") {
+      const urls = lanAddresses().map((ip) => `http://${ip}:${port}`);
+      return new Response(connectPage(serverName, urls), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
+    }
     if ((request.method === "GET" || request.method === "HEAD") && !API_PREFIXES.some((p) => url.pathname.startsWith(p))) {
       const file = staticFile(url.pathname);
       if (file) return file;
@@ -222,7 +235,26 @@ function lanAddresses(): string[] {
 console.log(`${serverName} (COMMANDER 로컬 서버 ${packageInfo.version}, ${edition})  |  데이터: ${dataDir}`);
 console.log(`  이 컴퓨터:        http://localhost:${server.port}`);
 for (const ip of lanAddresses()) console.log(`  같은 와이파이:    http://${ip}:${server.port}`);
+const lan = lanAddresses();
+if (lan[0]) {
+  console.log(`  폰으로 접속: 같은 와이파이에서 앱의 서버 목록에 뜨거나, 아래 QR을 폰 카메라로 찍으세요. (화면: http://localhost:${server.port}/connect)`);
+  console.log(qrTerminal(connectLink(`http://${lan[0]}:${server.port}`, serverName)).split("\n").map((l) => "    " + l).join("\n"));
+}
+const stopMdns = process.argv.includes("--no-discovery")
+  ? null
+  : startMdns(
+      { name: serverName, ips: lan, port: server.port!, txt: { name: serverName, ip: lan.join(","), port: String(server.port), ed: edition === "expert" ? "expert" : "vanilla", proto: "1" } },
+      (m) => console.warn(`  [주의] ${m}`),
+    );
 if (woken > 0) console.log(`  이어서 진행하는 방: ${woken}개`);
+if (pluginReport) {
+  const { accepted, rejected, notes, ruleset } = pluginReport;
+  console.log(`  플러그인: ${accepted.length}개 적용${accepted.length ? ` (${accepted.map((p) => `${p.name} ${p.version}`).join(", ")})` : ""}, 규칙 묶음 ${ruleset}`);
+  for (const note of notes) console.warn(`  [플러그인 주의] ${note}`);
+  for (const r of rejected) for (const line of r.errors) console.warn(`  [플러그인 거절] ${line}`);
+} else if (edition !== "expert" && existsSync(join(dataDir, "plugins"))) {
+  console.log("  이 서버는 바닐라라서 plugins/ 폴더를 읽지 않는다. (엑스퍼트 서버에서 쓴다)");
+}
 for (const note of store.notes) console.warn(`  [주의] ${note}`);
 if (backedUp) console.log(`  백업: ${backedUp}`);
 const backupTimer = setInterval(() => store.backup(), 24 * 60 * 60 * 1000);
@@ -235,6 +267,7 @@ function shutdown(): void {
   closing = true;
   console.log("\n저장하고 끄는 중...");
   for (const ns of Object.values(namespaces)) ns.flushAll();
+  stopMdns?.();
   lock.release();
   void server.stop(true).then(() => process.exit(0));
 }

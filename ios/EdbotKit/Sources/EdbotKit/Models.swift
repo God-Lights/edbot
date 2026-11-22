@@ -550,6 +550,14 @@ public struct ServerInfo: Codable, Equatable, Sendable {
         case production, development, local
     }
 
+    /// 적용된 콘텐츠 팩 한 개 (엑스퍼트 서버)
+    public struct Pack: Codable, Equatable, Sendable {
+        public let id: String
+        public let name: String
+        public let version: String
+        public init(id: String, name: String, version: String) { self.id = id; self.name = name; self.version = version }
+    }
+
     public let protocolVersion: Int
     public let name: String
     public let env: Environment
@@ -558,16 +566,32 @@ public struct ServerInfo: Codable, Equatable, Sendable {
     public let edition: String
     public let version: String
     public let ruleset: String
+    /// 적용된 콘텐츠 팩. 팩이 없거나 오래된 서버면 빈 목록.
+    public let packs: [Pack]
     /// 판이 끝나면 전적이 남는 서버인가
     public let ranking: Bool
     /// 게스트(학번과 이름) 방을 쓸 수 있는가
     public let guestRooms: Bool
 
     enum CodingKeys: String, CodingKey {
-        case protocolVersion = "protocol", name, env, authMode, edition, version, ruleset, ranking, guestRooms
+        case protocolVersion = "protocol", name, env, authMode, edition, version, ruleset, packs, ranking, guestRooms
     }
 
-    public init(protocolVersion: Int, name: String, env: Environment, authMode: AuthMode, edition: String = "vanilla", version: String = "0.0.0", ruleset: String = "official", ranking: Bool = true, guestRooms: Bool = true) {
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        protocolVersion = try c.decode(Int.self, forKey: .protocolVersion)
+        name = try c.decode(String.self, forKey: .name)
+        env = try c.decode(Environment.self, forKey: .env)
+        authMode = try c.decode(AuthMode.self, forKey: .authMode)
+        edition = try c.decodeIfPresent(String.self, forKey: .edition) ?? "vanilla"
+        version = try c.decodeIfPresent(String.self, forKey: .version) ?? "0.0.0"
+        ruleset = try c.decodeIfPresent(String.self, forKey: .ruleset) ?? "official"
+        packs = try c.decodeIfPresent([Pack].self, forKey: .packs) ?? []
+        ranking = try c.decodeIfPresent(Bool.self, forKey: .ranking) ?? true
+        guestRooms = try c.decodeIfPresent(Bool.self, forKey: .guestRooms) ?? true
+    }
+
+    public init(protocolVersion: Int, name: String, env: Environment, authMode: AuthMode, edition: String = "vanilla", version: String = "0.0.0", ruleset: String = "official", packs: [Pack] = [], ranking: Bool = true, guestRooms: Bool = true) {
         self.protocolVersion = protocolVersion
         self.name = name
         self.env = env
@@ -575,6 +599,7 @@ public struct ServerInfo: Codable, Equatable, Sendable {
         self.edition = edition
         self.version = version
         self.ruleset = ruleset
+        self.packs = packs
         self.ranking = ranking
         self.guestRooms = guestRooms
     }

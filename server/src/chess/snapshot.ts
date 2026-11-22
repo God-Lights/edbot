@@ -1,7 +1,8 @@
 // 체스판 자동 전투 상태를 보는 사람에 맞춰 줄인다. 상대의 상점, 골드, 판은 준비 단계에서 보이지 않는다.
 
 import type { ChessSelfSnapshot, ChessSnapshot, ChessUnitView, Seat } from "../protocol";
-import { MAX_ROUNDS, bothDone, deployCap, interest, rerollCost, shopOdds, BASE_INCOME } from "./game";
+import { rules } from "./content";
+import { bothDone, deployCap, interest, rerollCost, shopOdds } from "./game";
 import type { ChessGame, ChessPlayer } from "./game";
 import { activeSynergies } from "./synergy";
 import { MARKET_PRICE, materialDef } from "./weapons";
@@ -18,7 +19,7 @@ function self(player: ChessPlayer): ChessSelfSnapshot {
     board: player.board.map((u) => ({ ...view(u), col: u.col, row: u.row })),
     done: player.done,
     rerollCost: rerollCost(player),
-    nextIncome: BASE_INCOME + interest(player.gold),
+    nextIncome: rules().baseIncome + interest(player.gold),
     synergies: activeSynergies(player.board.map((u) => u.defId)),
     materials: Object.fromEntries(Object.entries(player.materials).filter(([, n]) => n > 0)),
     weapons: Object.fromEntries(Object.entries(player.weapons).filter(([, n]) => n > 0)),
@@ -31,7 +32,8 @@ export function toChessSnapshot(game: ChessGame, viewerSeat: Seat | null, showCo
   const other = viewerSeat === null ? null : game.players[viewerSeat === 0 ? 1 : 0];
   return {
     round: game.round,
-    maxRounds: MAX_ROUNDS,
+    maxRounds: rules().maxRounds,
+    startHp: rules().startHp,
     deployCap: deployCap(game.round),
     shopOdds: shopOdds(game.round, game.lite),
     lite: game.lite,
