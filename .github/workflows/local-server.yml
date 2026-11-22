@@ -45,7 +45,7 @@ jobs:
           for i in $(seq 1 30); do curl -sf localhost:8787/health >/dev/null && break; sleep 1; done
           bun scripts/smoke.ts http://localhost:8787 ADMN
           kill %1
-      - name: 엑스퍼트로 소스 실행: 팩 적용과 바닐라의 무시 점검
+      - name: "엑스퍼트로 소스 실행 - 팩 적용과 바닐라의 무시 점검"
         working-directory: local-server
         run: |
           d="$RUNNER_TEMP/expert-data"; mkdir -p "$d/plugins"
