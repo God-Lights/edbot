@@ -82,6 +82,7 @@ export interface ReplayRound {
   survivors: [number, number];
   damage: [number, number];
   beats: number;
+  mobius?: boolean;
 }
 
 export interface CombatRecord extends CombatRecording {
@@ -567,7 +568,7 @@ export function finishRound(game: ChessGame): void {
   game.history.push({
     round: game.round, boards: combat.boards, units: combat.units, frames: combat.frames, events: combat.events,
     tiles: combat.tiles, mines: combat.mines, winner: combat.result.winner, survivors: combat.result.survivors,
-    damage: combat.damage, beats: combat.result.beats,
+    damage: combat.damage, beats: combat.result.beats, ...(game.mobius ? { mobius: true } : {}),
   });
   game.lastRound = { round: game.round, winner: combat.result.winner, damage: combat.damage, survivors: combat.result.survivors };
 

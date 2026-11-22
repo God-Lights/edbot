@@ -40,6 +40,7 @@ function lobbyView() {
       <div class="mgroup">
         <div class="panel stack tight">
           <button class="btn primary wide" data-act="quick"${S.quick ? " disabled" : ""}>⚔ 빠른 대전</button>
+          <label class="chk" title="앞면·밑면, 이음매, 웜홀이 있는 뫼비우스 규칙으로 싸워요"><input type="checkbox" id="mobius"${S.mobius ? " checked" : ""}> 🌀 무한 모드로 만들기</label>
           <button class="btn sec wide" data-act="create"${S.creating ? " disabled" : ""}>${S.creating ? "방을 만드는 중..." : "방 만들기"}</button>
           <form class="row tight" data-form="join"><input id="code" class="input code" maxlength="4" placeholder="방 코드 4자리" autocapitalize="characters" autocomplete="off" value="${esc(S.roomCode)}">
             <button class="btn sec" type="submit">입장</button></form>
@@ -56,6 +57,7 @@ function lobbyView() {
               .map(([v, t]) => `<option value="${v}"${S.botLevel === v ? " selected" : ""}>${t}</option>`).join("")}</select></label>
           <button class="btn sec wide" data-act="join-code" data-code="ADMN" title="봇과 한 판, 쉬운 캐릭터만">🤖 연습 대전</button>
           <button class="btn sec wide" data-act="join-code" data-code="ADMF" title="봇, 모든 캐릭터와 자원 시스템">🤖 전체 대전</button>
+          <button class="btn sec wide" data-act="join-code" data-code="ADMX" title="봇, 앞면·밑면과 이음매가 있는 무한 모드">🌀 무한 대전</button>
         </div>
         <div class="panel two tight"><button class="btn sec" data-act="ranking">🏆 랭킹</button><button class="btn sec" data-act="guide" data-tab="flow">📖 가이드</button></div>
       </div>
@@ -164,7 +166,7 @@ function openLive() {
 
 async function createGuestRoom() {
   update({ creating: true, message: "" });
-  const result = await api.createRoom(true);
+  const result = await api.createRoom(true, S.mobius);
   update({ creating: false });
   if (result.code) update({ modal: "guestroom", guestRoom: result.code });
   else if (result.status === 401) toast("게스트 방은 GL 로그인 후에 만들 수 있어요.");
@@ -194,10 +196,11 @@ function roomLobbyView(room) {
   const ready = me()?.ready;
   const cards = room.players.map((p) => `<div class="panel pcard"><b class="big">${esc(p.name)}</b><div class="${p.ready ? "good" : "sub"}">${p.connected ? (p.ready ? "준비 완료" : "준비 중") : "연결 끊김"}</div></div>`).join("");
   return `<div class="roomlobby"><div class="sub">방 코드</div><div class="code-big">${esc(room.code)}</div>
+    ${room.mobius ? `<div class="badge mob" title="앞면·밑면, 이음매, 웜홀이 있는 뫼비우스 규칙">🌀 무한 모드</div>` : ""}
     ${room.players.length < 2 ? `<div class="sub">상대를 기다리는 중... 방 코드를 알려 주세요.</div>` : ""}
     <div class="row center">${cards}</div>
     <button class="btn primary" data-act="ready">${ready ? "준비 취소" : "준비"}</button>
-    ${["ADMN", "ADMF"].includes(room.code) ? "" : `<button class="btn sec" data-act="copy-watch" data-code="${esc(room.code)}">👁 관전 링크 복사</button>`}</div>`;
+    ${["ADMN", "ADMF", "ADMX"].includes(room.code) ? "" : `<button class="btn sec" data-act="copy-watch" data-code="${esc(room.code)}">👁 관전 링크 복사</button>`}</div>`;
 }
 
 function resultView(room) {
@@ -458,7 +461,7 @@ async function cancelQuick() {
 
 async function createRoom() {
   update({ creating: true, message: "" });
-  const result = await api.createRoom();
+  const result = await api.createRoom(false, S.mobius);
   update({ creating: false });
   if (result.code) join(result.code);
   else if (result.status === 401) toast("로그인이 필요해요. 로그인하기를 눌러 주세요.");
@@ -556,6 +559,11 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("change", (event) => {
+  if (event.target.id === "mobius") {
+    S.mobius = event.target.checked;
+    store("edbot.mobius", S.mobius ? "1" : "0");
+    return;
+  }
   if (event.target.id === "botlevel") {
     S.botLevel = event.target.value;
     store("edbot.botLevel", S.botLevel);

@@ -46,7 +46,7 @@ export function gameBar(room, chess) {
     ? `<span class="opp-state ${chess.opponent.done ? "good" : ""}" title="상대 ${chess.opponent.boardCount}기 배치">${chess.opponent.done ? "준비 끝" : "준비 중"}</span>` : "";
   const btn = (act, label, title, extra = "") => `<button class="ibtn" data-act="${act}" title="${title}"${extra}>${label}</button>`;
   return `<header class="gbar">
-    <div class="gb-side"><b class="mono gb-code">${esc(room.code)}</b>${hpPill(mine, chess.me?.hp ?? 0, "var(--mine)")}</div>
+    <div class="gb-side"><b class="mono gb-code">${esc(room.code)}</b>${room.mobius ? `<span class="badge mob" title="무한 모드">🌀</span>` : ""}${hpPill(mine, chess.me?.hp ?? 0, "var(--mine)")}</div>
     <div class="gb-center"><b>R${chess.round}/${chess.maxRounds}</b>
       <span class="sub gb-timer" data-timer="${room.phaseEndsAt ?? ""}" data-label="${PHASE_NAME[room.phase]}">${PHASE_NAME[room.phase]} ${countdown(conn.remainingMs(room.phaseEndsAt))}</span>
       ${last ? `<span class="gb-last" title="${esc(last)}">${esc(last)}</span>` : ""}</div>
@@ -81,7 +81,7 @@ function boardHtml(chess, me, seat) {
       }</div>`;
     }
   }
-  return `<div class="board">${html}</div>`;
+  return `<div class="board${chess.mobius ? " mobius" : ""}">${html}</div>`;
 }
 
 function benchHtml(me, canAuto) {

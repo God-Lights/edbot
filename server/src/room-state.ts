@@ -1155,6 +1155,7 @@ export function toSnapshot(state: RoomState, now: number, viewerId?: string): Ro
   const viewer = viewerId ? state.players.find((p) => p.id === viewerId) : undefined;
   return {
     isHost: !!viewer?.userId && !!state.hostId && viewer.userId === state.hostId,
+    mobius: state.mobius === true,
     code: state.code,
     phase: state.phase,
     phaseStartedAt: state.phaseStartedAt,

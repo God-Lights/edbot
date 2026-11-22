@@ -69,6 +69,8 @@ const SOUNDS = {
   full: () => { tone(880, 0.08, { type: "triangle", vol: 0.06 }); tone(1175, 0.16, { type: "triangle", vol: 0.06, delay: 0.07 }); },
   roundStart: () => { tone(196, 0.5, { type: "sine", vol: 0.07 }); tone(392, 0.4, { type: "triangle", vol: 0.04, delay: 0.02 }); },
   combatStart: () => { tone(90, 0.18, { type: "sine", vol: 0.1, slide: -40 }); tone(90, 0.18, { type: "sine", vol: 0.1, slide: -40, delay: 0.2 }); noise(0.1, 0.04, 0.2); },
+  ghost: () => { tone(660, 0.22, { type: "sine", vol: 0.05, slide: -380 }); tone(330, 0.3, { type: "triangle", vol: 0.03, slide: 220, delay: 0.08 }); },
+  surface: () => { tone(220, 0.2, { type: "sine", vol: 0.06, slide: 700 }); [660, 880, 1175].forEach((f, i) => tone(f, 0.14, { type: "triangle", vol: 0.05, delay: 0.12 + i * 0.05 })); },
   tick: () => tone(1000, 0.03, { type: "square", vol: 0.025 }),
   suddenDeath: () => { tone(110, 0.5, { type: "sawtooth", vol: 0.05 }); tone(116, 0.5, { type: "sawtooth", vol: 0.04 }); },
 };

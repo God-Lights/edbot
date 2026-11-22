@@ -29,7 +29,7 @@ const TEST_ROOM_CODE = "ADMN";
 /** 전체 캐릭터와 자원 시스템까지 켜진 봇 대전 (연습을 넘어선 판). */
 const FULL_TEST_ROOM_CODE = "ADMF";
 /** 무한 모드(뫼비우스 규칙)의 봇 대전. 전체 캐릭터와 자원 시스템이 켜져 있다. */
-const INFINITE_TEST_ROOM_CODE = "ADMI";
+const INFINITE_TEST_ROOM_CODE = "ADMX";
 const isTestCode = (code: string): boolean => code === TEST_ROOM_CODE || code === FULL_TEST_ROOM_CODE || code === INFINITE_TEST_ROOM_CODE;
 
 const CORS_HEADERS = {

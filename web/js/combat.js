@@ -3,7 +3,7 @@
 import { gameBar, token } from "./prep.js";
 import { sfx } from "./sfx.js";
 import { S, conn, materialInfo, mySeat, synergyInfo } from "./state.js";
-import { BOARD, DEPLOY_ROWS, MINE, RARITY_COLOR, THEIRS, esc } from "./util.js";
+import { BOARD, DEPLOY_ROWS, MINE, MOBIUS_SUDDEN_BEAT, RARITY_COLOR, SUDDEN_BEAT, THEIRS, WORMHOLE_BEATS, esc } from "./util.js";
 
 /** 박자 위치(소수)에서 기물 i의 모습. 두 박자 사이는 위치·체력만 부드럽게 잇는다. */
 export function interpolated(combat, position, index) {
@@ -12,15 +12,21 @@ export function interpolated(combat, position, index) {
   const k = Math.min(Math.floor(clamped), last);
   const a = combat.frames[k]?.[index];
   if (!a) return null; // 아직 나타나지 않은 소환수
-  const unit = (v) => ({ x: v[0], y: v[1], hp: v[2], energy: v[3], shield: v[4], alive: (v[5] & 1) !== 0 });
+  // flags: 1 생존, 2 승급, 4 밑면(유령), 8 이상 = 웜홀 게이지 g
+  const unit = (v) => ({ x: v[0], y: v[1], hp: v[2], energy: v[3], shield: v[4], alive: (v[5] & 1) !== 0, face: (v[5] >> 2) & 1, g: v[5] >> 3, fade: 1 });
   const A = unit(a);
   const b = k < last ? combat.frames[k + 1]?.[index] : null;
   if (!b) return A;
   const B = unit(b);
   if (!A.alive || !B.alive) return A;
   const t = clamped - k;
+  // 이음매를 넘는 박자: 판을 가로질러 미끄러지지 않고, 그 자리에서 사라졌다가 반대편에서 나타난다.
+  if (A.face !== B.face && (Math.abs(A.x - B.x) > 1.5 || Math.abs(A.y - B.y) > 1.5)) {
+    return t < 0.5 ? { ...A, fade: 1 - 2 * t } : { ...B, fade: 2 * t - 1 };
+  }
   const mix = (p, q) => p + (q - p) * t;
-  return { x: mix(A.x, B.x), y: mix(A.y, B.y), hp: mix(A.hp, B.hp), energy: mix(A.energy, B.energy), shield: mix(A.shield, B.shield), alive: true };
+  const to = t < 0.5 ? A : B;
+  return { x: mix(A.x, B.x), y: mix(A.y, B.y), hp: mix(A.hp, B.hp), energy: mix(A.energy, B.energy), shield: mix(A.shield, B.shield), alive: true, face: to.face, g: to.g, fade: 1 };
 }
 
 export function minedTiles(combat, beat) {
@@ -44,12 +50,13 @@ export function arenaHtml(combat, seat) {
   }
   const units = combat.units
     .map((u, i) => `<div class="au" data-i="${i}" style="display:none">${token(u.defId, u.star, { tint: u.seat === seat ? MINE : THEIRS, armed: !!u.weapon })}
+      <i class="whring"></i><i class="gbadge">👻</i>
       <div class="ubar"><i class="shield"></i><div><b style="background:${u.seat === seat ? MINE : THEIRS}"></b></div></div></div>`)
     .join("");
   const tiles = combat.tiles
     .map((t, i) => `<text class="atile" data-t="${i}" fill="${RARITY_COLOR[materialInfo(t.material)?.rarity ?? "common"]}" text-anchor="middle" dominant-baseline="central" font-size="0.55">◆</text>`)
     .join("");
-  return `<div class="arena-wrap"><div class="arena" id="arena">${cells}${units}
+  return `<div class="arena-wrap"><div class="arena${combat.mobius ? " mobius" : ""}" id="arena">${cells}${units}
     <svg class="fx" viewBox="0 0 ${BOARD} ${BOARD}" preserveAspectRatio="none">${tiles}<g id="lines"></g></svg>
     <div class="fxlayer" id="fxlayer"></div>
     <div class="sd" id="sd" style="display:none">돌발 사망!</div>
@@ -90,6 +97,9 @@ export function playArena(combat, seat, getPos) {
   const flip = (x, y) => (seat === 0 ? [x, y] : [BOARD - 1 - x, BOARD - 1 - y]);
   const fxlayer = arena.querySelector("#fxlayer");
   const sd = arena.querySelector("#sd");
+  const suddenBeat = combat.mobius ? MOBIUS_SUDDEN_BEAT : SUDDEN_BEAT;
+  // 분신 연동: 'clone' 이벤트의 [본체 번호, 분신 번호]를 모아 둔다.
+  const cloneLinks = combat.events.filter((e) => e[1] === "clone").map((e) => [e[2], e[3]]);
   let spawned = null; // 마지막으로 연출을 낸 박자
   let bannerSounded = false;
   let sdSounded = false;
@@ -161,6 +171,10 @@ export function playArena(combat, seat, getPos) {
       if (e[1] === "attack" && e[3] >= 0) lunge(e[2], e[3], j);
       if (e[1] === "ability" && a) { ring(x, y, "#b040be"); sfx.play("ability"); }
       else if (e[1] === "death") sfx.play("death");
+      else if (e[1] === "ghost" && a) { floatText(x, y, "👻", "ghost"); sfx.play("ghost"); }
+      else if (e[1] === "surface" && a) { ring(x, y, "#59ccbf"); floatText(x, y, "↑ 웜홀", "wormhole"); sfx.play("surface"); }
+      else if (e[1] === "clone" && a) floatText(x, y, "분신!", "promo");
+      else if (e[1] === "stone" && a) floatText(x, y, "🗿 석화", "stone");
       else if (e[1] === "promote" && a) { floatText(x, y, "♛ 승급!", "promo"); sfx.play("promote"); }
       else if (e[1] === "mine") {
         const tile = combat.tiles[e[3]];
@@ -182,19 +196,29 @@ export function playArena(combat, seat, getPos) {
     if (spawned === null) spawned = k - 1;
     if (k - spawned > 3) spawned = k - 1;
     while (spawned < k && pos < combat.beats) { spawned += 1; spawnBeat(spawned); }
-    sd.style.display = k + 1 >= 20 && pos < combat.beats ? "" : "none";
-    if (k + 1 >= 20 && !sdSounded) { sdSounded = true; sfx.play("suddenDeath"); }
+    sd.style.display = k + 1 >= suddenBeat && pos < combat.beats ? "" : "none";
+    if (k + 1 >= suddenBeat && !sdSounded) { sdSounded = true; sfx.play("suddenDeath"); }
 
+    // 이번 프레임의 모습. 앞면 기물이 서 있는 칸을 모아 두면, 같은 칸의 유령을 살짝 비켜 그릴 수 있다.
+    const frames = combat.units.map((_, i) => interpolated(combat, pos, i));
+    const frontCells = new Set();
+    frames.forEach((f) => { if (f?.alive && f.face === 0) frontCells.add(`${Math.round(f.x)},${Math.round(f.y)}`); });
+    const shown = new Map();
     combat.units.forEach((u, i) => {
       const el = els[i];
-      const f = interpolated(combat, pos, i);
+      const f = frames[i];
       if (!f || !f.alive) { el.style.display = "none"; return; }
       const [x, y] = flip(f.x, f.y);
+      shown.set(i, [x, y]);
       el.style.display = "";
       el.style.transform = `translate(${x * 100}%, ${y * 100}%)`;
+      el.classList.toggle("ghost", f.face === 1);
+      el.classList.toggle("stack", f.face === 1 && frontCells.has(`${Math.round(f.x)},${Math.round(f.y)}`));
+      el.classList.toggle("wh-open", f.face === 1 && f.g >= WORMHOLE_BEATS);
+      if (f.face === 1) el.style.setProperty("--wh", String(Math.min(1, f.g / WORMHOLE_BEATS)));
       const next = combat.frames[k + 1]?.[i];
       const dying = next && (next[5] & 1) === 0;
-      el.style.opacity = dying ? String(Math.max(0, 1 - (pos - k))) : "1";
+      el.style.opacity = String((dying ? Math.max(0, 1 - (pos - k)) : 1) * (f.fade ?? 1));
       el.firstElementChild.style.scale = dying ? String(0.55 + 0.45 * Math.max(0, 1 - (pos - k))) : "1";
       el.querySelector(".ubar b").style.width = `${u.maxHp > 0 ? Math.min(100, Math.max(0, (f.hp / u.maxHp) * 100)) : 0}%`;
       el.querySelector(".ubar .shield").style.display = f.shield > 0 ? "block" : "none";
@@ -219,6 +243,13 @@ export function playArena(combat, seat, getPos) {
         const [bx, by] = flip(b.x, b.y);
         svg += `<line x1="${ax + 0.5}" y1="${ay + 0.5}" x2="${bx + 0.5}" y2="${by + 0.5}" stroke="${e[1] === "ability" ? "#b040be" : "#fff"}" stroke-width="${e[1] === "ability" ? 0.09 : 0.05}" opacity="${(fade * 0.8).toFixed(2)}"/>`;
       }
+    }
+    // 분신과 본체를 잇는 가는 선
+    for (const [body, clone] of cloneLinks) {
+      const a = shown.get(body);
+      const b = shown.get(clone);
+      if (!a || !b) continue;
+      svg += `<line x1="${a[0] + 0.5}" y1="${a[1] + 0.5}" x2="${b[0] + 0.5}" y2="${b[1] + 0.5}" stroke="#b040be" stroke-width="0.03" stroke-dasharray="0.12 0.1" opacity="0.55"/>`;
     }
     lines.innerHTML = svg;
 

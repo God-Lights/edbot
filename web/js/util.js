@@ -5,6 +5,11 @@ export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&a
 export const BOARD = 8;
 export const DEPLOY_ROWS = 4;
 export const START_HP = 30;
+/** 밑면에서 이만큼 박자를 보내면 웜홀이 열린다. (서버 sim.ts의 WORMHOLE_BEATS와 같게) */
+export const WORMHOLE_BEATS = 4;
+/** 돌발 사망이 시작되는 박자 (서버 sim.ts와 같게) */
+export const SUDDEN_BEAT = 20;
+export const MOBIUS_SUDDEN_BEAT = 28;
 
 export const PIECE_COLOR = { king: "#f2c74d", queen: "#e661d9", rook: "#e08061", bishop: "#59ccbf", knight: "#73b3ff", pawn: "#b8b8c7" };
 export const PIECE_NAME = { king: "킹", queen: "퀸", rook: "룩", bishop: "비숍", knight: "나이트", pawn: "폰" };

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { attackableEnemies, distanceBetween, enemiesOf, moveDestinations, stepCell } from "../src/chess/board";
+import { CODE_ALPHABET, CODE_LENGTH, RESERVED_CODES } from "../src/codes";
 import { makeRng, placeTeam, randomTeam } from "../src/chess/balance";
 import { addEffect, createUnit } from "../src/chess/core";
 import {
@@ -265,5 +266,14 @@ describe("무한 모드 방과 게임", () => {
     const { createRoom } = await import("../src/room-state");
     expect(createRoom("ABCD", 0, false, "chess", false, false, "", "", true).mobius).toBe(true);
     expect(createRoom("ABCD", 0, false, "chess").mobius).toBe(false);
+  });
+});
+
+describe("테스트 방 코드", () => {
+  it("예약된 코드는 모두 방 코드에 쓰는 글자만 쓴다 (아니면 접속할 수 없다)", () => {
+    for (const code of RESERVED_CODES) {
+      expect(code).toHaveLength(CODE_LENGTH);
+      for (const ch of code) expect(CODE_ALPHABET).toContain(ch);
+    }
   });
 });

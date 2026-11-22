@@ -314,6 +314,8 @@ export interface ChessCombatSnapshot {
   tiles: ChessTileView[];
   mines: Array<[number, number, Seat]>;
   goldBonus: [number, number];
+  /** 무한 모드(뫼비우스 규칙)로 싸운 전투. flags 4는 밑면(유령), 8 이상은 속성 게이지. */
+  mobius?: boolean;
 }
 
 export interface ChessRoundSummary {
@@ -360,6 +362,8 @@ export interface ResultSnapshot {
 export interface RoomSnapshot {
   /** 내가 이 방을 만든 사람이다 (방을 닫을 수 있다) */
   isHost: boolean;
+  /** 무한 모드(뫼비우스 규칙) 방 */
+  mobius?: boolean;
   code: string;
   phase: Phase;
   phaseStartedAt: number;
