@@ -76,6 +76,10 @@ final class AppModel {
     private(set) var liveError: String?
     private(set) var isLoadingLive = false
     var showLive = false
+    private(set) var myRooms: [LiveRoom] = []
+    private(set) var myRoomsError: String?
+    private(set) var isLoadingMyRooms = false
+    var showMyRooms = false
 
     // 체스판 자동 전투
     private(set) var chessUnits: [ChessUnitInfo] = []
@@ -539,6 +543,51 @@ final class AppModel {
         } catch {
             liveError = "목록을 불러오지 못했어요."
         }
+    }
+
+    /// 내가 만든 방 목록을 불러온다. GL 로그인이 필요하다.
+    func refreshMyRooms() async {
+        guard !isLoadingMyRooms, let url = serverURL else { return }
+        isLoadingMyRooms = true
+        defer { isLoadingMyRooms = false }
+        do {
+            myRooms = try await ApiClient(baseURL: url, authToken: authToken).myRooms()
+            myRoomsError = nil
+        } catch ApiError.unauthorized {
+            myRoomsError = "GL 로그인이 필요해요."
+        } catch {
+            myRoomsError = "목록을 불러오지 못했어요."
+        }
+    }
+
+    /// 방을 닫는다(만든 사람만). 안에 있는 사람이 모두 나가지고 방의 내용이 지워진다.
+    func closeRoom(code: String) async {
+        guard let url = serverURL else { return }
+        do {
+            let closed = try await ApiClient(baseURL: url, authToken: authToken).closeRoom(code: code)
+            message = closed ? "방 \(code)을(를) 닫았어요." : "이미 없는 방이에요."
+        } catch ApiError.status(403) {
+            message = "방을 만든 사람만 닫을 수 있어요."
+        } catch ApiError.unauthorized {
+            message = "GL 로그인이 필요해요."
+        } catch {
+            message = "방을 닫지 못했어요."
+        }
+        await refreshMyRooms()
+        await refreshLive()
+    }
+
+    /// 내가 만든 방을 모두 닫는다.
+    func closeAllMyRooms() async {
+        guard let url = serverURL else { return }
+        let api = ApiClient(baseURL: url, authToken: authToken)
+        var closed = 0
+        for room in myRooms {
+            if (try? await api.closeRoom(code: room.code)) == true { closed += 1 }
+        }
+        message = "\(closed)개 방을 닫았어요."
+        await refreshMyRooms()
+        await refreshLive()
     }
 
     /// 목록에서 고른 경기를 관전한다.

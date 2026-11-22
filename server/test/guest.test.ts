@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { GUEST_HEADER, guestUserId, parseGuest, wsAccess } from "../src/guest";
 import { LIVE_TTL_MS, LiveBoard } from "../src/liveboard";
 import type { LiveRoom } from "../src/liveboard";
-import { createRoom, joinRoom, setReady, takeMatchRecord } from "../src/room-state";
+import { canCloseRoom, createRoom, joinRoom, setReady, takeMatchRecord, toSnapshot } from "../src/room-state";
 import { runChessBot } from "../src/bot";
 import { advancePhase } from "../src/room-state";
 
@@ -84,7 +84,7 @@ describe("게스트 방", () => {
 
 describe("관전 목록", () => {
   const live = (code: string, updatedAt: number): LiveRoom => ({
-    code, host: "발표자", players: [{ name: "가", studentId: "20211", connected: true }, { name: "나", studentId: "20212", connected: true }],
+    code, host: "발표자", hostId: "u-host", guest: true, players: [{ name: "가", studentId: "20211", connected: true }, { name: "나", studentId: "20212", connected: true }],
     phase: "prep", round: 1, maxRounds: 8, hps: [30, 30], updatedAt,
   });
 
@@ -105,5 +105,45 @@ describe("관전 목록", () => {
     board.upsert(live("OLD1", 0));
     board.upsert(live("NEW1", LIVE_TTL_MS));
     expect(board.list(LIVE_TTL_MS + 1).map((r) => r.code)).toEqual(["NEW1"]);
+  });
+});
+
+describe("방 닫기 권한", () => {
+  const host = { id: "u-host", nickname: "발표자" };
+  const other = { id: "u-other", nickname: "다른이" };
+
+  it("방을 만든 사람만 닫을 수 있다", () => {
+    const state = createRoom("CLOS", 0, false, "chess", false, true, "발표자", "u-host");
+    expect(canCloseRoom(state, host)).toBe(true);
+    expect(canCloseRoom(state, other)).toBe(false);
+    // 같은 닉네임이어도 id가 다르면 안 된다 (hostId가 있는 방)
+    expect(canCloseRoom(state, { id: "u-fake", nickname: "발표자" })).toBe(false);
+  });
+
+  it("만든 사람 정보가 없는 옛 방은 앉아 있는 GL 계정이나 같은 닉네임이 닫을 수 있다", () => {
+    const old = createRoom("OLDR", 0, false, "chess", false, false, "발표자", "");
+    expect(canCloseRoom(old, host)).toBe(true); // 닉네임이 만든 사람 이름과 같다
+    expect(canCloseRoom(old, other)).toBe(false);
+    let n = 0;
+    joinRoom(old, { name: "다른이", userId: "u-other" }, 0, () => `id${++n}`);
+    expect(canCloseRoom(old, other)).toBe(true); // 앉아 있는 사람
+    const nameless = createRoom("NONE", 0, false, "chess", false, false, "", "");
+    expect(canCloseRoom(nameless, host)).toBe(false);
+  });
+
+  it("테스트 대전 방은 닫을 대상이 아니다", () => {
+    const test = createRoom("ADMN", 0, true, "chess");
+    expect(canCloseRoom(test, host)).toBe(false);
+  });
+
+  it("스냅샷의 isHost는 방을 만든 사람 본인에게만 true", () => {
+    const state = createRoom("HOST", 0, false, "chess", false, false, "발표자", "u-host");
+    let n = 0;
+    const a = joinRoom(state, { name: "발표자", userId: "u-host" }, 0, () => `id${++n}`);
+    const b = joinRoom(state, { name: "다른이", userId: "u-other" }, 0, () => `id${++n}`);
+    if (!a.ok || !b.ok) throw new Error("join");
+    expect(toSnapshot(state, 0, a.player.id).isHost).toBe(true);
+    expect(toSnapshot(state, 0, b.player.id).isHost).toBe(false);
+    expect(toSnapshot(state, 0, undefined).isHost).toBe(false);
   });
 });

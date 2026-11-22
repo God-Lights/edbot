@@ -118,6 +118,8 @@ export interface RoomState {
   guest: boolean;
   /** 방을 만든 사람의 이름 (관전 목록에 보인다) */
   hostName: string;
+  /** 방을 만든 GL 계정의 id. 방을 닫을 수 있는 사람이다. (옛 방에는 없다) */
+  hostId?: string;
   /** 테스트 대전 봇의 난이도. 로비에서 바꿀 수 있다. */
   botLevel: "easy" | "normal" | "hard";
   /** lanes: 옛 레인 타워 게임, chess: 체스판 자동 전투 */
@@ -128,7 +130,7 @@ export interface RoomState {
 
 type Failure = { ok: false; code: ErrorCode; message: string };
 
-export function createRoom(code: string, now: number, testMatch = false, mode: RoomMode = "lanes", lite = testMatch, guest = false, hostName = ""): RoomState {
+export function createRoom(code: string, now: number, testMatch = false, mode: RoomMode = "lanes", lite = testMatch, guest = false, hostName = "", hostId = ""): RoomState {
   return {
     code,
     phase: "lobby",
@@ -150,6 +152,7 @@ export function createRoom(code: string, now: number, testMatch = false, mode: R
     lite,
     guest,
     hostName,
+    hostId,
     botLevel: lite ? "easy" : "normal",
     mode,
     createdAt: now,
@@ -1134,9 +1137,17 @@ function viewerSteam(state: RoomState, seat: Seat | null): number {
 }
 
 /** 클라이언트에게 보낼 공개 상태. token 같은 비밀 값은 넣지 않는다. */
+/** 방을 닫을 수 있는가: 만든 사람. 만든 사람 정보가 없는 옛 방은 앉아 있는 GL 계정이나 만든 사람의 닉네임이 같은 사람. 테스트 대전 방은 닫을 대상이 아니다. */
+export function canCloseRoom(state: RoomState, user: { id: string; nickname: string }): boolean {
+  if (state.testMatch) return false;
+  if (state.hostId) return state.hostId === user.id;
+  return state.players.some((p) => p.userId === user.id) || (state.hostName !== "" && state.hostName === user.nickname);
+}
+
 export function toSnapshot(state: RoomState, now: number, viewerId?: string): RoomSnapshot {
   const viewer = viewerId ? state.players.find((p) => p.id === viewerId) : undefined;
   return {
+    isHost: !!viewer?.userId && !!state.hostId && viewer.userId === state.hostId,
     code: state.code,
     phase: state.phase,
     phaseStartedAt: state.phaseStartedAt,

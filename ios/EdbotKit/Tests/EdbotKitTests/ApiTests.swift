@@ -54,6 +54,32 @@ final class ApiTests: XCTestCase {
         }
     }
 
+    func testMyRoomsAndCloseRoom() async throws {
+        let list = StubHTTP { _ in (#"{"rooms":[{"code":"ABCD","host":"h","guest":true,"mine":true,"players":[],"phase":"lobby","round":0,"maxRounds":8,"hps":null,"updatedAt":1}]}"#, 200) }
+        let rooms = try await ApiClient(baseURL: base, authToken: "tok", http: list).myRooms()
+        XCTAssertEqual(rooms.first?.mine, true)
+        XCTAssertEqual(rooms.first?.guest, true)
+        XCTAssertEqual(list.last?.url?.path, "/api/my-rooms")
+
+        let ok = StubHTTP { _ in (#"{"ok":true}"#, 200) }
+        let closed = try await ApiClient(baseURL: base, authToken: "tok", http: ok).closeRoom(code: " abcd ")
+        XCTAssertTrue(closed)
+        XCTAssertEqual(ok.last?.httpMethod, "POST")
+        XCTAssertEqual(ok.last?.url?.path, "/api/rooms/ABCD/close")
+
+        let missing = StubHTTP { _ in (#"{"error":"room_not_found"}"#, 404) }
+        let gone = try await ApiClient(baseURL: base, authToken: "tok", http: missing).closeRoom(code: "ABCD")
+        XCTAssertFalse(gone)
+
+        let forbidden = StubHTTP { _ in (#"{"error":"forbidden"}"#, 403) }
+        do {
+            _ = try await ApiClient(baseURL: base, authToken: "tok", http: forbidden).closeRoom(code: "ABCD")
+            XCTFail("던져야 한다")
+        } catch {
+            XCTAssertEqual(error as? ApiError, .status(403))
+        }
+    }
+
     func testCreateRoomUnauthorized() async {
         let http = StubHTTP { _ in (#"{"error":"unauthorized"}"#, 401) }
         do {

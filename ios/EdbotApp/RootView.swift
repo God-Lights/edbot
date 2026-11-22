@@ -18,6 +18,7 @@ struct RootView: View {
         .sheet(isPresented: $model.showGuide) { GuideView() }
         .sheet(isPresented: $model.showRanking) { RankingView() }
         .sheet(isPresented: $model.showLive) { LiveView() }
+        .sheet(isPresented: $model.showMyRooms) { MyRoomsView() }
         .sheet(isPresented: Binding(get: { model.createdGuestRoomCode != nil }, set: { if !$0 { model.createdGuestRoomCode = nil } })) {
             GuestRoomSheet(code: model.createdGuestRoomCode ?? "")
         }
@@ -159,6 +160,10 @@ struct LobbyView: View {
                     }
                     .buttonStyle(SecondaryButtonStyle())
                 }
+                Button { model.showMyRooms = true } label: {
+                    Label("내 방 관리 (방 지우기)", systemImage: "trash").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(SecondaryButtonStyle())
             }
 
             HStack(spacing: 10) {
@@ -223,6 +228,7 @@ struct LobbyView: View {
 /// 방 안. 단계에 맞는 화면을 보여 주고, 위쪽에 방 코드와 상대를 띄운다.
 struct RoomView: View {
     @Environment(AppModel.self) private var model
+    @State private var confirmClose = false
 
     var body: some View {
         if let room = model.room {
@@ -234,6 +240,12 @@ struct RoomView: View {
                 if let message = model.message { Text(message).foregroundStyle(Theme.warn) }
             }
             .padding(20)
+            .confirmationDialog("방을 닫을까요?", isPresented: $confirmClose, titleVisibility: .visible) {
+                Button("방 닫기", role: .destructive) { Task { await model.closeRoom(code: room.code) } }
+                Button("취소", role: .cancel) {}
+            } message: {
+                Text("안에 있는 사람이 모두 나가지고, 방의 내용이 지워져요.")
+            }
         }
     }
 
@@ -251,6 +263,9 @@ struct RoomView: View {
                 .background(Capsule().fill((player.id == model.myPlayerId ? Theme.mine : Theme.theirs).opacity(0.18)))
             }
             Button { model.openGuide() } label: { Label("가이드", systemImage: "book") }.buttonStyle(SecondaryButtonStyle())
+            if room.isHost == true {
+                Button { confirmClose = true } label: { Label("방 닫기", systemImage: "trash") }.buttonStyle(SecondaryButtonStyle())
+            }
             Button(model.isSpectating ? "관전 끝내기" : "나가기") { model.leave() }.buttonStyle(SecondaryButtonStyle())
         }
     }

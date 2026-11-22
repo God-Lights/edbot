@@ -79,7 +79,8 @@ export type ErrorCode =
   | "no_free_smelter"
   | "no_weapon"
   | "spectate_unavailable"
-  | "unauthorized";
+  | "unauthorized"
+  | "room_closed";
 
 export interface PublicPlayer {
   id: string;
@@ -354,6 +355,8 @@ export interface ResultSnapshot {
 }
 
 export interface RoomSnapshot {
+  /** 내가 이 방을 만든 사람이다 (방을 닫을 수 있다) */
+  isHost: boolean;
   code: string;
   phase: Phase;
   phaseStartedAt: number;

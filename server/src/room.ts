@@ -10,6 +10,7 @@ import {
   addBotIfNeeded, setBotLevel,
   advancePhase,
   buildReplay,
+  canCloseRoom,
   createRoom,
   isExpired,
   joinRoom,
@@ -78,11 +79,37 @@ export class Room extends DurableObject<Env> {
   // ---- Worker가 부르는 RPC ----
 
   /** 방을 처음 만든다. 이미 있으면 false. (코드가 겹쳤을 때 Worker가 다른 코드로 다시 시도한다.) */
-  async init(code: string, testMatch = false, mode: "lanes" | "chess" = "chess", lite = testMatch, guest = false, hostName = ""): Promise<boolean> {
+  async init(code: string, testMatch = false, mode: "lanes" | "chess" = "chess", lite = testMatch, guest = false, hostName = "", hostId = ""): Promise<boolean> {
     if (this.state) return false;
-    this.state = createRoom(code, Date.now(), testMatch, mode, lite, guest, hostName);
+    this.state = createRoom(code, Date.now(), testMatch, mode, lite, guest, hostName, hostId);
     await this.persist();
     return true;
+  }
+
+  /**
+   * 방을 닫는다: 모두에게 알리고 연결을 끊고, 방의 모든 저장 내용(알람 포함)을 지운다.
+   * enforce가 false면(로그인 검사를 끈 개발 서버) 누구나 닫을 수 있다.
+   */
+  async close(requester: { id: string; nickname: string } | null, enforce: boolean): Promise<"ok" | "forbidden" | "not_found"> {
+    const state = this.state;
+    if (!state) return "not_found";
+    if (enforce && (!requester || !canCloseRoom(state, requester))) return "forbidden";
+    for (const ws of this.ctx.getWebSockets()) {
+      try {
+        sendTo(ws, { t: "error", code: "room_closed", message: "방이 닫혔다." });
+        ws.close(1000, "room_closed");
+      } catch {
+        // 이미 닫힌 소켓
+      }
+    }
+    this.state = null;
+    await this.ctx.storage.deleteAll(); // 알람도 함께 지워진다
+    try {
+      await this.env.LIVE.get(this.env.LIVE.idFromName("global")).remove(state.code);
+    } catch {
+      // 목록에서 못 지워도 20분 뒤에는 사라진다
+    }
+    return "ok";
   }
 
   async info(): Promise<RoomInfo | null> {
@@ -347,9 +374,7 @@ export class Room extends DurableObject<Env> {
     const now = Date.now();
 
     if (isExpired(this.state, now)) {
-      if (this.state.guest) {
-        try { await this.env.LIVE.get(this.env.LIVE.idFromName("global")).remove(this.state.code); } catch { /* 무시 */ }
-      }
+      try { await this.env.LIVE.get(this.env.LIVE.idFromName("global")).remove(this.state.code); } catch { /* 무시 */ }
       this.state = null;
       await this.ctx.storage.deleteAll(); // 알람도 함께 지워진다
       return;
@@ -381,11 +406,13 @@ export class Room extends DurableObject<Env> {
   /** 게스트 방이면 진행 상황을 관전 목록(LiveRegistry)에 알린다. 단계·라운드·사람이 바뀔 때만 보낸다. */
   private async reportLive(): Promise<void> {
     const state = this.state;
-    if (!state?.guest) return;
+    if (!state || state.testMatch) return; // 테스트 대전(봇) 방은 사람마다 따로 있어서 목록에 올리지 않는다
     const hps = state.chess ? ([state.chess.players[0].hp, state.chess.players[1].hp] as [number, number]) : null;
     const room: LiveRoom = {
       code: state.code,
       host: state.hostName,
+      hostId: state.hostId ?? "",
+      guest: state.guest ?? false,
       players: state.players.map((p) => ({ name: p.name, studentId: p.guestId, connected: p.connected })),
       phase: state.phase,
       round: state.chess?.round ?? 0,

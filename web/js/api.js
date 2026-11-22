@@ -49,6 +49,16 @@ export const api = {
     const r = await request("/api/live");
     return r.ok ? r.body.rooms : { error: r.status };
   },
+  /** 내가 만든 방 목록 (게스트 방과 일반 방). 실패하면 { error } */
+  async myRooms() {
+    const r = await request("/api/my-rooms");
+    return r.ok ? r.body.rooms : { error: r.status };
+  },
+  /** 방을 닫는다 (만든 사람만). { ok } 또는 { error, status } */
+  async closeRoom(code) {
+    const r = await request(`/api/rooms/${encodeURIComponent(code)}/close`, { method: "POST" });
+    return r.ok ? { ok: true } : { error: r.body?.error ?? "close_failed", status: r.status, message: r.body?.message };
+  },
   async chessCatalog() {
     const r = await request("/api/chess");
     return r.ok ? r.body : null;
