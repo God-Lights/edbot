@@ -3,7 +3,7 @@ import { USER_HEADER } from "./auth";
 import { GUEST_HEADER, guestUserId, parseGuest } from "./guest";
 import type { LiveRoom } from "./liveboard";
 import { runBotUntilIdle } from "./bot";
-import { matchIdOf, recordMatch, saveReplay } from "./ranking/store";
+import { matchIdOf, rankingStoreOf } from "./ranking/store";
 import { parseClientMessage } from "./protocol";
 import type { ErrorCode, ServerMessage } from "./protocol";
 import {
@@ -332,14 +332,15 @@ export class Room extends DurableObject<Env> {
   /** 판이 끝났으면 전적과 레이팅을 D1에 저장하고, 레이팅 변화를 결과에 담아 다시 알린다. */
   private async recordIfFinished(): Promise<void> {
     if (!this.state) return;
-    const match = takeMatchRecord(this.state, Date.now());
+    const match = takeMatchRecord(this.state, Date.now(), this.env.RECORD_ANONYMOUS === "true");
     if (!match) return;
     try {
-      const ratings = await recordMatch(this.env.DB, match);
+      const store = rankingStoreOf(this.env);
+      const ratings = await store.recordMatch(match);
       if (ratings && this.state.result) {
         this.state.result.ratings = [ratings[0], ratings[1]];
         const replay = buildReplay(this.state);
-        if (replay) await saveReplay(this.env.DB, matchIdOf(match.roomCode, match.startedAt), replay);
+        if (replay) await store.saveReplay(matchIdOf(match.roomCode, match.startedAt), replay);
       }
     } catch (error) {
       // 랭킹 저장이 실패해도 판 진행에는 영향이 없다. (예: 아직 마이그레이션을 적용하지 않았을 때)

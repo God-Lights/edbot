@@ -1,4 +1,4 @@
-// 단일 실행파일을 만든다. 웹 화면(../web)과 DB 마이그레이션을 실행파일 안에 넣는다.
+// 단일 실행파일을 만든다. 웹 화면(../web)을 실행파일 안에 넣는다.
 //
 //   bun build.ts                               (지금 컴퓨터용)
 //   bun build.ts --target bun-windows-x64      (윈도우용 .exe. 다른 OS에서도 만들 수 있다)
@@ -18,7 +18,6 @@ const target = arg("target", "");
 const edition = arg("edition", "vanilla");
 const root = import.meta.dir;
 const webDir = join(root, "..", "web");
-const migrationsDir = join(root, "..", "server", "migrations");
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -31,16 +30,12 @@ function walk(dir: string): string[] {
 const generatedDir = join(root, "src", "generated");
 mkdirSync(generatedDir, { recursive: true });
 const webFiles = walk(webDir).filter((f) => !f.endsWith("README.md")).sort();
-const sqlFiles = readdirSync(migrationsDir).filter((f) => f.endsWith(".sql")).sort();
 const rel = (from: string, to: string) => relative(from, to).split(sep).join("/");
 let source = "// build.ts가 만든다. 직접 고치지 않는다.\n";
 webFiles.forEach((file, i) => (source += `import w${i} from "${rel(generatedDir, file)}" with { type: "file" };\n`));
-sqlFiles.forEach((file, i) => (source += `import m${i} from "${rel(generatedDir, join(migrationsDir, file))}" with { type: "text" };\n`));
 source += "export const web: Record<string, string> = {\n";
 webFiles.forEach((file, i) => (source += `  ${JSON.stringify("/" + rel(webDir, file))}: w${i},\n`));
-source += "};\nexport const migrations = [\n";
-sqlFiles.forEach((file, i) => (source += `  { name: ${JSON.stringify(file)}, sql: m${i} },\n`));
-source += "];\n";
+source += "};\n";
 writeFileSync(join(generatedDir, "embedded.ts"), source);
 
 const name = target.includes("windows") ? "commander-server.exe" : target ? `commander-server-${target.replace("bun-", "")}` : "commander-server";

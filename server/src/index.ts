@@ -9,7 +9,7 @@ import type { AuthEnv } from "./auth";
 import { loadSourceJson } from "./sidestore";
 import { SYNERGIES } from "./synergy";
 import { WEAPONS } from "./forge/weapons";
-import { getLeaderboard, getPlayerStats, getRecentMatches, getReplay } from "./ranking/store";
+import { rankingStoreOf } from "./ranking/store";
 import { approvedPage, donePage, failedPage, homePage } from "./pages";
 import { Room } from "./room";
 import { Matchmaker } from "./matchmaker";
@@ -223,7 +223,7 @@ export default {
         let rating = 1000;
         if (me) {
           try {
-            rating = (await getPlayerStats(env.DB, me.id))?.rating ?? 1000;
+            rating = (await rankingStoreOf(env).getPlayerStats(me.id))?.rating ?? 1000;
           } catch {
             rating = 1000; // 랭킹 DB가 준비되지 않아도 매칭은 된다
           }
@@ -247,7 +247,7 @@ export default {
     // GET /api/replays/:id -> 끝난 판의 다시 보기 데이터 (id는 내 전적 목록의 id).
     if (request.method === "GET" && parts.length === 3 && parts[0] === "api" && parts[1] === "replays") {
       try {
-        const data = await getReplay(env.DB, decodeURIComponent(parts[2] ?? ""));
+        const data = await rankingStoreOf(env).getReplay(decodeURIComponent(parts[2] ?? ""));
         if (!data) return json({ error: "replay_not_found" }, 404);
         return new Response(data, { headers: { "content-type": "application/json", ...CORS_HEADERS } });
       } catch {
@@ -260,7 +260,7 @@ export default {
       const me = await identify(env, request);
       const limit = Number(url.searchParams.get("limit") ?? 20);
       try {
-        const entries = await getLeaderboard(env.DB, Number.isFinite(limit) ? limit : 20, me?.id ?? null);
+        const entries = await rankingStoreOf(env).getLeaderboard(Number.isFinite(limit) ? limit : 20, me?.id ?? null);
         return json({ entries });
       } catch {
         return json({ error: "ranking_unavailable" }, 503);
@@ -271,10 +271,10 @@ export default {
       const me = await identify(env, request);
       if (!me) return json({ error: "unauthorized", loginUrl: `${origin}/auth/login` }, 401);
       try {
-        if (parts[2] === "stats") return json({ stats: await getPlayerStats(env.DB, me.id) });
+        if (parts[2] === "stats") return json({ stats: await rankingStoreOf(env).getPlayerStats(me.id) });
         if (parts[2] === "matches") {
           const limit = Number(url.searchParams.get("limit") ?? 10);
-          return json({ matches: await getRecentMatches(env.DB, me.id, Number.isFinite(limit) ? limit : 10) });
+          return json({ matches: await rankingStoreOf(env).getRecentMatches(me.id, Number.isFinite(limit) ? limit : 10) });
         }
       } catch {
         return json({ error: "ranking_unavailable" }, 503);

@@ -73,6 +73,42 @@ const outcome = await new Promise<{ ok: boolean; why: string }>((resolve) => {
 check("봇과 한 판(준비 -> 전투 -> 다음 라운드)", outcome.ok, outcome.why);
 console.log(`   단계 흐름: ${seen.join(" -> ")}`);
 
+// ---- 두 사람이 한 판: 한 사람이 항복하면 이름으로 전적이 남는다 (로컬 서버) ----
+const stamp = Date.now().toString(36).slice(-5);
+const names = [`갑${stamp}`, `을${stamp}`] as const;
+const duel = await new Promise<{ ok: boolean; why: string }>((resolve) => {
+  const made = fetch(`${base}/api/rooms`, { method: "POST" }).then((r) => r.json() as Promise<{ code?: string }>);
+  void made.then(({ code: room }) => {
+    if (!room) return resolve({ ok: false, why: "방을 못 만듦" });
+    const sockets = names.map((name) => new WebSocket(`${base.replace(/^http/, "ws")}/ws/${room}?name=${encodeURIComponent(name)}`));
+    const timer = setTimeout(() => done(false, "시간 초과"), 45_000);
+    const done = (ok: boolean, why: string) => {
+      clearTimeout(timer);
+      for (const ws of sockets) { try { ws.close(); } catch { /* 이미 닫힘 */ } }
+      resolve({ ok, why });
+    };
+    const readied = [false, false];
+    let surrendered = false;
+    sockets.forEach((ws, i) => {
+      ws.onerror = () => done(false, "WebSocket 오류");
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(String(event.data)) as { t: string; room?: { phase: string }; message?: string };
+        if (msg.t === "error") return done(false, `서버 오류 ${msg.message}`);
+        const phase = msg.room?.phase;
+        if (phase === "lobby" && !readied[i]) { readied[i] = true; ws.send(JSON.stringify({ t: "ready", ready: true })); }
+        if (phase === "prep" && i === 1 && !surrendered) { surrendered = true; ws.send(JSON.stringify({ t: "surrender" })); }
+        if (phase === "result" && i === 0) done(true, "항복으로 한 판이 끝남");
+      };
+    });
+  });
+});
+check("두 사람이 한 판(항복으로 끝내기)", duel.ok, duel.why);
+await Bun.sleep(300);
+const board = (await fetch(`${base}/api/leaderboard?limit=50`).then((r) => r.json()).catch(() => null)) as { entries?: Array<{ nickname: string; rating: number; wins: number; losses: number }> } | null;
+const winner = board?.entries?.find((e) => e.nickname === names[0]);
+const loser = board?.entries?.find((e) => e.nickname === names[1]);
+check("이름으로 전적이 남음(순위표)", !!winner && !!loser && winner.wins === 1 && loser.losses === 1, `${winner?.rating ?? "?"} / ${loser?.rating ?? "?"}`);
+
 if (failures.length) {
   console.log(`\n실패 ${failures.length}개: ${failures.join(", ")}`);
   process.exit(1);
