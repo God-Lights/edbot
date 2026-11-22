@@ -24,9 +24,13 @@ import Security
 /// Keychain에 저장한다. 토큰은 이 기기의 이 앱에서만 읽힌다.
 public struct KeychainTokenStore: TokenStore {
     private let service: String
-    private let account = "game-session-token"
+    private let account: String
 
-    public init(service: String = "com.officialgl.commander") { self.service = service }
+    /// account: 서버마다 다르게 해서, 서버를 바꿔도 로그인(토큰)이 섞이지 않게 한다.
+    public init(service: String = "com.officialgl.commander", account: String = "game-session-token") {
+        self.service = service
+        self.account = account
+    }
 
     private var baseQuery: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
@@ -54,3 +58,10 @@ public struct KeychainTokenStore: TokenStore {
     }
 }
 #endif
+
+/// 서버 주소별로 토큰 저장소를 고른다. 운영 서버는 예전 키를 그대로 써서 이미 로그인한 사람이 풀리지 않는다.
+public func tokenAccount(forServer url: URL, defaultHost: String = "edgame-api.officialgl.com") -> String {
+    let host = (url.host ?? url.absoluteString).lowercased()
+    let key = url.port.map { "\(host):\($0)" } ?? host
+    return host == defaultHost.lowercased() && url.port == nil ? "game-session-token" : "game-session-token:\(key)"
+}
