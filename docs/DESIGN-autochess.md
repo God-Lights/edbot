@@ -265,4 +265,20 @@
 - **시제품에서 확인한 것**(리눅스): 소스 실행과 단일 실행파일 모두 웹 화면, 도감 API, 방 만들기(무한 모드 옵션 포함), 봇과 한 판(준비 → 전투 → 다음 라운드, WebSocket)이 통과한다. 서버를 껐다 켜도 방과 진행 중인 알람이 이어진다. 웹 화면(Playwright)도 이 서버에서 준비 → 전투까지 된다.
 - **윈도우**: .exe 는 CI(`local-server.yml`)의 윈도우 머신에서 실행해서 같은 점검을 한다. (이 개발 환경에는 윈도우가 없다.)
 - **JSON 저장(1단계 완료)**: 서버 엔진은 전적을 `RankingStore`(`server/src/ranking/store.ts`, 함수 6개) 한 겹으로만 쓴다. 운영·개발은 D1(`d1RankingStore`), 시험은 메모리(`MemoryRankingStore`), 로컬 서버는 JSON 파일(`JsonRankingStore`). 세 구현이 같은 시험(`server/test/store.test.ts`)을 통과한다. 로컬은 `data/players.json`, `data/matches.jsonl`(한 판에 한 줄, 선수 표를 다시 만들 수 있는 원본), `data/replays/<id>.json`, `backups/<날짜>/`(최근 14일), `commander.lock`(한 폴더에 서버 하나). 파일은 임시 파일에 쓰고 이름을 바꿔서 쓰다 꺼져도 깨지지 않고, 깨졌으면 판 기록으로 복구한다. `commander-server export/import [--merge]`로 JSON을 옮긴다(행은 D1 표의 열과 같다). **로컬 전적은 이름이 곧 사용자**(`name:<소문자 이름>`, 봇과 한 판은 기록하지 않음): 서버 변수 `RECORD_ANONYMOUS=true`일 때만. 운영에서는 GL 계정이 없으면 기록하지 않는 그대로다.
-- **다음 단계**: ② `/api/server`(이름·환경·로그인 방식·프로토콜 버전)와 서버별 로그인 방식(`gl`/`hybrid`/`open`) ③ 데이터 기반 콘텐츠와 플러그인, 바닐라/엑스퍼트 빌드 ④ 앱·웹의 서버 띠와 서버 주소별 토큰, QR.
+- **서버 정보와 서버별 로그인 방식(2단계 완료)**:  데이터 기반 콘텐츠와 플러그인, 바닐라/엑스퍼트 빌드 ④ 앱·웹의 서버 띠와 서버 주소별 토큰, QR.
+
+## 25. 서버 정보와 서버별 로그인 방식
+- **`GET /api/server`**: `{ protocol, name, env(production|development|local), authMode(gl|hybrid|open), edition(vanilla|expert), version, ruleset("official"), ranking, guestRooms }`. 앱과 웹은 이걸 보고 로비를 맞춘다. 이 API가 없는 오래된 서버는 예전처럼 둘 다 보여 준다. `protocol`(`PROTOCOL_VERSION`, 지금 1)은 메시지 형식이 호환되지 않게 바뀔 때만 올리고, 클라이언트가 아는 것보다 높으면 "업데이트해 주세요"를 안내한다.
+- **로그인 방식 `AUTH_MODE`** (예전 `REQUIRE_AUTH=false`는 `open`으로 읽는다. 모르는 값은 가장 엄격한 `gl`):
+
+| 방식 | 로그인 | 게스트 방 | 전적 | 쓰는 곳 |
+|---|---|---|---|---|
+| `gl` | GL 계정 필수 | 쓴다 | GL 계정 둘이 한 판 | 운영 |
+| `hybrid` | GL 로그인 또는 이름만 | 쓴다 | GL 계정 둘이 한 판 | 개발 서버 |
+| `open` | 이름만(GL을 확인하지 않는다) | 안 쓴다 | `RECORD_ANONYMOUS=true`면 이름으로 | 로컬 서버(인터넷 없이) |
+
+- **환경 나누기**: `wrangler.jsonc`의 `env.dev`(Worker 이름 `edbot-server-dev`, D1 `edbot-dev`, 방·로그인 저장소도 이름이 달라 따로, 도메인은 아직 없음). 배포 `npm run deploy:dev`, 마이그레이션 `npm run db:migrate:dev`. 운영은 `AUTH_MODE=gl`, `SERVER_ENV=production`이며, **운영 설정이 `gl`이고 어느 Worker 설정에도 `open`이 없는지 시험(`server/test/server-info.test.ts`)이 지킨다.**
+- **로비**: `gl`은 로그인 버튼과 게스트 카드, `hybrid`는 로그인 버튼과 이름 입력과 게스트 카드, `open`은 이름 입력만. 운영이 아닌 서버에는 맨 위에 안내 띠("로컬 서버 · 이름이 곧 계정이에요. 전적은 이 서버에만 남아요." / "개발 서버 · 시험용이에요"), 엑스퍼트면 표시.
+- **서버별 로그인 토큰(앱)**: 키체인의 계정 이름에 서버 주소(호스트:포트)를 넣어 서버를 바꿔도 로그인이 섞이지 않는다. 운영 서버(`edgame-api.officialgl.com`)는 예전 키를 그대로 써서 이미 로그인한 사람이 풀리지 않는다. 서버 입력칸을 바꾸면 그 서버의 토큰과 서버 정보로 바뀐다.
+- **iOS 서버 앱(앞으로)**: 별도 앱 "COMMANDER Server"(SwiftUI 관리 화면 + Swift 접속 받기 + 숨은 웹뷰에서 엔진 실행). 서버 전용 기기(안내 접근)와 분할 보기로 한 기기에서 서버+플레이를 둘 다 지원. 무료 Apple ID의 앱 수 제한 때문에 앱은 하나로 하고 에디션은 앱 안의 스위치로 한다. 같은 `/api/server`와 `RankingStore`를 그대로 쓴다.
+- **다음 단계**: ③ 데이터 기반 콘텐츠와 플러그인, 바닐라/엑스퍼트 빌드 ④ 앱·웹의 QR 연결(서버 설정 QR)과 서버 자동 찾기 ⑤ iOS 서버 앱.
