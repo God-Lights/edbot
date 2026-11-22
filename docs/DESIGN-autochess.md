@@ -265,7 +265,7 @@
 - **시제품에서 확인한 것**(리눅스): 소스 실행과 단일 실행파일 모두 웹 화면, 도감 API, 방 만들기(무한 모드 옵션 포함), 봇과 한 판(준비 → 전투 → 다음 라운드, WebSocket)이 통과한다. 서버를 껐다 켜도 방과 진행 중인 알람이 이어진다. 웹 화면(Playwright)도 이 서버에서 준비 → 전투까지 된다.
 - **윈도우**: .exe 는 CI(`local-server.yml`)의 윈도우 머신에서 실행해서 같은 점검을 한다. (이 개발 환경에는 윈도우가 없다.)
 - **JSON 저장(1단계 완료)**: 서버 엔진은 전적을 `RankingStore`(`server/src/ranking/store.ts`, 함수 6개) 한 겹으로만 쓴다. 운영·개발은 D1(`d1RankingStore`), 시험은 메모리(`MemoryRankingStore`), 로컬 서버는 JSON 파일(`JsonRankingStore`). 세 구현이 같은 시험(`server/test/store.test.ts`)을 통과한다. 로컬은 `data/players.json`, `data/matches.jsonl`(한 판에 한 줄, 선수 표를 다시 만들 수 있는 원본), `data/replays/<id>.json`, `backups/<날짜>/`(최근 14일), `commander.lock`(한 폴더에 서버 하나). 파일은 임시 파일에 쓰고 이름을 바꿔서 쓰다 꺼져도 깨지지 않고, 깨졌으면 판 기록으로 복구한다. `commander-server export/import [--merge]`로 JSON을 옮긴다(행은 D1 표의 열과 같다). **로컬 전적은 이름이 곧 사용자**(`name:<소문자 이름>`, 봇과 한 판은 기록하지 않음): 서버 변수 `RECORD_ANONYMOUS=true`일 때만. 운영에서는 GL 계정이 없으면 기록하지 않는 그대로다.
-- **서버 정보와 서버별 로그인 방식(2단계 완료)**:  데이터 기반 콘텐츠와 플러그인, 바닐라/엑스퍼트 빌드 ④ 앱·웹의 서버 띠와 서버 주소별 토큰, QR.
+- **서버 정보와 서버별 로그인 방식(2단계 완료)**: 25장을 본다. 남은 단계: ③ 데이터 기반 콘텐츠와 플러그인, 바닐라/엑스퍼트 빌드 ④ QR 연결과 서버 자동 찾기 ⑤ iOS 서버 앱.
 
 ## 25. 서버 정보와 서버별 로그인 방식
 - **`GET /api/server`**: `{ protocol, name, env(production|development|local), authMode(gl|hybrid|open), edition(vanilla|expert), version, ruleset("official"), ranking, guestRooms }`. 앱과 웹은 이걸 보고 로비를 맞춘다. 이 API가 없는 오래된 서버는 예전처럼 둘 다 보여 준다. `protocol`(`PROTOCOL_VERSION`, 지금 1)은 메시지 형식이 호환되지 않게 바뀔 때만 올리고, 클라이언트가 아는 것보다 높으면 "업데이트해 주세요"를 안내한다.
