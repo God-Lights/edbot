@@ -43,13 +43,15 @@ struct AppBackground: View {
 
 struct PrimaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
+    /// 아이폰 가로처럼 세로가 낮은 화면에서는 버튼을 낮춘다.
+    @Environment(\.verticalSizeClass) private var vSize
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.headline)
             .foregroundStyle(.white)
-            .frame(minHeight: 48)
-            .padding(.horizontal, 22)
+            .frame(minHeight: vSize == .compact ? 36 : 48)
+            .padding(.horizontal, vSize == .compact ? 14 : 22)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(LinearGradient(colors: [Theme.navy, Theme.purple], startPoint: .leading, endPoint: .trailing))
@@ -62,13 +64,14 @@ struct PrimaryButtonStyle: ButtonStyle {
 
 struct SecondaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.verticalSizeClass) private var vSize
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(Theme.silver)
-            .frame(minHeight: 44)
-            .padding(.horizontal, 16)
+            .frame(minHeight: vSize == .compact ? 32 : 44)
+            .padding(.horizontal, vSize == .compact ? 10 : 16)
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.panelStrong))
             .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.4)
     }

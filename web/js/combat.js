@@ -1,6 +1,6 @@
 // 전투 단계: 서버가 기록한 전투를 8x8 판에서 재생한다. 내 쪽이 항상 아래에 보인다.
 
-import { header, token } from "./prep.js";
+import { gameBar, token } from "./prep.js";
 import { sfx } from "./sfx.js";
 import { S, conn, materialInfo, mySeat, synergyInfo } from "./state.js";
 import { BOARD, DEPLOY_ROWS, MINE, RARITY_COLOR, THEIRS, esc } from "./util.js";
@@ -65,17 +65,15 @@ export function combatView(room) {
   const chess = room.chess;
   const combat = chess?.combat;
   const seat = mySeat();
-  if (!chess || !combat || seat == null) return `<div class="center-msg">전투를 불러오는 중...</div>`;
-  const synergies = chess.me?.synergies?.length ? `<div class="sub">${chess.me.synergies.map((id) => `🔗 ${esc(synergyInfo(id)?.nameKo ?? id)}`).join(" ")}</div>` : "";
-  return `${header(room, chess)}
-    <div class="combat">
-      ${arenaHtml(combat, seat)}
-      <div class="side">
+  if (!chess || !combat || seat == null) return `<div class="game"><div class="center-msg">전투를 불러오는 중...</div></div>`;
+  const synergies = chess.me?.synergies?.length ? `<div class="sub csyn">${chess.me.synergies.map((id) => `🔗 ${esc(synergyInfo(id)?.nameKo ?? id)}`).join(" ")}</div>` : "";
+  return `<div class="game combatgame">${gameBar(room, chess)}
+    <main class="cmain"><div class="carena">${arenaHtml(combat, seat)}</div>
+      <div class="cside">
         ${teamList("내 기물", MINE, combat.boards[seat] ?? [])}
         ${teamList("상대 기물", THEIRS, combat.boards[1 - seat] ?? [])}
         ${synergies}
-      </div>
-    </div>`;
+      </div></main></div>`;
 }
 
 let runId = 0;
