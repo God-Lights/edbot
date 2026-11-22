@@ -1179,3 +1179,9 @@ export function toSnapshot(state: RoomState, now: number, viewerId?: string): Ro
     result: state.result,
   };
 }
+
+/** 이 방의 진행 중인 판이 지금 서버의 규칙 묶음과 같은가. 다르면(서버의 콘텐츠 팩이 바뀌었으면) 그 방은 이어 갈 수 없다. */
+export function isRulesetCurrent(state: RoomState, current: string): boolean {
+  const pinned = state.chess?.ruleset ?? "official";
+  return !state.chess || pinned === current;
+}

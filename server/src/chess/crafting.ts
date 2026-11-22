@@ -5,6 +5,7 @@
 // - 무기 + 재료: 그 무기의 원재료를 합치면 -> ★2 무기
 // 무기의 이름표(id)는 문자열 하나로 정한다: "clawstone-axe"(기본), "clawstone-axe*"(★2), "clawstone-axe+edmium-blade"(융합, 사전순).
 
+import { activeContent } from "./content";
 import { MATERIALS, materialDef, weaponDef } from "./weapons";
 import type { Rarity } from "./weapons";
 
@@ -55,25 +56,33 @@ export interface MaterialFusion {
  * 재료 조합표. 같은 희귀도의 서로 다른 두 재료(사전순으로 짝을 세어서)가 한 단계 위 희귀도의 재료를 돌아가며 만든다.
  * 흔함 4종(짝 6개) -> 보통 4종, 보통 4종(6개) -> 희귀 3종, 희귀 3종(3개) -> 전설 2종.
  */
-export const MATERIAL_FUSIONS: readonly MaterialFusion[] = (() => {
-  const table: MaterialFusion[] = [];
+export function buildFusions(materials: ReadonlyArray<{ id: string; rarity: Rarity }>, fixed: readonly MaterialFusion[] = []): MaterialFusion[] {
+  const table: MaterialFusion[] = [...fixed];
   for (const rarity of ["common", "uncommon", "rare"] as const) {
-    const sameTier = MATERIALS.filter((m) => m.rarity === rarity).map((m) => m.id).sort();
-    const upper = MATERIALS.filter((m) => m.rarity === NEXT_RARITY[rarity]).map((m) => m.id);
-    let index = 0;
+    const sameTier = materials.filter((m) => m.rarity === rarity).map((m) => m.id).sort();
+    const upper = materials.filter((m) => m.rarity === NEXT_RARITY[rarity]).map((m) => m.id);
+    if (upper.length === 0) continue;
+    // 정해져 있는 짝(공식 조합표)은 그대로 두고, 없는 짝만 위 단계 재료를 돌아가며 채운다.
+    let index = table.filter((f) => sameTier.includes(f.a) && sameTier.includes(f.b)).length;
     for (let i = 0; i < sameTier.length; i++) {
       for (let j = i + 1; j < sameTier.length; j++) {
+        if (table.some((f) => f.a === sameTier[i] && f.b === sameTier[j])) continue;
         table.push({ a: sameTier[i]!, b: sameTier[j]!, result: upper[index % upper.length]! });
         index += 1;
       }
     }
   }
   return table;
-})();
+}
+
+export const MATERIAL_FUSIONS: readonly MaterialFusion[] = buildFusions(MATERIALS);
+
+/** 지금 적용된 재료 조합표(공식 + 팩). 팩이 없으면 MATERIAL_FUSIONS와 같다. */
+export const fusions = (): readonly MaterialFusion[] => activeContent()?.fusions ?? MATERIAL_FUSIONS;
 
 export function fuseMaterials(a: string, b: string): string | null {
   const [x, y] = [a, b].sort();
-  return MATERIAL_FUSIONS.find((f) => f.a === x && f.b === y)?.result ?? null;
+  return fusions().find((f) => f.a === x && f.b === y)?.result ?? null;
 }
 
 /** 두 아이템을 합친 결과. 합칠 수 없으면 null. (순서는 상관없다) */

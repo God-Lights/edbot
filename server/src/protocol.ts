@@ -328,6 +328,8 @@ export interface ChessRoundSummary {
 export interface ChessSnapshot {
   round: number;
   maxRounds: number;
+  /** 시작 체력(체력 막대의 기준). 오래된 서버면 없다. */
+  startHp?: number;
   /** 지금 판에 올릴 수 있는 기물 수 */
   deployCap: number;
   /** 상점의 가격별 등장 확률(%) [1골드, 2골드, 3골드, 4골드] */

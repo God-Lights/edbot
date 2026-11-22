@@ -123,6 +123,13 @@ if (subcommand === "export" || subcommand === "import") {
 
 // ---- Cloudflare가 주던 것들 ----
 
+// 엑스퍼트 서버만 plugins/ 의 콘텐츠 팩을 읽는다. 바닐라 실행파일에서는 이 분기와 plugins.ts 가 빌드에서 빠진다.
+let pluginReport: { accepted: Array<{ id: string; name: string; version: string }>; rejected: Array<{ id: string; errors: string[] }>; notes: string[]; ruleset: string } | null = null;
+if (process.env.COMMANDER_EDITION === "expert") {
+  const { loadPlugins } = await import("./plugins");
+  pluginReport = loadPlugins(dataDir);
+}
+
 const serverName = option("name", "내 컴퓨터 서버");
 const env: Record<string, unknown> = {
   STORE: store,
@@ -223,6 +230,14 @@ console.log(`${serverName} (COMMANDER 로컬 서버 ${packageInfo.version}, ${ed
 console.log(`  이 컴퓨터:        http://localhost:${server.port}`);
 for (const ip of lanAddresses()) console.log(`  같은 와이파이:    http://${ip}:${server.port}`);
 if (woken > 0) console.log(`  이어서 진행하는 방: ${woken}개`);
+if (pluginReport) {
+  const { accepted, rejected, notes, ruleset } = pluginReport;
+  console.log(`  플러그인: ${accepted.length}개 적용${accepted.length ? ` (${accepted.map((p) => `${p.name} ${p.version}`).join(", ")})` : ""}, 규칙 묶음 ${ruleset}`);
+  for (const note of notes) console.warn(`  [플러그인 주의] ${note}`);
+  for (const r of rejected) for (const line of r.errors) console.warn(`  [플러그인 거절] ${line}`);
+} else if (edition !== "expert" && existsSync(join(dataDir, "plugins"))) {
+  console.log("  이 서버는 바닐라라서 plugins/ 폴더를 읽지 않는다. (엑스퍼트 서버에서 쓴다)");
+}
 for (const note of store.notes) console.warn(`  [주의] ${note}`);
 if (backedUp) console.log(`  백업: ${backedUp}`);
 const backupTimer = setInterval(() => store.backup(), 24 * 60 * 60 * 1000);

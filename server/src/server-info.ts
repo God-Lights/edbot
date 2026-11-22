@@ -3,6 +3,8 @@
 
 import { authMode } from "./auth";
 import type { AuthEnv, AuthMode } from "./auth";
+import { activeContent, currentRuleset } from "./chess/content";
+import type { PackInfo } from "./chess/content";
 import { PROTOCOL_VERSION } from "./protocol";
 
 export type ServerEnvironment = "production" | "development" | "local";
@@ -26,8 +28,10 @@ export interface ServerInfo {
   /** vanilla: 공식과 같은 규칙. expert: 플러그인(캐릭터·아이템·모드)을 더할 수 있다. */
   edition: Edition;
   version: string;
-  /** 규칙 묶음의 이름. 지금은 공식 규칙뿐이라 "official". (플러그인을 도입하면 해시가 들어간다) */
+  /** 규칙 묶음의 이름: 공식이면 "official", 콘텐츠 팩이 있으면 "custom-<해시>" */
   ruleset: string;
+  /** 적용된 콘텐츠 팩(없으면 빈 목록). 엑스퍼트 서버에서만 있을 수 있다. */
+  packs: PackInfo[];
   /** 판이 끝나면 전적과 랭킹이 남는 서버인가 */
   ranking: boolean;
   /** 게스트(학번과 이름) 방을 쓸 수 있는가: GL 로그인이 있는 서버에서만 의미가 있다 */
@@ -50,7 +54,8 @@ export function serverInfo(env: ServerEnv): ServerInfo {
     authMode: mode,
     edition: env.EDITION === "expert" ? "expert" : "vanilla",
     version: env.SERVER_VERSION ?? "0.0.0",
-    ruleset: "official",
+    ruleset: currentRuleset(),
+    packs: [...(activeContent()?.packs ?? [])],
     ranking: mode === "open" ? env.RECORD_ANONYMOUS === "true" : true,
     guestRooms: mode !== "open",
   };

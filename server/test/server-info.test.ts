@@ -30,7 +30,7 @@ describe("/api/server 정보", () => {
   it("운영(gl): 환경을 안 적어도 production, 전적이 남고 게스트 방을 쓴다", () => {
     expect(serverInfo({ AUTH_MODE: "gl" })).toEqual({
       protocol: PROTOCOL_VERSION, name: "COMMANDER", env: "production", authMode: "gl", edition: "vanilla",
-      version: "0.0.0", ruleset: "official", ranking: true, guestRooms: true,
+      version: "0.0.0", ruleset: "official", packs: [], ranking: true, guestRooms: true,
     });
   });
   it("개발(hybrid): GL 계정 둘이면 전적이 남는다", () => {

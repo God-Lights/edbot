@@ -1,0 +1,48 @@
+{
+  "apiVersion": 1,
+  "id": "example",
+  "name": "예시 팩",
+  "version": "1.0.0",
+  "description": "콘텐츠 팩 형식을 보여 주는 예시: 새 캐릭터 2명, 캐릭터 값 조정, 새 재료와 무기, 규칙 값 하나.",
+  "units": [
+    {
+      "id": "moon-guard",
+      "nameKo": "달빛 수호병",
+      "piece": "rook",
+      "faction": "달",
+      "cost": 2,
+      "role": "탱커",
+      "ability": "shield-wall",
+      "abilityText": "자신과 인접 아군에게 보호막을 준다",
+      "lite": true
+    },
+    {
+      "id": "star-hunter",
+      "nameKo": "별 사냥꾼",
+      "piece": "knight",
+      "faction": "달",
+      "cost": 3,
+      "role": "암살",
+      "ability": "leap-bite",
+      "abilityText": "가장 약한 적에게 도약해 물어 기절시킨다",
+      "atkMult": 1.1
+    }
+  ],
+  "unitOverrides": {
+    "dwargon": { "hpMult": 1.1 }
+  },
+  "materials": [
+    { "id": "moonstone", "nameKo": "달돌", "rarity": "common", "weapon": "moon-bow" }
+  ],
+  "weapons": [
+    {
+      "id": "moon-bow",
+      "nameKo": "달돌 활",
+      "material": "moonstone",
+      "rarity": "common",
+      "text": "공격 +20%, 에너지 충전 +20%",
+      "stats": { "atk": 1.2, "energy": 1.2 }
+    }
+  ],
+  "rules": { "rerollCost": 2 }
+}

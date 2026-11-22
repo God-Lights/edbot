@@ -3,6 +3,8 @@ import { USER_HEADER } from "./auth";
 import { GUEST_HEADER, guestUserId, parseGuest } from "./guest";
 import type { LiveRoom } from "./liveboard";
 import { runBotUntilIdle } from "./bot";
+import { currentRuleset } from "./chess/content";
+import { ensureContent } from "./content-load";
 import { matchIdOf, rankingStoreOf } from "./ranking/store";
 import { parseClientMessage } from "./protocol";
 import type { ErrorCode, ServerMessage } from "./protocol";
@@ -13,6 +15,7 @@ import {
   canCloseRoom,
   createRoom,
   isExpired,
+  isRulesetCurrent,
   joinRoom,
   nextDeadline,
   playerBan,
@@ -68,8 +71,15 @@ export class Room extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    ensureContent(env);
     ctx.blockConcurrencyWhile(async () => {
       this.state = (await ctx.storage.get<RoomState>(STATE_KEY)) ?? null;
+      // 서버의 콘텐츠 팩이 바뀐 뒤에는, 옛 규칙으로 시작한 판을 이어 가지 않고 방을 지운다. (없어진 캐릭터가 판에 남지 않게)
+      if (this.state && !isRulesetCurrent(this.state, currentRuleset())) {
+        console.error(`방 ${this.state.code}: 규칙 묶음이 바뀌어서 이어 가지 않는다.`);
+        this.state = null;
+        await ctx.storage.deleteAll();
+      }
     });
   }
 
