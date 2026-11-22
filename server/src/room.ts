@@ -53,6 +53,8 @@ export interface RoomInfo {
   mode: string;
   /** 게스트 방 (학번과 이름으로 들어올 수 있다) */
   guest: boolean;
+  /** 무한 모드(뫼비우스 규칙) */
+  mobius: boolean;
 }
 
 /**
@@ -79,9 +81,9 @@ export class Room extends DurableObject<Env> {
   // ---- Worker가 부르는 RPC ----
 
   /** 방을 처음 만든다. 이미 있으면 false. (코드가 겹쳤을 때 Worker가 다른 코드로 다시 시도한다.) */
-  async init(code: string, testMatch = false, mode: "lanes" | "chess" = "chess", lite = testMatch, guest = false, hostName = "", hostId = ""): Promise<boolean> {
+  async init(code: string, testMatch = false, mode: "lanes" | "chess" = "chess", lite = testMatch, guest = false, hostName = "", hostId = "", mobius = false): Promise<boolean> {
     if (this.state) return false;
-    this.state = createRoom(code, Date.now(), testMatch, mode, lite, guest, hostName, hostId);
+    this.state = createRoom(code, Date.now(), testMatch, mode, lite, guest, hostName, hostId, mobius);
     await this.persist();
     return true;
   }
@@ -121,6 +123,7 @@ export class Room extends DurableObject<Env> {
       joinable: this.state.phase === "lobby" && this.state.players.length < 2,
       mode: this.state.mode,
       guest: this.state.guest ?? false,
+      mobius: this.state.mobius === true,
     };
   }
 

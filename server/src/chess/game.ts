@@ -102,6 +102,8 @@ export interface ChessGame {
   history: ReplayRound[];
   /** 입문 모드: 상점에 쉬운 캐릭터(1~2골드)만 나온다. */
   lite: boolean;
+  /** 무한 모드: 전투를 뫼비우스 규칙으로 한다. */
+  mobius: boolean;
   round: number;
   rngState: number;
   nextUid: number;
@@ -158,7 +160,7 @@ export const LITE_IDS: readonly string[] = [
   "lappus", "for-the-more", "raufaino", "obelion", "marshal-berg",
 ];
 
-export function createChessGame(seed: number, lite = false): ChessGame {
+export function createChessGame(seed: number, lite = false, mobius = false): ChessGame {
   const pool: Record<string, number> = {};
   for (const def of ROSTER) if (!lite || LITE_IDS.includes(def.id)) pool[def.id] = POOL_COPIES[def.cost];
   return {
@@ -167,6 +169,7 @@ export function createChessGame(seed: number, lite = false): ChessGame {
     tiles: [],
     market: [],
     lite,
+    mobius,
     round: 0,
     rngState: seed | 0,
     nextUid: 1,
@@ -536,7 +539,7 @@ export function boardPlacements(player: ChessPlayer): Placement[] {
 /** 전투를 계산해서 기록해 둔다. 체력은 전투 단계가 끝날 때(finishRound) 깎는다. */
 export function runRoundCombat(game: ChessGame): CombatRecord {
   const boards: [Placement[], Placement[]] = [boardPlacements(game.players[0]), boardPlacements(game.players[1])];
-  const recording = recordCombat(boards, game.resources ? game.tiles : []);
+  const recording = recordCombat(boards, game.resources ? game.tiles : [], { mobius: game.mobius });
   const { winner, survivors } = recording.result;
   const damage: [number, number] = [0, 0];
   if (winner !== null) {

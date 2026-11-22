@@ -332,6 +332,8 @@ export interface ChessSnapshot {
   shopOdds: [number, number, number, number];
   /** 입문 모드(쉬운 캐릭터만 나온다) */
   lite: boolean;
+  /** 무한 모드(뫼비우스 규칙). 기록 프레임의 flags 4는 밑면(유령), 8 이상은 속성 게이지 g(flags>>3). */
+  mobius?: boolean;
   /** seat별 체력. 관전자도 볼 수 있는 공개 정보 */
   hps: [number, number];
   me: ChessSelfSnapshot | null;
