@@ -103,8 +103,6 @@ enum Labels {
         }
     }
 
-    }
-
     /// 기물 아이콘(Assets의 PieceXxx). 단색이라 foregroundStyle로 색을 입힌다.
     static func pieceImageName(_ piece: Piece) -> String {
         switch piece {
