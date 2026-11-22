@@ -286,6 +286,10 @@ public struct LiveRoom: Codable, Equatable, Sendable, Identifiable {
     public let maxRounds: Int
     public let hps: [Int]?
     public let updatedAt: Int64
+    /// 게스트 방인가 (내 방 목록에서만 의미 있다)
+    public let guest: Bool?
+    /// 내가 만든 방이다 (지울 수 있다)
+    public let mine: Bool?
 
     public var id: String { code }
 }

@@ -164,22 +164,42 @@ export default {
         const mode = url.searchParams.get("mode") === "lanes" ? "lanes" : "chess";
         // 게스트 방(?guest=1): GL 계정으로 로그인한 사람이 만들고, 학번과 이름만으로 들어올 수 있다. 전적은 남기지 않는다.
         const guestRoom = url.searchParams.get("guest") === "1";
-        if (await roomStub(env, code).init(code, false, mode, false, guestRoom, user?.nickname ?? "")) {
+        if (await roomStub(env, code).init(code, false, mode, false, guestRoom, user?.nickname ?? "", user?.id ?? "")) {
           return json({ code }, 201);
         }
       }
       return json({ error: "could_not_create_room" }, 503);
     }
 
-    // GET /api/live -> 진행 중인 게스트 방 목록 (관전할 곳 고르기). GL 로그인이 필요하다.
-    if (request.method === "GET" && url.pathname === "/api/live") {
+    // GET /api/live -> 진행 중인 게스트 방 목록 (관전할 곳 고르기). GL 로그인이 필요하다. mine은 내가 만든 방(지울 수 있다)이다.
+    // GET /api/my-rooms -> 내가 만든 방(게스트 방과 일반 방) 목록.
+    if (request.method === "GET" && (url.pathname === "/api/live" || url.pathname === "/api/my-rooms")) {
       const me = await identify(env, request);
       if (enabled && !me) return json({ error: "unauthorized", loginUrl: `${origin}/auth/login` }, 401);
       try {
-        return json({ rooms: await env.LIVE.get(env.LIVE.idFromName("global")).list() });
+        const all = await env.LIVE.get(env.LIVE.idFromName("global")).list();
+        const isMine = (r: { hostId: string; host: string }): boolean =>
+          !enabled || (!!me && (r.hostId ? r.hostId === me.id : r.host !== "" && r.host === me.nickname));
+        const publicRoom = ({ hostId: _hostId, ...rest }: (typeof all)[number]) => ({ ...rest, mine: isMine({ hostId: _hostId, host: rest.host }) });
+        const rooms = url.pathname === "/api/live"
+          ? all.filter((r) => r.guest).map(publicRoom)
+          : all.filter((r) => isMine({ hostId: r.hostId, host: r.host })).map(publicRoom);
+        return json({ rooms });
       } catch {
         return json({ error: "live_unavailable" }, 503);
       }
+    }
+
+    // POST /api/rooms/:code/close -> 방을 닫는다 (만든 사람만). 모두의 연결이 끊기고 방의 내용이 지워진다.
+    if (request.method === "POST" && parts.length === 4 && parts[0] === "api" && parts[1] === "rooms" && parts[3] === "close") {
+      const code = (parts[2] ?? "").toUpperCase();
+      if (!CODE_PATTERN.test(code)) return json({ error: "room_not_found" }, 404);
+      const me = await identify(env, request);
+      if (enabled && !me) return json({ error: "unauthorized", loginUrl: `${origin}/auth/login` }, 401);
+      const result = await roomStub(env, code).close(me ? { id: me.id, nickname: me.nickname } : null, enabled);
+      if (result === "not_found") return json({ error: "room_not_found" }, 404);
+      if (result === "forbidden") return json({ error: "forbidden", message: "방을 만든 사람만 닫을 수 있어요." }, 403);
+      return json({ ok: true });
     }
 
     // ---- 빠른 대전 매칭 ----

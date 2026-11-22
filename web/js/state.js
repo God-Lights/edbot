@@ -1,5 +1,6 @@
 // 앱 전체 상태와 서버로 보내는 행동. 화면은 이것만 보고 그린다.
 
+import { api } from "./api.js";
 import { Connection } from "./conn.js";
 import { errorText } from "./util.js";
 
@@ -37,6 +38,8 @@ export const S = {
   guestCode: "",
   /** 방을 만든 직후 보여 주는 게스트 방 안내 */
   guestRoom: null,
+  /** 내가 만든 방 목록: null | { rooms } | { error } */
+  myRooms: null,
   /** 진행 중인 게스트 경기 목록: null | { rooms } | { error } */
   live: null,
   /** 관전 중이다 (플레이어가 아니다) */
@@ -86,7 +89,9 @@ export const conn = new Connection((event) => {
       renderFn();
       break;
     case "error":
-      toast(errorText(event.code, event.message));
+      // 방이 닫혔다 (만든 사람이 닫았다): 로비로 돌아간다.
+      if (event.code === "room_closed") leave(errorText(event.code));
+      else toast(errorText(event.code, event.message));
       break;
     case "reconnecting":
       S.status = "reconnecting";
@@ -113,12 +118,24 @@ function observe(room) {
   S.room = room;
 }
 
-export function join(code, level = "", spectate = false, guest = null) {
+export async function join(code, level = "", spectate = false, guest = null) {
   code = code.trim().toUpperCase();
   if (code.length !== 4) return toast("방 코드는 4자리예요.");
   leave();
   S.status = "connecting";
   S.message = "";
+  renderFn();
+  // 없는 방(닫힌 방 포함)이면 재접속을 반복하지 않고 바로 알려 준다.
+  let info = null;
+  try {
+    info = await api.room(code);
+  } catch {
+    info = {}; // 서버에 닿지 못한 것일 수 있어서 일단 접속을 시도한다
+  }
+  if (!info) {
+    S.status = "idle";
+    return toast(errorText("room_not_found"));
+  }
   store("edbot.name", S.name);
   S.spectating = spectate;
   S.sessionRounds = {};

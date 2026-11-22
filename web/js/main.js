@@ -35,7 +35,8 @@ function lobbyView() {
         </form>
       </div>
       <div class="panel stack">
-        ${loggedIn ? `<div class="two"><button class="btn sec" data-act="create-guest">🎓 게스트 방 만들기</button><button class="btn sec" data-act="live">👁 진행 중인 경기 관전</button></div>` : ""}
+        ${loggedIn ? `<div class="two"><button class="btn sec" data-act="create-guest">🎓 게스트 방 만들기</button><button class="btn sec" data-act="live">👁 진행 중인 경기 관전</button></div>
+        <button class="btn sec wide" data-act="myrooms">🗂 내 방 관리 (방 지우기)</button>` : ""}
         <button class="btn primary wide" data-act="quick"${S.quick ? " disabled" : ""}>⚔ 빠른 대전 (비슷한 실력의 상대 찾기)</button>
         <button class="btn sec wide" data-act="create"${S.creating ? " disabled" : ""}>${S.creating ? "방을 만드는 중..." : "방 만들기"}</button>
         <div class="two"><button class="btn sec" data-act="ranking">🏆 랭킹</button><button class="btn sec" data-act="guide" data-tab="flow">📖 게임 가이드</button></div>
@@ -78,12 +79,65 @@ function liveModal() {
       const hp = r.hps ? `♥ ${Math.max(0, r.hps[0])} : ${Math.max(0, r.hps[1])}` : "";
       const round = r.round ? `라운드 ${r.round}/${r.maxRounds}` : "";
       return `<div class="panel livecard"><div><b>${who}</b><div class="sub">${esc(LIVE_PHASE[r.phase] ?? r.phase)} ${round} ${hp} · 방 ${esc(r.code)} · 만든 사람 ${esc(r.host)}</div></div>
-        <span class="grow"></span><button class="btn primary" data-act="live-watch" data-code="${esc(r.code)}">👁 관전</button></div>`;
+        <span class="grow"></span>${r.mine ? `<button class="btn sec" data-act="room-close" data-code="${esc(r.code)}" data-from="live">🗑 삭제</button>` : ""}
+        <button class="btn primary" data-act="live-watch" data-code="${esc(r.code)}">👁 관전</button></div>`;
     }).join("");
   }
   return `<div class="modal"><div class="modal-box"><div class="modal-head"><h2>진행 중인 게스트 경기</h2>
     <div class="row"><button class="btn sec" data-act="live-refresh">⟳ 새로고침</button><button class="btn sec" data-act="close-modal">닫기</button></div></div>
     <div class="modal-body">${body}</div></div></div>`;
+}
+
+function myRoomsModal() {
+  const m = S.myRooms;
+  let body;
+  if (!m) body = `<div class="panel">불러오는 중...</div>`;
+  else if (m.error) body = `<div class="panel warn">${m.error === 401 ? "GL 로그인이 필요해요." : "목록을 불러오지 못했어요."}</div>`;
+  else if (!m.rooms.length) body = `<div class="panel sub">내가 만든 방이 없어요.</div>`;
+  else {
+    body = m.rooms.map((r) => {
+      const who = r.players.length ? r.players.map((p) => `${p.studentId ? esc(p.studentId) + " " : ""}${esc(p.name)}${p.connected ? "" : " (끊김)"}`).join("  vs  ") : "참가자 없음";
+      return `<div class="panel livecard"><div><b>방 ${esc(r.code)} · ${r.guest ? "게스트 방" : "일반 방"}</b><div class="sub">${esc(LIVE_PHASE[r.phase] ?? r.phase)}${r.round ? ` · 라운드 ${r.round}/${r.maxRounds}` : ""} · ${who}</div></div>
+        <span class="grow"></span><button class="btn sec" data-act="room-close" data-code="${esc(r.code)}" data-from="myrooms">🗑 삭제</button></div>`;
+    }).join("");
+  }
+  const count = m?.rooms?.length ?? 0;
+  return `<div class="modal"><div class="modal-box"><div class="modal-head"><h2>내 방 관리</h2>
+    <div class="row">${count ? `<button class="btn sec" data-act="myrooms-clear">🗑 모두 닫기 (${count})</button>` : ""}<button class="btn sec" data-act="myrooms">⟳ 새로고침</button><button class="btn sec" data-act="close-modal">닫기</button></div></div>
+    <div class="sub">방을 닫으면 안에 있는 사람이 모두 나가지고, 방의 내용이 지워져요. 내가 만든 방만 보여요.</div>
+    <div class="modal-body">${body}</div></div></div>`;
+}
+
+async function openMyRooms() {
+  S.myRooms = null;
+  update({ modal: "myrooms" });
+  await refreshMyRooms();
+}
+async function refreshMyRooms() {
+  const rooms = await api.myRooms();
+  S.myRooms = Array.isArray(rooms) ? { rooms } : rooms;
+  if (S.modal === "myrooms") render();
+}
+
+/** 방 하나를 닫는다. 끝나면 열려 있는 목록을 새로 불러온다. */
+async function closeRoom(code, from) {
+  if (!confirm(`방 ${code}을(를) 닫을까요? 안에 있는 사람이 모두 나가져요.`)) return;
+  const result = await api.closeRoom(code);
+  if (result.ok) toast(`방 ${code}을(를) 닫았어요.`);
+  else if (result.status === 403) toast(result.message ?? "방을 만든 사람만 닫을 수 있어요.");
+  else if (result.status === 404) toast("이미 없는 방이에요.");
+  else toast("방을 닫지 못했어요.");
+  if (from === "myrooms") await refreshMyRooms();
+  if (from === "live") await refreshLive();
+}
+
+async function closeAllMyRooms() {
+  const rooms = S.myRooms?.rooms ?? [];
+  if (!rooms.length || !confirm(`내가 만든 방 ${rooms.length}개를 모두 닫을까요? 안에 있는 사람이 모두 나가져요.`)) return;
+  let closed = 0;
+  for (const r of rooms) if ((await api.closeRoom(r.code)).ok) closed += 1;
+  toast(`${closed}개 방을 닫았어요.`);
+  await refreshMyRooms();
 }
 
 let liveTimer = null;
@@ -199,7 +253,8 @@ function roomShell(room) {
     default: body = `<div class="center-msg">이 웹 버전은 체스판 자동 전투만 지원해요. (${esc(PHASE_NAME[room.phase] ?? room.phase)})</div>`;
   }
   return `<div class="topbar"><img class="mini-logo" src="assets/logo.png" alt=""><b class="mono">${esc(room.code)}</b><span class="grow"></span>${players}
-    <button class="btn sec" data-act="mute" title="효과음">${sfx.muted ? "🔇" : "🔊"}</button><button class="btn sec" data-act="guide" data-tab="flow">📖 가이드</button><button class="btn sec" data-act="leave">나가기</button></div>
+    <button class="btn sec" data-act="mute" title="효과음">${sfx.muted ? "🔇" : "🔊"}</button><button class="btn sec" data-act="guide" data-tab="flow">📖 가이드</button>
+    ${room.isHost ? `<button class="btn sec" data-act="room-close" data-code="${esc(room.code)}" data-from="room">🗑 방 닫기</button>` : ""}<button class="btn sec" data-act="leave">나가기</button></div>
     ${S.status === "reconnecting" ? `<div class="warn center">다시 연결하는 중...</div>` : ""}<div class="room">${body}</div>`;
 }
 
@@ -215,7 +270,7 @@ function render() {
   stopPlayback();
   const modalScroll = document.querySelector(".modal-body")?.scrollTop ?? 0;
   app.innerHTML = (inRoom ? roomShell(room) : S.quick ? quickView() : S.status === "connecting" ? `<div class="center-msg">접속하는 중...</div>` : lobbyView())
-    + (S.modal === "guestroom" && S.guestRoom ? guestRoomModal() : S.modal === "live" ? liveModal() : S.modal === "guide" ? guideModal() : S.modal === "ranking" ? rankingModal() : S.modal === "replay" && S.replay ? replayModal() : "");
+    + (S.modal === "guestroom" && S.guestRoom ? guestRoomModal() : S.modal === "live" ? liveModal() : S.modal === "myrooms" ? myRoomsModal() : S.modal === "guide" ? guideModal() : S.modal === "ranking" ? rankingModal() : S.modal === "replay" && S.replay ? replayModal() : "");
   const modalBody = document.querySelector(".modal-body");
   if (modalBody) modalBody.scrollTop = modalScroll;
   if (S.modal === "replay") startReplay();
@@ -348,6 +403,9 @@ document.addEventListener("click", (event) => {
     case "mute": sfx.toggle(); render(); break;
     case "create-guest": createGuestRoom(); break;
     case "live": openLive(); break;
+    case "myrooms": openMyRooms(); break;
+    case "myrooms-clear": closeAllMyRooms(); break;
+    case "room-close": closeRoom(d.code, d.from); break;
     case "live-refresh": refreshLive(); break;
     case "live-watch": update({ modal: null }); join(d.code, "", true); break;
     case "guestroom-play": update({ modal: null }); join(d.code); break;

@@ -111,8 +111,87 @@ struct LiveView: View {
                 Text(detail).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
+            if room.mine == true {
+                Button { Task { await model.closeRoom(code: room.code) } } label: { Label("삭제", systemImage: "trash") }
+                    .buttonStyle(SecondaryButtonStyle())
+            }
             Button { model.watch(code: room.code) } label: { Label("관전", systemImage: "eye") }
                 .buttonStyle(PrimaryButtonStyle())
+        }
+        .panel()
+    }
+}
+
+/// 내가 만든 방(게스트 방과 일반 방) 관리: 하나씩 지우거나 모두 닫는다.
+struct MyRoomsView: View {
+    @Environment(AppModel.self) private var model
+    @State private var confirmAll = false
+
+    var body: some View {
+        ZStack {
+            AppBackground()
+            VStack(spacing: 14) {
+                HStack {
+                    Text("내 방 관리").font(.title.bold())
+                    Spacer()
+                    if !model.myRooms.isEmpty {
+                        Button { confirmAll = true } label: { Label("모두 닫기 (\(model.myRooms.count))", systemImage: "trash") }
+                            .buttonStyle(SecondaryButtonStyle())
+                    }
+                    Button { Task { await model.refreshMyRooms() } } label: { Label("새로고침", systemImage: "arrow.clockwise") }
+                        .buttonStyle(SecondaryButtonStyle())
+                    Button("닫기") { model.showMyRooms = false }.buttonStyle(SecondaryButtonStyle())
+                }
+                Text("방을 닫으면 안에 있는 사람이 모두 나가지고, 방의 내용이 지워져요. 내가 만든 방만 보여요.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let message = model.message { Text(message).font(.callout).foregroundStyle(Theme.warn) }
+                ScrollView {
+                    VStack(spacing: 10) { listBody }
+                        .frame(maxWidth: 900)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(24)
+        }
+        .preferredColorScheme(.dark)
+        .task { await model.refreshMyRooms() }
+        .confirmationDialog("내가 만든 방을 모두 닫을까요?", isPresented: $confirmAll, titleVisibility: .visible) {
+            Button("모두 닫기", role: .destructive) { Task { await model.closeAllMyRooms() } }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text("안에 있는 사람이 모두 나가져요.")
+        }
+    }
+
+    @ViewBuilder private var listBody: some View {
+        if let error = model.myRoomsError {
+            Text(error).foregroundStyle(Theme.warn).frame(maxWidth: .infinity).panel()
+        } else if model.myRooms.isEmpty {
+            Text("내가 만든 방이 없어요.").foregroundStyle(.secondary).frame(maxWidth: .infinity).panel()
+        } else {
+            ForEach(model.myRooms) { room in
+                row(room)
+            }
+        }
+    }
+
+    private func row(_ room: LiveRoom) -> some View {
+        let who: String = room.players.isEmpty
+            ? "참가자 없음"
+            : room.players.map { ($0.studentId.map { "\($0) " } ?? "") + $0.name + ($0.connected ? "" : " (끊김)") }.joined(separator: "  vs  ")
+        var detail: String = Labels.livePhase(room.phase)
+        if room.round > 0 { detail += " · 라운드 \(room.round)/\(room.maxRounds)" }
+        detail += " · " + who
+        return HStack {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("방 \(room.code) · \(room.guest == true ? "게스트 방" : "일반 방")").font(.headline)
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button { Task { await model.closeRoom(code: room.code) } } label: { Label("삭제", systemImage: "trash") }
+                .buttonStyle(SecondaryButtonStyle())
         }
         .panel()
     }

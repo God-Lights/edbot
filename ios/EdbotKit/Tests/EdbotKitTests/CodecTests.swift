@@ -52,6 +52,13 @@ final class CodecTests: XCTestCase {
         XCTAssertEqual(MessageCodec.ping(42), #"{"t":"ping","ts":42}"#)
     }
 
+    func testRoomClosedIsFatalAndIsHostParses() {
+        XCTAssertTrue(ErrorCode.isFatal("room_closed"))
+        let json = #"{"t":"state","room":{"isHost":true,"code":"ABCD","phase":"lobby","phaseStartedAt":1,"phaseEndsAt":null,"serverTime":3,"players":[]}}"#
+        guard case let .state(room)? = MessageCodec.parse(json) else { return XCTFail("state가 아니다") }
+        XCTAssertEqual(room.isHost, true)
+    }
+
     func testFatalErrors() {
         XCTAssertTrue(ErrorCode.isFatal("room_full"))
         XCTAssertTrue(ErrorCode.isFatal("room_not_found"))

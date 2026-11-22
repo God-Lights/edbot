@@ -76,6 +76,29 @@ public struct ApiClient: Sendable {
         return body.rooms
     }
 
+    /// 내가 만든 방(게스트 방과 일반 방) 목록. GL 로그인이 필요하다.
+    public func myRooms() async throws -> [LiveRoom] {
+        struct Body: Decodable { let rooms: [LiveRoom] }
+        let (data, status) = try await http.send(Http.request(baseURL, "/api/my-rooms", token: authToken))
+        if status == 401 { throw ApiError.unauthorized }
+        guard (200..<300).contains(status) else { throw ApiError.status(status) }
+        guard let body = try? JSONDecoder().decode(Body.self, from: data) else { throw ApiError.badResponse }
+        return body.rooms
+    }
+
+    /// 방을 닫는다(만든 사람만). 안에 있는 사람이 모두 나가지고 방의 내용이 지워진다.
+    /// 이미 없는 방이면 false, 닫았으면 true. 권한이 없으면 forbidden을 던진다.
+    @discardableResult
+    public func closeRoom(code: String) async throws -> Bool {
+        let escaped = code.trimmingCharacters(in: .whitespaces).uppercased().addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? code
+        let (_, status) = try await http.send(Http.request(baseURL, "/api/rooms/\(escaped)/close", method: "POST", token: authToken))
+        if status == 401 { throw ApiError.unauthorized }
+        if status == 403 { throw ApiError.status(403) }
+        if status == 404 { return false }
+        guard (200..<300).contains(status) else { throw ApiError.status(status) }
+        return true
+    }
+
     /// 체스판 자동 전투의 캐릭터 20명과 기물 시너지를 가져온다.
     public func chessCatalog() async throws -> ChessCatalog {
         let (data, status) = try await http.send(Http.request(baseURL, "/api/chess"))

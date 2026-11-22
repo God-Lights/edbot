@@ -6,6 +6,10 @@ export interface LiveRoom {
   code: string;
   /** 방을 만든 GL 계정의 닉네임 */
   host: string;
+  /** 방을 만든 GL 계정의 id. 밖으로 내보내지 않는다. */
+  hostId: string;
+  /** 게스트 방 (학번과 이름으로 들어올 수 있다) */
+  guest: boolean;
   players: Array<{ name: string; studentId?: string; connected: boolean }>;
   phase: string;
   round: number;

@@ -51,6 +51,7 @@ enum Labels {
         case ErrorCode.noFreeSmelter: return "빈 재련대가 없어요. 다음 라운드에 무기가 나와요."
         case ErrorCode.unknownWeapon: return "없는 무기예요."
         case ErrorCode.noWeapon: return "그 무기를 가지고 있지 않아요."
+        case ErrorCode.roomClosed: return "방이 닫혔어요."
         case ErrorCode.spectateUnavailable: return "이 방은 관전할 수 없어요. (연습·전체 대전 방이거나 없는 방이에요)"
         case ErrorCode.notInZone: return "본진이나 아군 가드 타워 근처에서만 장착할 수 있어요."
         case ErrorCode.alreadyEquipping: return "이미 무기를 끼우는 중이에요."
@@ -77,6 +78,17 @@ enum Labels {
         case "gave_up": return "서버에 다시 연결하지 못했어요."
         case "invalid_url": return "서버 주소가 올바르지 않아요."
         default: return nil
+        }
+    }
+
+    /// 관전·내 방 목록의 단계 이름
+    static func livePhase(_ phase: String) -> String {
+        switch phase {
+        case "lobby": return "대기 중"
+        case "prep": return "준비 중"
+        case "combat": return "전투 중"
+        case "result": return "결과"
+        default: return phase
         }
     }
 

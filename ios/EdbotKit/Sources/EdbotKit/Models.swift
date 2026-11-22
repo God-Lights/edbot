@@ -426,6 +426,8 @@ public struct ResultSnapshot: Codable, Equatable, Sendable {
 }
 
 public struct RoomSnapshot: Codable, Equatable, Sendable {
+    /// 내가 이 방을 만든 사람이다 (방을 닫을 수 있다). 오래된 서버면 nil.
+    public let isHost: Bool?
     public let code: String
     public let phase: Phase
     public let phaseStartedAt: Int64
@@ -500,6 +502,7 @@ public enum ErrorCode {
     public static let unknownWeapon = "unknown_weapon"
     public static let noWeapon = "no_weapon"
     public static let spectateUnavailable = "spectate_unavailable"
+    public static let roomClosed = "room_closed"
     public static let notInZone = "not_in_zone"
     public static let alreadyEquipping = "already_equipping"
     public static let alreadyEquipped = "already_equipped"
@@ -519,6 +522,6 @@ public enum ErrorCode {
 
     /// 다시 시도해도 소용없는 오류. 이 오류를 받으면 자동 재접속을 멈춘다.
     public static func isFatal(_ code: String) -> Bool {
-        [roomNotFound, roomFull, gameInProgress, unauthorized, spectateUnavailable].contains(code)
+        [roomNotFound, roomFull, gameInProgress, unauthorized, spectateUnavailable, roomClosed].contains(code)
     }
 }
