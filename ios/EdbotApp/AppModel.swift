@@ -90,6 +90,11 @@ final class AppModel {
     private(set) var chessSynergies: [ChessSynergyInfo] = []
     private(set) var chessMaterials: [ChessMaterialInfo] = []
     private(set) var chessWeapons: [ChessWeaponInfo] = []
+    private(set) var chessFusions: [ChessFusion] = []
+    /// 탭으로 조합하는 방식이 켜져 있다 (아이템 둘을 차례로 누른다)
+    private(set) var combineMode = false
+    /// 조합 방식에서 먼저 누른 아이템
+    var combineFirst: ChessItem?
     /// 준비 단계에서 고른 내 기물(대기석 또는 판 위). 칸을 누르면 거기에 놓는다.
     var selectedUid: String?
 
@@ -207,7 +212,33 @@ final class AppModel {
     func chessUnit(_ id: String) -> ChessUnitInfo? { chessUnits.first { $0.id == id } }
     func chessSynergy(_ id: String) -> ChessSynergyInfo? { chessSynergies.first { $0.id == id } }
     func chessMaterial(_ id: String) -> ChessMaterialInfo? { chessMaterials.first { $0.id == id } }
-    func chessWeapon(_ id: String) -> ChessWeaponInfo? { chessWeapons.first { $0.id == id } }
+    /// 기본 무기뿐 아니라 ★2(`id*`)·융합(`a+b`) 무기도 이름과 설명을 돌려준다.
+    func chessWeapon(_ id: String) -> ChessWeaponInfo? { ChessCrafting.weaponInfo(id, weapons: chessWeapons) }
+
+    func itemName(_ item: ChessItem) -> String {
+        item.kind == .material ? (chessMaterial(item.id)?.nameKo ?? item.id) : (chessWeapon(item.id)?.nameKo ?? item.id)
+    }
+
+    func setCombineMode(_ on: Bool) {
+        combineMode = on
+        combineFirst = nil
+    }
+
+    /// 조합 방식에서 아이템을 눌렀다: 처음이면 고르고, 두 번째면 합친다.
+    func combineTap(_ item: ChessItem) {
+        if let first = combineFirst {
+            combineFirst = nil
+            chessCombine(first, item)
+        } else {
+            combineFirst = item
+        }
+    }
+
+    func chessCombine(_ a: ChessItem, _ b: ChessItem) {
+        guard let connection else { return }
+        play(.combine)
+        Task { await connection.sendCombine(a, b) }
+    }
 
     private func loadChess(from url: URL) {
         guard chessUnits.isEmpty else { return }
@@ -217,6 +248,7 @@ final class AppModel {
                 chessSynergies = catalog.synergies
                 chessMaterials = catalog.materials
                 chessWeapons = catalog.weapons
+                chessFusions = catalog.fusions ?? []
             }
         }
     }
@@ -739,6 +771,7 @@ final class AppModel {
         if previous?.phase != room.phase || previous?.chess?.round != room.chess?.round {
             selectedUid = nil
             selectedWeaponId = nil
+            combineFirst = nil
         }
         if let battle = room.battle {
             interpolator.update(battle.units, at: Date.timeIntervalSinceReferenceDate)

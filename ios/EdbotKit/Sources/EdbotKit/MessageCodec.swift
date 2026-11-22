@@ -112,6 +112,10 @@ public enum MessageCodec {
     public static func equip(_ weaponId: String, uid: String) -> String {
         "{\"t\":\"equip\",\"weaponId\":\(quoted(weaponId)),\"uid\":\(quoted(uid))}"
     }
+    /// 재료·무기 둘을 합쳐 새 재료나 무기를 만든다.
+    public static func combine(_ a: ChessItem, _ b: ChessItem) -> String {
+        "{\"t\":\"combine\",\"a\":{\"kind\":\"\(a.kind.rawValue)\",\"id\":\(quoted(a.id))},\"b\":{\"kind\":\"\(b.kind.rawValue)\",\"id\":\(quoted(b.id))}}"
+    }
     /// 기물(uid)의 무기를 뺀다.
     public static func unequip(_ uid: String) -> String { "{\"t\":\"unequip\",\"uid\":\(quoted(uid))}" }
     /// 준비 끝. 둘 다 끝내면 바로 전투가 시작된다.

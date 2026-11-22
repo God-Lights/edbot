@@ -550,24 +550,35 @@ struct ChessPrepView: View {
                     marketRow(me, index: index)
                 }
             }
+            if !materialIds.isEmpty || !weaponIds.isEmpty {
+                combineBar
+            }
             if !materialIds.isEmpty {
-                Text("재료 · 누르거나 재련대로 끌어다 놓아요").font(.caption).foregroundStyle(.secondary)
+                Text("재료 · 누르면 재련, 재련대로 끌어 놓아도 돼요 (다른 재료 위로 끌면 조합)").font(.caption).foregroundStyle(.secondary)
                 chipFlow {
                     ForEach(materialIds, id: \.self) { id in
                         let rarity: String = model.chessMaterial(id)?.rarity ?? "common"
-                        Button { model.chessSmelt(id) } label: {
+                        let item = ChessItem(.material, id)
+                        let usable: Bool = freeSmelter || model.combineMode
+                        let picked: Bool = model.combineFirst == item
+                        Button {
+                            if model.combineMode { model.combineTap(item) } else { model.chessSmelt(id) }
+                        } label: {
                             Text("\(materialName(id)) ×\(me.materials[id] ?? 0)")
                                 .font(.caption.bold())
                                 .padding(.horizontal, 8).padding(.vertical, 5)
-                                .background(Capsule().fill(ChessStyle.rarityColor(rarity).opacity(0.25)))
-                                .overlay(Capsule().strokeBorder(ChessStyle.rarityColor(rarity).opacity(0.7), lineWidth: 1))
+                                .background(Capsule().fill(ChessStyle.rarityColor(rarity).opacity(picked ? 0.55 : 0.25)))
+                                .overlay(Capsule().strokeBorder(picked ? Color.white : ChessStyle.rarityColor(rarity).opacity(0.7), lineWidth: picked ? 2 : 1))
                         }
                         .buttonStyle(.plain)
-                        .disabled(!freeSmelter)
-                        .opacity(freeSmelter ? 1 : 0.45)
+                        .disabled(!usable)
+                        .opacity(usable ? 1 : 0.45)
                         .draggable("material:\(id)")
+                        .dropDestination(for: String.self) { items, _ in combineDrop(items, onto: item) }
+                        .transition(.scale(scale: 0.5).combined(with: .opacity))
                     }
                 }
+                .animation(.spring(response: 0.35, dampingFraction: 0.7), value: materialIds)
             }
             HStack(spacing: 6) {
                 ForEach(me.smelters.indices, id: \.self) { slot in
@@ -589,12 +600,15 @@ struct ChessPrepView: View {
                 Text("재련 중인 무기는 다음 라운드 시작에 완성돼요.").font(.system(size: 9)).foregroundStyle(.secondary)
             }
             if !weaponIds.isEmpty {
-                Text("무기 · 기물 위로 끌어다 놓으면 껴요 (누른 뒤 기물을 눌러도 돼요)").font(.caption).foregroundStyle(.secondary)
+                Text("무기 · 기물 위로 끌어 놓으면 껴요 (다른 아이템 위로 끌면 조합)").font(.caption).foregroundStyle(.secondary)
                 chipFlow {
                     ForEach(weaponIds, id: \.self) { id in
                         let rarity: String = model.chessWeapon(id)?.rarity ?? "common"
-                        let selected: Bool = model.selectedWeaponId == id
-                        Button { model.selectedWeaponId = selected ? nil : id } label: {
+                        let item = ChessItem(.weapon, id)
+                        let selected: Bool = model.selectedWeaponId == id || model.combineFirst == item
+                        Button {
+                            if model.combineMode { model.combineTap(item) } else { model.selectedWeaponId = model.selectedWeaponId == id ? nil : id }
+                        } label: {
                             Text("\(weaponName(id)) ×\(me.weapons[id] ?? 0)")
                                 .font(.caption.bold())
                                 .padding(.horizontal, 8).padding(.vertical, 5)
@@ -603,8 +617,11 @@ struct ChessPrepView: View {
                         }
                         .buttonStyle(.plain)
                         .draggable("weapon:\(id)")
+                        .dropDestination(for: String.self) { items, _ in combineDrop(items, onto: item) }
+                        .transition(.scale(scale: 0.5).combined(with: .opacity))
                     }
                 }
+                .animation(.spring(response: 0.35, dampingFraction: 0.7), value: weaponIds)
                 if let id = model.selectedWeaponId, let info = model.chessWeapon(id) {
                     Text(info.text).font(.caption2).foregroundStyle(Theme.warn)
                 }
@@ -619,6 +636,45 @@ struct ChessPrepView: View {
             guard let unit, unit.weapon != nil else { return false }
             model.chessUnequip(unit.uid)
             return true
+        }
+    }
+
+    /// 아이템을 다른 아이템 위에 놓으면 합친다.
+    private func combineDrop(_ items: [String], onto target: ChessItem) -> Bool {
+        guard let raw = items.first, let dropped = DragItem(raw) else { return false }
+        let item: ChessItem
+        switch dropped {
+        case let .material(id): item = ChessItem(.material, id)
+        case let .weapon(id): item = ChessItem(.weapon, id)
+        case .unit: return false
+        }
+        model.chessCombine(item, target)
+        return true
+    }
+
+    /// 조합 도구줄: 탭으로 조합하는 방식 켜기, 조합 도감, 안내 문구
+    private var combineBar: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Button { model.setCombineMode(!model.combineMode) } label: {
+                    Label(model.combineMode ? "조합 중 (둘을 차례로 누르세요)" : "조합", systemImage: "flask")
+                        .font(.caption.bold())
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(Capsule().fill(model.combineMode ? Theme.accent.opacity(0.6) : Color.white.opacity(0.12)))
+                }
+                .buttonStyle(.plain)
+                Button { model.openGuide(.recipes) } label: {
+                    Label("조합 도감", systemImage: "scroll")
+                        .font(.caption.bold())
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(Capsule().fill(Color.white.opacity(0.12)))
+                }
+                .buttonStyle(.plain)
+            }
+            Text(model.combineFirst.map { "\(model.itemName($0))와(과) 합칠 아이템을 누르세요" }
+                 ?? "아이템을 다른 아이템 위로 끌어다 놓으면 합쳐져요 (재료+재료, 무기+무기, 무기+원재료)")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
         }
     }
 

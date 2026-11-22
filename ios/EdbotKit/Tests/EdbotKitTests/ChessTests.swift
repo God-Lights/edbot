@@ -127,4 +127,58 @@ final class ChessTests: XCTestCase {
         XCTAssertNil(rooms[1].hps)
         XCTAssertTrue(rooms[1].players.isEmpty)
     }
+
+    // MARK: 조합
+
+    private static let weaponsJSON = #"[{"id":"clawstone-axe","nameKo":"클로우스톤 도끼","materialId":"clawstone","rarity":"common","text":"공격 +15%"},{"id":"edmium-blade","nameKo":"에드뮴 블레이드","materialId":"edmium","rarity":"common","text":"공격 속도 +25%"},{"id":"dark-scythe","nameKo":"어둠의 낫","materialId":"dark-essence","rarity":"rare","text":"흡혈 35%"}]"#
+    private var weapons: [ChessWeaponInfo] { try! JSONDecoder().decode([ChessWeaponInfo].self, from: Data(Self.weaponsJSON.utf8)) }
+    private let fusions: [ChessFusion] = [ChessFusion(a: "bit", b: "clawstone", result: "titanium"), ChessFusion(a: "clawstone", b: "edmium", result: "redocean")]
+
+    func testParsesWeaponIds() {
+        let w = weapons
+        XCTAssertEqual(ChessCrafting.parseWeapon("clawstone-axe", weapons: w)?.kind, .single)
+        XCTAssertEqual(ChessCrafting.parseWeapon("clawstone-axe*", weapons: w)?.power, 1.5)
+        XCTAssertEqual(ChessCrafting.parseWeapon("clawstone-axe+edmium-blade", weapons: w)?.parts, ["clawstone-axe", "edmium-blade"])
+        for bad in ["nope", "nope*", "clawstone-axe**", "clawstone-axe+clawstone-axe", "edmium-blade+clawstone-axe", "a+b+c", "+", "clawstone-axe+", ""] {
+            XCTAssertNil(ChessCrafting.parseWeapon(bad, weapons: w), bad)
+        }
+    }
+
+    func testWeaponInfoNamesCombinedWeapons() throws {
+        let w = weapons
+        XCTAssertEqual(ChessCrafting.weaponInfo("clawstone-axe*", weapons: w)?.nameKo, "클로우스톤 도끼 ★2")
+        let hybrid = try XCTUnwrap(ChessCrafting.weaponInfo("dark-scythe+edmium-blade", weapons: w) ?? ChessCrafting.weaponInfo("clawstone-axe+dark-scythe", weapons: w))
+        XCTAssertEqual(hybrid.rarity, "rare") // 융합 무기는 더 높은 희귀도를 따른다
+        XCTAssertTrue(hybrid.text.contains("75%"))
+    }
+
+    func testCombineRules() {
+        let w = weapons
+        let c: (ChessItem, ChessItem) -> ChessItem? = { ChessCrafting.combine($0, $1, weapons: w, fusions: self.fusions) }
+        // 재료: 조합표에 있는 쌍만, 순서 무관
+        XCTAssertEqual(c(ChessItem(.material, "clawstone"), ChessItem(.material, "bit")), ChessItem(.material, "titanium"))
+        XCTAssertEqual(c(ChessItem(.material, "bit"), ChessItem(.material, "clawstone")), ChessItem(.material, "titanium"))
+        XCTAssertNil(c(ChessItem(.material, "bit"), ChessItem(.material, "bit")))
+        XCTAssertNil(c(ChessItem(.material, "bit"), ChessItem(.material, "edmium")))
+        // 무기: 같으면 ★2, 다르면 융합(사전순), ★2·융합은 더 못 합친다
+        XCTAssertEqual(c(ChessItem(.weapon, "clawstone-axe"), ChessItem(.weapon, "clawstone-axe")), ChessItem(.weapon, "clawstone-axe*"))
+        XCTAssertEqual(c(ChessItem(.weapon, "edmium-blade"), ChessItem(.weapon, "clawstone-axe")), ChessItem(.weapon, "clawstone-axe+edmium-blade"))
+        XCTAssertNil(c(ChessItem(.weapon, "clawstone-axe*"), ChessItem(.weapon, "edmium-blade")))
+        XCTAssertNil(c(ChessItem(.weapon, "clawstone-axe+edmium-blade"), ChessItem(.weapon, "dark-scythe")))
+        // 무기 + 원재료 = ★2
+        XCTAssertEqual(c(ChessItem(.weapon, "clawstone-axe"), ChessItem(.material, "clawstone")), ChessItem(.weapon, "clawstone-axe*"))
+        XCTAssertEqual(c(ChessItem(.material, "clawstone"), ChessItem(.weapon, "clawstone-axe")), ChessItem(.weapon, "clawstone-axe*"))
+        XCTAssertNil(c(ChessItem(.weapon, "clawstone-axe"), ChessItem(.material, "edmium")))
+    }
+
+    func testCombineMessageAndCatalogFusions() throws {
+        XCTAssertEqual(
+            MessageCodec.combine(ChessItem(.material, "bit"), ChessItem(.weapon, "clawstone-axe")),
+            #"{"t":"combine","a":{"kind":"material","id":"bit"},"b":{"kind":"weapon","id":"clawstone-axe"}}"#
+        )
+        XCTAssertTrue(ErrorCode.invalidRecipe == "invalid_recipe")
+        let json = #"{"units":[],"synergies":[],"materials":[],"weapons":[],"fusions":[{"a":"bit","b":"clawstone","result":"titanium"}]}"#
+        let catalog = try XCTUnwrap(MessageCodec.parseChessCatalog(Data(json.utf8)))
+        XCTAssertEqual(catalog.fusions?.first?.result, "titanium")
+    }
 }

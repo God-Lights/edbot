@@ -2,7 +2,7 @@ import EdbotKit
 import SwiftUI
 
 enum GuideTab: String, CaseIterable, Identifiable {
-    case flow, prep, combat, characters, synergy, resources, controls
+    case flow, prep, combat, characters, synergy, resources, recipes, controls
 
     var id: String { rawValue }
 
@@ -14,6 +14,7 @@ enum GuideTab: String, CaseIterable, Identifiable {
         case .characters: return "캐릭터"
         case .synergy: return "시너지"
         case .resources: return "자원과 무기"
+        case .recipes: return "조합 도감"
         case .controls: return "조작"
         }
     }
@@ -72,6 +73,7 @@ struct GuideView: View {
         case .characters: CharacterGuide()
         case .synergy: SynergyGuide()
         case .resources: ResourceGuide()
+        case .recipes: RecipeGuide()
         case .controls: ControlsGuide()
         }
     }
@@ -304,6 +306,55 @@ private struct SynergyGuide: View {
     }
 }
 
+/// 조합 도감: 조합 규칙과 재료 조합표(서버가 알려 주는 데이터)
+private struct RecipeGuide: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        VStack(spacing: 14) {
+            GuideCard(title: "조합이란?") {
+                guideLine("재료와 무기를 **서로 합쳐서** 새로운 재료나 무기를 만들어요. 합친 둘은 사라지고, 재련처럼 기다리지 않고 **바로** 결과가 나와요.")
+                guideLine("아이템을 **다른 아이템 위로 끌어다 놓으면** 합쳐져요. 끌기 어려우면 **조합** 버튼을 켜고 두 아이템을 차례로 눌러도 돼요.")
+            }
+            GuideCard(title: "무기 조합") {
+                guideLine("**같은 무기 둘 → ★2 무기**: 효과가 1.5배예요. (예: 클로우스톤 도끼 + 클로우스톤 도끼)")
+                guideLine("**다른 무기 둘 → 융합 무기**: 두 무기의 효과를 **각각 75%씩** 모두 가져요. (예: 클로우스톤 도끼 + 에드뮴 블레이드)")
+                guideLine("**무기 + 그 무기의 원재료 → ★2 무기**: 재료를 재련하지 않고 바로 무기에 보태요.")
+                guideLine("★2 무기와 융합 무기는 더 합칠 수 없어요. 기물에는 무기를 하나만 낄 수 있어요.")
+            }
+            GuideCard(title: "재료 조합") {
+                guideLine("**같은 희귀도의 서로 다른 재료 둘 → 한 단계 위 희귀도의 재료**예요. 흔함 → 보통 → 희귀 → 전설. (전설끼리는 합칠 수 없어요)")
+                guideLine("시장에서 못 사는 전설 재료도 조합으로 만들 수 있어요. 어떤 재료가 나오는지는 아래 조합표를 보세요.")
+            }
+            if model.chessFusions.isEmpty {
+                ProgressView("불러오는 중...").frame(maxWidth: .infinity).panel()
+            } else {
+                ForEach(["common", "uncommon", "rare"], id: \.self) { rarity in
+                    GuideCard(title: title(rarity)) {
+                        ForEach(rows(rarity), id: \.self) { row in
+                            Text(row).font(.callout.bold())
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func title(_ rarity: String) -> String {
+        switch rarity {
+        case "common": return "흔함 + 흔함 → 보통"
+        case "uncommon": return "보통 + 보통 → 희귀"
+        default: return "희귀 + 희귀 → 전설"
+        }
+    }
+
+    private func rows(_ rarity: String) -> [String] {
+        model.chessFusions
+            .filter { model.chessMaterial($0.a)?.rarity == rarity }
+            .map { "\(model.chessMaterial($0.a)?.nameKo ?? $0.a) + \(model.chessMaterial($0.b)?.nameKo ?? $0.b) → ◆ \(model.chessMaterial($0.result)?.nameKo ?? $0.result)" }
+    }
+}
+
 private struct ResourceGuide: View {
     @Environment(AppModel.self) private var model
     private let rarities: [String] = ["common", "uncommon", "rare", "legendary"]
@@ -323,6 +374,7 @@ private struct ResourceGuide: View {
                 guideLine("재료를 누르면 재련대에 들어가요. **재련대는 2칸**이고, 다음 라운드가 시작될 때 같은 이름의 무기로 완성돼요.")
                 guideLine("무기를 누른 뒤 기물(대기석이나 판 위)을 누르면 껴요. 번개 방패 표시가 있는 기물이 무기를 낀 기물이에요.")
                 guideLine("기물을 팔거나 ★2로 합칠 때 무기는 보관함으로 돌아와요. 선택한 기물 정보에서 **무기 빼기**도 할 수 있어요.")
+                guideLine("재료와 무기는 서로 **조합**할 수도 있어요. (조합 도감 탭)")
             }
             if model.chessMaterials.isEmpty {
                 ProgressView("불러오는 중...").frame(maxWidth: .infinity).panel()

@@ -9,7 +9,7 @@ final class Sfx {
     enum Sound: CaseIterable {
         case click, buy, sell, place, ready, hit, ability, death, promote, mine
         case roundWin, roundLose, win, lose
-        case pickup, drop, equip, smelt, merge, full, roundStart, combatStart, tick, suddenDeath
+        case pickup, drop, equip, smelt, combine, merge, full, roundStart, combatStart, tick, suddenDeath
     }
 
     private enum Wave { case sine, triangle, square, saw }
@@ -222,6 +222,9 @@ final class Sfx {
             return ([Note(freq: 1200, dur: 0.05, wave: .square, vol: 0.04), Note(freq: 1800, dur: 0.14, wave: .triangle, vol: 0.05, delay: 0.04)], [Burst(dur: 0.05, vol: 0.03)])
         case .smelt:
             return ([Note(freq: 120, dur: 0.35, wave: .saw, vol: 0.04, slide: 160), Note(freq: 660, dur: 0.12, wave: .triangle, vol: 0.04, delay: 0.3)], [Burst(dur: 0.35, vol: 0.05)])
+        case .combine:
+            return (([880, 1109, 1319, 1760] as [Double]).enumerated().map { Note(freq: $0.element, dur: 0.18, wave: .triangle, vol: 0.06, delay: 0.1 + Double($0.offset) * 0.07) }
+                    + [Note(freq: 440, dur: 0.1, wave: .saw, vol: 0.04, slide: 400)], [Burst(dur: 0.12, vol: 0.04)])
         case .merge:
             return (([523, 659, 784, 1047, 1319] as [Double]).enumerated().map { Note(freq: $0.element, dur: 0.16, wave: .triangle, vol: 0.07, delay: Double($0.offset) * 0.06) }, [])
         case .full: return ([Note(freq: 880, dur: 0.08, wave: .triangle, vol: 0.06), Note(freq: 1175, dur: 0.16, wave: .triangle, vol: 0.06, delay: 0.07)], [])
