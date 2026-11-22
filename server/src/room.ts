@@ -1,5 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { USER_HEADER } from "./auth";
+import { GUEST_HEADER, guestUserId, parseGuest } from "./guest";
+import type { LiveRoom } from "./liveboard";
 import { runBotUntilIdle } from "./bot";
 import { matchIdOf, recordMatch, saveReplay } from "./ranking/store";
 import { parseClientMessage } from "./protocol";
@@ -48,6 +50,8 @@ export interface RoomInfo {
   players: number;
   joinable: boolean;
   mode: string;
+  /** 게스트 방 (학번과 이름으로 들어올 수 있다) */
+  guest: boolean;
 }
 
 /**
@@ -74,9 +78,9 @@ export class Room extends DurableObject<Env> {
   // ---- Worker가 부르는 RPC ----
 
   /** 방을 처음 만든다. 이미 있으면 false. (코드가 겹쳤을 때 Worker가 다른 코드로 다시 시도한다.) */
-  async init(code: string, testMatch = false, mode: "lanes" | "chess" = "chess", lite = testMatch): Promise<boolean> {
+  async init(code: string, testMatch = false, mode: "lanes" | "chess" = "chess", lite = testMatch, guest = false, hostName = ""): Promise<boolean> {
     if (this.state) return false;
-    this.state = createRoom(code, Date.now(), testMatch, mode, lite);
+    this.state = createRoom(code, Date.now(), testMatch, mode, lite, guest, hostName);
     await this.persist();
     return true;
   }
@@ -89,6 +93,7 @@ export class Room extends DurableObject<Env> {
       players: this.state.players.length,
       joinable: this.state.phase === "lobby" && this.state.players.length < 2,
       mode: this.state.mode,
+      guest: this.state.guest ?? false,
     };
   }
 
@@ -110,13 +115,26 @@ export class Room extends DurableObject<Env> {
     } catch {
       glUser = null;
     }
+    // Worker가 확인한 게스트(학번과 이름). 게스트 방에서만 받아 준다.
+    let guest: ReturnType<typeof parseGuest> = null;
+    try {
+      const raw = request.headers.get(GUEST_HEADER);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { studentId?: string; name?: string };
+        guest = parseGuest(parsed.studentId, parsed.name);
+      }
+    } catch {
+      guest = null;
+    }
     if (url.searchParams.get("spectate") === "1") return this.acceptSpectator(now);
+    if (guest && !this.state.guest) return this.rejectSocket("unauthorized", "게스트로 들어갈 수 있는 방이 아니에요. 로그인이 필요해요.");
     const result = joinRoom(
       this.state,
       {
-        name: glUser?.nickname ?? url.searchParams.get("name") ?? "",
+        name: guest?.name ?? glUser?.nickname ?? url.searchParams.get("name") ?? "",
         token: url.searchParams.get("token") ?? undefined,
-        userId: glUser?.id,
+        userId: guest ? guestUserId(guest) : glUser?.id,
+        guestId: guest?.studentId,
       },
       now,
       () => crypto.randomUUID(),
@@ -151,6 +169,15 @@ export class Room extends DurableObject<Env> {
       room: toSnapshot(this.state, now, player.id),
     });
     this.broadcast();
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  /** 소켓을 열어 이유를 알려 주고 닫는다. (HTTP 오류보다 클라이언트가 처리하기 쉽다.) */
+  private rejectSocket(code: ErrorCode, message: string): Response {
+    const [client, server] = Object.values(new WebSocketPair()) as [WebSocket, WebSocket];
+    this.ctx.acceptWebSocket(server);
+    sendTo(server, { t: "error", code, message });
+    server.close(1008, code);
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -320,6 +347,9 @@ export class Room extends DurableObject<Env> {
     const now = Date.now();
 
     if (isExpired(this.state, now)) {
+      if (this.state.guest) {
+        try { await this.env.LIVE.get(this.env.LIVE.idFromName("global")).remove(this.state.code); } catch { /* 무시 */ }
+      }
       this.state = null;
       await this.ctx.storage.deleteAll(); // 알람도 함께 지워진다
       return;
@@ -343,6 +373,34 @@ export class Room extends DurableObject<Env> {
     if (!this.state) return;
     await this.ctx.storage.put(STATE_KEY, this.state);
     await this.reschedule();
+    await this.reportLive();
+  }
+
+  private lastLiveSignature = "";
+
+  /** 게스트 방이면 진행 상황을 관전 목록(LiveRegistry)에 알린다. 단계·라운드·사람이 바뀔 때만 보낸다. */
+  private async reportLive(): Promise<void> {
+    const state = this.state;
+    if (!state?.guest) return;
+    const hps = state.chess ? ([state.chess.players[0].hp, state.chess.players[1].hp] as [number, number]) : null;
+    const room: LiveRoom = {
+      code: state.code,
+      host: state.hostName,
+      players: state.players.map((p) => ({ name: p.name, studentId: p.guestId, connected: p.connected })),
+      phase: state.phase,
+      round: state.chess?.round ?? 0,
+      maxRounds: 8,
+      hps,
+      updatedAt: Date.now(),
+    };
+    const signature = JSON.stringify([room.phase, room.round, room.players, room.hps]);
+    if (signature === this.lastLiveSignature) return;
+    this.lastLiveSignature = signature;
+    try {
+      await this.env.LIVE.get(this.env.LIVE.idFromName("global")).upsert(room);
+    } catch {
+      // 목록이 잠깐 안 갱신돼도 게임에는 영향이 없다.
+    }
   }
 
   private async reschedule(): Promise<void> {

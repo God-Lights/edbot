@@ -32,6 +32,13 @@ export const S = {
   creating: false,
   /** 빠른 대전 줄서기: null | { ticket, startedAt, waiting } */
   quick: null,
+  /** 게스트 로그인 (학번 + 이름). 기억해 둔다. */
+  guest: { studentId: load("edbot.guestId"), name: load("edbot.guestName") },
+  guestCode: "",
+  /** 방을 만든 직후 보여 주는 게스트 방 안내 */
+  guestRoom: null,
+  /** 진행 중인 게스트 경기 목록: null | { rooms } | { error } */
+  live: null,
   /** 관전 중이다 (플레이어가 아니다) */
   spectating: false,
   /** 이번 판에서 본 전투 기록 (라운드 번호 -> 전투). 다시 보기에 쓴다. */
@@ -106,7 +113,7 @@ function observe(room) {
   S.room = room;
 }
 
-export function join(code, level = "", spectate = false) {
+export function join(code, level = "", spectate = false, guest = null) {
   code = code.trim().toUpperCase();
   if (code.length !== 4) return toast("방 코드는 4자리예요.");
   leave();
@@ -115,7 +122,7 @@ export function join(code, level = "", spectate = false) {
   store("edbot.name", S.name);
   S.spectating = spectate;
   S.sessionRounds = {};
-  conn.start(code, S.user?.nickname ?? S.name, level, spectate);
+  conn.start(code, S.user?.nickname ?? S.name, level, spectate, guest);
   renderFn();
 }
 

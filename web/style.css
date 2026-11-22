@@ -183,3 +183,6 @@ small { font-size: 11px; color: var(--muted); }
 .replay .arena { width: min(100%, calc(100vh - 330px)); }
 .controls { margin-top: 10px; gap: 8px; } .controls .btn.on { background: rgba(176,64,190,.6); }
 .scrub { flex: 1; min-width: 120px; accent-color: var(--accent); }
+
+.modal-box.small { width: min(520px, 100%); }
+.livecard { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }

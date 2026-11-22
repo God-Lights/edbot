@@ -26,6 +26,16 @@ function lobbyView() {
     <div class="menu">
       ${account}
       <div class="panel stack">
+        <b>🎓 게스트로 참가</b><div class="sub">GL 계정이 없어도 학번과 이름만으로 게스트 방에 들어갈 수 있어요. (전적은 남지 않아요)</div>
+        <form class="stack" data-form="guest">
+          <div class="row"><input id="gid" class="input" inputmode="numeric" maxlength="10" placeholder="학번 (예: 20211)" value="${esc(S.guest.studentId)}" style="margin:0">
+            <input id="gname" class="input" maxlength="16" placeholder="이름" value="${esc(S.guest.name)}" style="margin:0"></div>
+          <div class="row"><input id="gcode" class="input code" maxlength="4" placeholder="방 코드" autocapitalize="characters" autocomplete="off" value="${esc(S.guestCode)}">
+            <button class="btn primary" type="submit">참가</button></div>
+        </form>
+      </div>
+      <div class="panel stack">
+        ${loggedIn ? `<div class="two"><button class="btn sec" data-act="create-guest">🎓 게스트 방 만들기</button><button class="btn sec" data-act="live">👁 진행 중인 경기 관전</button></div>` : ""}
         <button class="btn primary wide" data-act="quick"${S.quick ? " disabled" : ""}>⚔ 빠른 대전 (비슷한 실력의 상대 찾기)</button>
         <button class="btn sec wide" data-act="create"${S.creating ? " disabled" : ""}>${S.creating ? "방을 만드는 중..." : "방 만들기"}</button>
         <div class="two"><button class="btn sec" data-act="ranking">🏆 랭킹</button><button class="btn sec" data-act="guide" data-tab="flow">📖 게임 가이드</button></div>
@@ -41,6 +51,72 @@ function lobbyView() {
           <button class="btn sec" type="submit">입장</button></form>
       </div>
     </div></div>`;
+}
+
+function guestRoomModal() {
+  const code = S.guestRoom;
+  return `<div class="modal"><div class="modal-box small"><div class="modal-head"><h2>게스트 방이 만들어졌어요</h2><button class="btn sec" data-act="close-modal">닫기</button></div>
+    <div class="roomlobby" style="padding:10px 0"><div class="sub">방 코드</div><div class="code-big">${esc(code)}</div>
+      <div class="sub">참가자는 <b>게스트로 참가</b>에서 학번·이름·이 코드를 입력하면 들어와요.</div>
+      <div class="row center"><button class="btn primary" data-act="guestroom-play" data-code="${esc(code)}">내가 플레이어로 참가</button>
+        <button class="btn sec" data-act="guestroom-watch" data-code="${esc(code)}">👁 관전하기</button></div></div></div></div>`;
+}
+
+const LIVE_PHASE = { lobby: "대기 중", prep: "준비 중", combat: "전투 중", result: "결과" };
+
+function liveModal() {
+  const live = S.live;
+  let body;
+  if (!live) body = `<div class="panel">불러오는 중...</div>`;
+  else if (live.error) body = `<div class="panel warn">${live.error === 401 ? "GL 로그인이 필요해요." : "목록을 불러오지 못했어요."}</div>`;
+  else if (!live.rooms.length) body = `<div class="panel sub">지금 진행 중인 게스트 경기가 없어요. 게스트 방을 만들거나 참가자가 들어오면 여기에 나타나요.</div>`;
+  else {
+    body = live.rooms.map((r) => {
+      const who = r.players.length
+        ? r.players.map((p) => `${p.studentId ? esc(p.studentId) + " " : ""}${esc(p.name)}${p.connected ? "" : " (끊김)"}`).join("  vs  ")
+        : "참가자를 기다리는 중";
+      const hp = r.hps ? `♥ ${Math.max(0, r.hps[0])} : ${Math.max(0, r.hps[1])}` : "";
+      const round = r.round ? `라운드 ${r.round}/${r.maxRounds}` : "";
+      return `<div class="panel livecard"><div><b>${who}</b><div class="sub">${esc(LIVE_PHASE[r.phase] ?? r.phase)} ${round} ${hp} · 방 ${esc(r.code)} · 만든 사람 ${esc(r.host)}</div></div>
+        <span class="grow"></span><button class="btn primary" data-act="live-watch" data-code="${esc(r.code)}">👁 관전</button></div>`;
+    }).join("");
+  }
+  return `<div class="modal"><div class="modal-box"><div class="modal-head"><h2>진행 중인 게스트 경기</h2>
+    <div class="row"><button class="btn sec" data-act="live-refresh">⟳ 새로고침</button><button class="btn sec" data-act="close-modal">닫기</button></div></div>
+    <div class="modal-body">${body}</div></div></div>`;
+}
+
+let liveTimer = null;
+async function refreshLive() {
+  const rooms = await api.live();
+  S.live = Array.isArray(rooms) ? { rooms } : rooms;
+  if (S.modal === "live") render();
+}
+function openLive() {
+  S.live = null;
+  update({ modal: "live" });
+  refreshLive();
+  clearInterval(liveTimer);
+  liveTimer = setInterval(() => (S.modal === "live" ? refreshLive() : clearInterval(liveTimer)), 5000);
+}
+
+async function createGuestRoom() {
+  update({ creating: true, message: "" });
+  const result = await api.createRoom(true);
+  update({ creating: false });
+  if (result.code) update({ modal: "guestroom", guestRoom: result.code });
+  else if (result.status === 401) toast("게스트 방은 GL 로그인 후에 만들 수 있어요.");
+  else toast("방을 만들 수 없어요.");
+}
+
+function joinAsGuest() {
+  const studentId = (S.guest.studentId ?? "").trim();
+  const name = (S.guest.name ?? "").trim();
+  if (!/^\d{4,10}$/.test(studentId)) return toast("학번은 숫자 4~10자리예요. (예: 20211)");
+  if (!name) return toast("이름을 입력해 주세요.");
+  store("edbot.guestId", studentId);
+  store("edbot.guestName", name);
+  join(S.guestCode, "", false, { studentId, name });
 }
 
 function quickView() {
@@ -139,7 +215,7 @@ function render() {
   stopPlayback();
   const modalScroll = document.querySelector(".modal-body")?.scrollTop ?? 0;
   app.innerHTML = (inRoom ? roomShell(room) : S.quick ? quickView() : S.status === "connecting" ? `<div class="center-msg">접속하는 중...</div>` : lobbyView())
-    + (S.modal === "guide" ? guideModal() : S.modal === "ranking" ? rankingModal() : S.modal === "replay" && S.replay ? replayModal() : "");
+    + (S.modal === "guestroom" && S.guestRoom ? guestRoomModal() : S.modal === "live" ? liveModal() : S.modal === "guide" ? guideModal() : S.modal === "ranking" ? rankingModal() : S.modal === "replay" && S.replay ? replayModal() : "");
   const modalBody = document.querySelector(".modal-body");
   if (modalBody) modalBody.scrollTop = modalScroll;
   if (S.modal === "replay") startReplay();
@@ -270,6 +346,12 @@ document.addEventListener("click", (event) => {
   switch (d.act) {
     case "create": createRoom(); break;
     case "mute": sfx.toggle(); render(); break;
+    case "create-guest": createGuestRoom(); break;
+    case "live": openLive(); break;
+    case "live-refresh": refreshLive(); break;
+    case "live-watch": update({ modal: null }); join(d.code, "", true); break;
+    case "guestroom-play": update({ modal: null }); join(d.code); break;
+    case "guestroom-watch": update({ modal: null }); join(d.code, "", true); break;
     case "watch": join(S.watchCode ?? "", "", true); break;
     case "copy-watch": copyWatchLink(d.code); break;
     case "rewatch": {
@@ -345,6 +427,18 @@ async function copyWatchLink(code) {
 }
 
 document.addEventListener("input", (event) => {
+  const id = event.target.id;
+  if (id === "gid") {
+    const cleaned = event.target.value.replace(/\D/g, "").slice(0, 10);
+    if (cleaned !== event.target.value) event.target.value = cleaned;
+    S.guest.studentId = cleaned;
+  }
+  if (id === "gname") S.guest.name = event.target.value;
+  if (id === "gcode") {
+    const cleaned = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+    if (cleaned !== event.target.value) event.target.value = cleaned;
+    S.guestCode = cleaned;
+  }
   if (event.target.id === "scrub") replayScrub(event.target.value);
   if (event.target.id === "watch") {
     const cleaned = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
@@ -365,6 +459,7 @@ document.addEventListener("submit", (event) => {
   event.preventDefault();
   if (form.dataset.form === "join") join(S.roomCode);
   if (form.dataset.form === "watch") join(S.watchCode ?? "", "", true);
+  if (form.dataset.form === "guest") joinAsGuest();
 });
 
 // 드래그: 기물을 판, 대기석, 판매 칸으로 끌어다 놓는다.
