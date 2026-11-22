@@ -170,12 +170,41 @@ function wantsSurface(state: CombatState, unit: CombatUnit): boolean {
   const foesFront = state.units.filter((u) => u.alive && u.team !== unit.team && u.face === 0);
   if (foesFront.length === 0) return false;
   if (attackableEnemies(state, unit).length > 0) return false;
+  // 석화한 분신이나 웜홀이 열린 채로 오래 기다린 유령은 칠 수 있는지와 상관없이 올라온다. (올라와서 걸어가며 싸운다)
+  if (unit.stoned || unit.g >= WORMHOLE_BEATS + 3) return true;
   const foesBack = state.units.filter((u) => u.alive && u.team !== unit.team && u.face === 1);
   if (foesBack.length === 0) return true;
   unit.face = 0;
   const canHit = attackableEnemies(state, unit).length > 0;
   unit.face = 1;
   return canHit;
+}
+
+/**
+ * 무한 모드의 폰: 같은 면에 적이 있으면 그 적을 쫓는다. 적이 뒤에 있으면 방향을 돌리고(끝줄까지 가지 않는다),
+ * 앞으로 가는 것이 가까워지지 않으면 옆으로 한 칸 비켜 간다. (그렇지 않으면 폰만 남은 판에서 서로 만나지 못한다)
+ * 같은 면에 적이 없을 때만 끝줄에서 U턴하며 일주한다.
+ */
+function pickPawnChase(state: CombatState, unit: CombatUnit, same: CombatUnit[]): Cell | undefined {
+  const tie = comparePerspective(unit);
+  const target = [...same].sort((a, b) => chebyshev(unit, a) - chebyshev(unit, b) || a.hp - b.hp || tie(a, b))[0]!;
+  if (target.y !== unit.y && Math.sign(target.y - unit.y) !== unit.dir) {
+    unit.dir = unit.dir === 1 ? -1 : 1;
+    // 돌아서니 바로 칠 수 있으면, 이번 박자는 돌아서는 데 쓰고 다음 박자에 친다. (그냥 지나쳐 가면 서로 등지고 영영 못 친다)
+    if (attackableEnemies(state, unit).length > 0) return undefined;
+  }
+  const here: Cell = { x: unit.x, y: unit.y, face: unit.face };
+  // 한 칸씩 앞이나 옆으로만 가니까, 가로·세로 거리의 합(맨해튼)이 줄어드는 쪽으로 간다. (체비쇼프 거리는 대각선 위치에서 줄지 않는다)
+  const manhattan = (c: { x: number; y: number }) => Math.abs(c.x - target.x) + Math.abs(c.y - target.y);
+  const current = manhattan(unit);
+  const options: Array<Cell | undefined> = [stepCell(state, here, 0, unit.dir)];
+  const sideways = [-1, 1].sort((a, b) => Math.abs(unit.x + a - target.x) - Math.abs(unit.x + b - target.x));
+  for (const dx of sideways) options.push(stepCell(state, here, dx, 0));
+  for (const c of options) {
+    if (!c || c.face !== unit.face || unitAt(state, c.x, c.y, c.face)) continue;
+    if (manhattan(c) < current) return { x: c.x, y: c.y, face: c.face };
+  }
+  return undefined;
 }
 
 /** 폰 분신: 일주를 마친 폰이 같은 칸 밑면이 비어 있으면 복제를 남긴다. 분신이 너무 많으면 만들지 않는다. */
@@ -385,9 +414,17 @@ export function stepCombat(state: CombatState): void {
       pushEvent(state, { type: "attack", unitId: unit.id, targetId: target.id });
       if (unit.weapon) weaponOnAttack(state, unit, target, atk);
     } else if (!hasEffect(unit, "root", state.beat)) {
-      if (state.mobius && unit.piece === "pawn" && !stepCell(state, { x: unit.x, y: unit.y, face: unit.face }, 0, unit.dir)) {
-        pawnTurn(state, unit);
-        continue;
+      if (state.mobius && unit.piece === "pawn") {
+        const same = enemiesOf(state, unit);
+        if (same.length > 0) {
+          const chase = pickPawnChase(state, unit, same);
+          if (chase) moves.push({ unit, dest: chase, surface: false });
+          continue;
+        }
+        if (!stepCell(state, { x: unit.x, y: unit.y, face: unit.face }, 0, unit.dir)) {
+          pawnTurn(state, unit);
+          continue;
+        }
       }
       const dest = pickMove(state, unit);
       if (dest) moves.push({ unit, dest, surface: false });
