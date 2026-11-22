@@ -54,6 +54,8 @@ const outcome = await new Promise<{ ok: boolean; why: string }>((resolve) => {
   ws.onclose = () => { if (!last) finish(false, "연결이 바로 닫힘"); };
   ws.onmessage = (event) => {
     const msg = JSON.parse(String(event.data)) as { t: string; room?: Room; code?: string; message?: string };
+    // 같은 기물을 세 번 사면 합쳐져서, 합치기 전 목록으로 보낸 배치가 "기물 없음"이 될 수 있다. 다음 상태에서 다시 배치한다.
+    if (msg.t === "error" && msg.code === "unit_not_found") { sentDone = 0; return; }
     if (msg.t === "error") return finish(false, `서버 오류: ${msg.code} ${msg.message}`);
     const room = msg.room;
     if (!room) return;
