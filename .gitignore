@@ -5,3 +5,7 @@ dist/
 *.log
 worker-configuration.d.ts
 ios-server/engine/dist/
+ios-server/App/Resources/engine.js
+ios-server/App/Info.plist
+ios-server/*.xcodeproj/
+ios-server/build/

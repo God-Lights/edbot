@@ -1,0 +1,90 @@
+name: iOS server app
+
+# COMMANDER 서버 앱(ios-server/): 엔진을 묶고, ServerKit 시험을 돌리고, 서명 없는 .ipa 를 빌드한다.
+on:
+  pull_request:
+    paths:
+      - "ios-server/**"
+      - "web/**"
+      - "server/src/**"
+      - "server/packs/**"
+      - "local-server/src/runtime/**"
+      - "local-server/src/plugins.ts"
+      - ".github/workflows/ios-server-app.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-server-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: 시험과 .ipa 빌드 (서명 없음)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      - name: 엔진 묶기와 시험
+        working-directory: ios-server/engine
+        run: bun run test
+
+      - name: ServerKit 시험 (HTTP, WebSocket, 파일 저장)
+        working-directory: ios-server/ServerKit
+        run: swift test
+
+      - name: 엔진을 앱에 넣고 프로젝트 생성
+        run: |
+          brew install xcodegen
+          mkdir -p ios-server/App/Resources
+          cp ios-server/engine/dist/engine.js ios-server/App/Resources/engine.js
+          cd ios-server && xcodegen generate
+
+      - name: 아카이브 (서명 끔)
+        working-directory: ios-server
+        shell: bash
+        run: |
+          mkdir -p build
+          set +e
+          xcodebuild archive \
+            -project CommanderServer.xcodeproj \
+            -scheme CommanderServer \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/CommanderServer.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            > build/xcodebuild.log 2>&1
+          status=$?
+          tail -n 40 build/xcodebuild.log
+          if [ "$status" -ne 0 ]; then
+            echo "::group::컴파일 오류"
+            grep -E "error:" build/xcodebuild.log | sort -u | head -40
+            echo "::endgroup::"
+          fi
+          exit "$status"
+
+      - name: 앱에 엔진과 웹 화면이 들어 있는지 확인하고 .ipa 만들기
+        working-directory: ios-server
+        run: |
+          app=build/CommanderServer.xcarchive/Products/Applications/CommanderServer.app
+          test -f "$app/engine.js" || { echo "engine.js 가 앱에 없다"; exit 1; }
+          test -f "$app/web/index.html" || { echo "web/index.html 이 앱에 없다"; exit 1; }
+          test -f "$app/web/js/main.js" || { echo "web/js/main.js 가 앱에 없다"; exit 1; }
+          /usr/libexec/PlistBuddy -c 'Print :NSBonjourServices:0' "$app/Info.plist" | grep -q "_commander._tcp"
+          rm -rf build/Payload && mkdir -p build/Payload
+          cp -R "$app" build/Payload/
+          (cd build && zip -qr CommanderServer.ipa Payload)
+          ls -lh build/CommanderServer.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CommanderServer-unsigned-ipa
+          path: ios-server/build/CommanderServer.ipa
+          if-no-files-found: error
+          retention-days: 14

@@ -7,11 +7,24 @@ import vm from "node:vm";
 type Msg = { t: string; [k: string]: unknown };
 const code = readFileSync(join(import.meta.dir, "dist", "engine.js"), "utf8");
 
+// 브라우저의 Request 처럼 금지 헤더를 조용히 지우는 Request. (Bun에는 그 규칙이 없어서 시험에서 흉내 낸다)
+const FORBIDDEN = new Set(["upgrade", "connection", "host", "origin", "cookie", "content-length", "keep-alive"]);
+class BrowserLikeRequest extends Request {
+  constructor(input: RequestInfo | URL, init?: RequestInit) {
+    const source = init?.headers ?? (typeof input === "object" && "headers" in input ? (input as Request).headers : undefined);
+    const kept = new Headers();
+    new Headers(source as HeadersInit | undefined).forEach((value, name) => {
+      if (!FORBIDDEN.has(name.toLowerCase()) && !name.toLowerCase().startsWith("sec-")) kept.set(name, value);
+    });
+    super(input as RequestInfo, { ...init, headers: kept });
+  }
+}
+
 function boot() {
   const posts: Msg[] = [];
   // 웹뷰에 있는 것만 준다. process, Buffer, require 는 없다.
   const sandbox: Record<string, unknown> = {
-    Request, Response, Headers, URL, URLSearchParams, TextEncoder, TextDecoder, crypto, atob, btoa,
+    Request: BrowserLikeRequest, Response, Headers, URL, URLSearchParams, TextEncoder, TextDecoder, crypto, atob, btoa,
     setTimeout, clearTimeout, setInterval, clearInterval, queueMicrotask, structuredClone, console: { log() {}, warn() {}, error() {} },
     Uint8Array, ArrayBuffer, Promise, JSON, Math, Date, Map, Set,
   };
