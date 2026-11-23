@@ -291,9 +291,12 @@ struct ChessPrepView: View {
                             shopRow(me, height: shopH)
                         }
                         .frame(width: leftW)
+                        // 높이는 남는 만큼만 쓴다. (헤더 높이를 추정해서 정하면 실제 헤더가 더 클 때 위로 넘쳐 팁 띠와 겹친다)
                         sidePanel(me)
-                            .frame(width: sideW, height: geo.size.height - headH - stripH - (compact ? 8 : 16))
+                            .frame(width: sideW)
+                            .frame(maxHeight: .infinity, alignment: .top)
                     }
+                    .frame(maxHeight: .infinity, alignment: .top)
                 }
             }
             // 준비 시간이 5초 남으면 1초마다 똑딱 소리
@@ -978,6 +981,8 @@ struct ChessPrepView: View {
                             Text("\(Image(systemName: "dollarsign.circle.fill"))\(cost)")
                                 .font(.system(size: 11, weight: .heavy).monospacedDigit())
                                 .foregroundStyle(Color.black.opacity(0.85))
+                                .lineLimit(1)
+                                .fixedSize()
                                 .padding(.horizontal, 5)
                                 .background(Capsule().fill(color))
                         }
