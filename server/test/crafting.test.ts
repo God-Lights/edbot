@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  HYBRID_POWER, MATERIAL_FUSIONS, STAR_POWER, combine, fuseMaterials, hybridWeaponId, parseWeapon, starWeaponId,
+  HYBRID_POWER, MATERIAL_FUSIONS, EVOLUTION_FUSIONS, STAR_POWER, combine, fuseMaterials, hybridWeaponId, parseWeapon, starWeaponId,
 } from "../src/chess/crafting";
 import { buy, combineItems, createChessGame, equip, startRound } from "../src/chess/game";
 import type { ChessGame } from "../src/chess/game";
@@ -31,10 +31,10 @@ describe("무기 이름표", () => {
 });
 
 describe("재료 조합표", () => {
-  it("흔함 6쌍 + 보통 6쌍 + 희귀 3쌍 = 15가지이고, 결과는 항상 한 단계 위 재료다", () => {
-    expect(MATERIAL_FUSIONS).toHaveLength(15);
+  it("흔함 6쌍 + 보통 6쌍 + 희귀 3쌍 = 15가지이고, 결과는 항상 한 단계 위 재료다 (진화 재료 조합 3개는 따로)", () => {
+    expect(MATERIAL_FUSIONS).toHaveLength(15 + EVOLUTION_FUSIONS.length);
     const next = { common: "uncommon", uncommon: "rare", rare: "legendary" } as const;
-    for (const f of MATERIAL_FUSIONS) {
+    for (const f of MATERIAL_FUSIONS.slice(0, 15)) {
       const ra = materialDef(f.a)!.rarity;
       expect(materialDef(f.b)!.rarity).toBe(ra);
       expect(materialDef(f.result)!.rarity).toBe(next[ra as keyof typeof next]);
@@ -42,7 +42,7 @@ describe("재료 조합표", () => {
     }
     // 모든 상위 재료가 최소 한 번은 만들어진다 (조합으로 전설까지 닿을 수 있다)
     for (const rarity of ["uncommon", "rare", "legendary"]) {
-      for (const mat of MATERIALS.filter((x) => x.rarity === rarity)) {
+      for (const mat of MATERIALS.filter((x) => x.rarity === rarity && !x.special)) {
         expect(MATERIAL_FUSIONS.some((f) => f.result === mat.id), mat.id).toBe(true);
       }
     }

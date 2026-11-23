@@ -2,7 +2,7 @@
 // 설계: docs/DESIGN-autochess.md 3, 4, 6장.
 
 import { activeContent, currentRuleset, rules } from "./content";
-import { roster, unitDef } from "./roster";
+import { EVOLUTION, EVOLVED_FROM, MERGE_EVOLVE, roster, unitDef } from "./roster";
 import { recordCombat } from "./sim";
 import type { CombatRecording } from "./sim";
 import type { Placement, ResourceTile, Seat } from "./types";
@@ -32,6 +32,8 @@ export interface OwnedUnit {
   star: 1 | 2;
   /** 낀 무기 id */
   weapon?: string;
+  /** 데도키온의 진화 진행도: 엔진 탑재율(%)과 A-C 코어 */
+  evo?: { engine: number; core: number };
 }
 
 export const SMELTER_COUNT = 2;
@@ -60,6 +62,8 @@ export interface ChessPlayer {
   smelters: Array<string | null>;
   /** 이번 라운드에 광물 시장에서 이미 샀다 */
   marketBought: boolean;
+  /** 이번 라운드 시작에 진화한 기물 (화면에 알린다) */
+  evolved: Array<{ uid: string; from: string; to: string }>;
 }
 
 export interface RoundSummary {
@@ -155,7 +159,7 @@ function nextRandom(game: ChessGame): number {
 
 function emptyPlayer(seat: Seat): ChessPlayer {
   return { seat, hp: rules().startHp, gold: rules().startGold, shop: Array(SHOP_SIZE).fill(null), bench: Array(BENCH_SIZE).fill(null), board: [], done: false,
-    materials: {}, weapons: {}, smelters: Array(SMELTER_COUNT).fill(null), marketBought: false };
+    materials: {}, weapons: {}, smelters: Array(SMELTER_COUNT).fill(null), marketBought: false, evolved: [] };
 }
 
 /** 입문용 풀: 1~2골드 캐릭터 11명만. 처음 하는 사람이 배울 것을 줄인다. (폰 4, 비숍 3, 룩 2, 킹 1... 시너지는 폰·비숍·룩만 켜진다) */
@@ -170,7 +174,8 @@ export const liteIds = (): readonly string[] => activeContent()?.liteIds ?? LITE
 export function createChessGame(seed: number, lite = false, mobius = false): ChessGame {
   const pool: Record<string, number> = {};
   const lites = liteIds();
-  for (const def of roster()) if (!lite || lites.includes(def.id)) pool[def.id] = rules().poolCopies[def.cost];
+  // 진화로만 얻는 캐릭터(데도키온, 토가로가, 드워곤)는 공용 풀에 넣지 않는다.
+  for (const def of roster()) if (!def.evolveOnly && (!lite || lites.includes(def.id))) pool[def.id] = rules().poolCopies[def.cost];
   return {
     resources: !lite,
     history: [],
@@ -225,7 +230,7 @@ function returnShopToPool(game: ChessGame, player: ChessPlayer): void {
 }
 
 function drawFromPool(game: ChessGame, cost: 1 | 2 | 3 | 4): string | null {
-  const candidates = roster().filter((d) => d.cost === cost && (game.pool[d.id] ?? 0) > 0);
+  const candidates = roster().filter((d) => d.cost === cost && !d.evolveOnly && (game.pool[d.id] ?? 0) > 0);
   if (candidates.length === 0) return null;
   const total = candidates.reduce((sum, d) => sum + (game.pool[d.id] ?? 0), 0);
   let roll = nextRandom(game) * total;
@@ -272,8 +277,10 @@ function rollRarity(game: ChessGame, includeLegendary: boolean): Rarity {
 
 function rollMaterial(game: ChessGame, includeLegendary: boolean, exclude: string[] = []): string {
   const rarity = rollRarity(game, includeLegendary);
-  const options = materials().filter((m) => m.rarity === rarity && !exclude.includes(m.id));
-  const pool = options.length > 0 ? options : materials().filter((m) => m.rarity === rarity);
+  // 진화 재료(special)는 조합으로만 만든다. 자원 칸·시장에 나오지 않는다.
+  const regular = materials().filter((m) => !m.special);
+  const options = regular.filter((m) => m.rarity === rarity && !exclude.includes(m.id));
+  const pool = options.length > 0 ? options : regular.filter((m) => m.rarity === rarity);
   return pool[Math.floor(nextRandom(game) * pool.length) % pool.length]!.id;
 }
 
@@ -317,6 +324,7 @@ export function startRound(game: ChessGame): void {
       const pouches = [...player.board, ...player.bench.filter((u): u is OwnedUnit => u !== null)].filter((u) => u.weapon && parseWeapon(u.weapon)?.parts.includes("digital-miner-pouch")).length;
       if (pouches > 0) player.materials.bit = (player.materials.bit ?? 0) + pouches;
       player.marketBought = false;
+      evolveReady(player);
     }
     player.gold += rules().baseIncome + interest(player.gold);
     player.done = false;
@@ -347,7 +355,9 @@ function mergeIfPossible(game: ChessGame, player: ChessPlayer, defId: string, ex
   const three = all.slice(0, 3);
   const anchor = three[0]!;
   const anchorBoard = onBoard.find((u) => u.uid === anchor.uid);
-  const upgraded: OwnedUnit = { uid: `i${game.nextUid++}`, defId, star: 2 };
+  // 데보이트 3장은 ★2 대신 데도키온 ★1이 된다.
+  const evolvesTo = MERGE_EVOLVE[defId];
+  const upgraded: OwnedUnit = evolvesTo ? { uid: `i${game.nextUid++}`, defId: evolvesTo, star: 1 } : { uid: `i${game.nextUid++}`, defId, star: 2 };
   // 무기는 하나를 ★2가 이어받고, 나머지는 보관함으로 돌아온다.
   const carried = three.map((u) => u.weapon).filter((w): w is string => !!w);
   if (carried[0]) upgraded.weapon = carried[0];
@@ -361,6 +371,49 @@ function mergeIfPossible(game: ChessGame, player: ChessPlayer, defId: string, ex
   } else {
     const slot = player.bench.findIndex((u) => u === null);
     player.bench[slot >= 0 ? slot : 0] = upgraded; // 세 장이 모두 대기석에 있었으므로 자리가 있다
+  }
+  // 진화한 캐릭터도 3장이 모이면 ★2가 된다.
+  if (evolvesTo) mergeIfPossible(game, player, evolvesTo);
+}
+
+// ---- 데도키온의 진화 ----
+
+/** 데도키온이 낀 E 코드에 맞는 진화 갈래. 없으면 null. */
+export function evolutionBranch(unit: OwnedUnit): (typeof EVOLUTION.branches)[number] | null {
+  if (unit.defId !== EVOLUTION.from || !unit.weapon) return null;
+  const parts = parseWeapon(unit.weapon)?.parts ?? [];
+  return EVOLUTION.branches.find((b) => parts.includes(b.code)) ?? null;
+}
+
+/** 전투가 끝나면 판 위의 데도키온이 진행도를 얻는다: A-C 코어는 늘, 엔진 탑재율은 E 코드를 꼈을 때만. */
+function gainEvolution(player: ChessPlayer): void {
+  for (const unit of player.board) {
+    if (unit.defId !== EVOLUTION.from) continue;
+    const evo = unit.evo ?? { engine: 0, core: 0 };
+    evo.core = Math.min(EVOLUTION.coreNeed, evo.core + EVOLUTION.corePerCombat);
+    if (evolutionBranch(unit)) evo.engine = Math.min(EVOLUTION.engineNeed, Math.round((evo.engine + EVOLUTION.enginePerCombat) * 10) / 10);
+    unit.evo = evo;
+  }
+}
+
+/** 라운드 시작: 조건을 다 채운 데도키온이 E 코드와 재료 2개를 쓰고 토가로가 / 드워곤이 된다. */
+function evolveReady(player: ChessPlayer): void {
+  player.evolved = [];
+  const units: OwnedUnit[] = [...player.board, ...player.bench.filter((u): u is OwnedUnit => u !== null)];
+  for (const unit of units) {
+    const branch = evolutionBranch(unit);
+    if (!branch || !unit.evo) continue;
+    if (unit.evo.engine < EVOLUTION.engineNeed || unit.evo.core < EVOLUTION.coreNeed) continue;
+    if ((player.materials[branch.material] ?? 0) < EVOLUTION.shardsNeed) continue;
+    player.materials[branch.material] = (player.materials[branch.material] ?? 0) - EVOLUTION.shardsNeed;
+    // E 코드는 진화에 쓰인다. (융합 무기였다면 다른 쪽 무기는 보관함으로 돌아온다)
+    const parsed = parseWeapon(unit.weapon!);
+    const other = parsed?.kind === "hybrid" ? parsed.parts.find((p) => p !== branch.code) : undefined;
+    if (other) player.weapons[other] = (player.weapons[other] ?? 0) + 1;
+    delete unit.weapon;
+    delete unit.evo;
+    player.evolved.push({ uid: unit.uid, from: unit.defId, to: branch.to });
+    unit.defId = branch.to;
   }
 }
 
@@ -396,7 +449,10 @@ export function sell(game: ChessGame, seat: Seat, uid: string): ChessResult {
   const def = unitDef(found.unit.defId)!;
   const copies = found.unit.star === 1 ? 1 : 3;
   player.gold += def.cost * copies;
-  game.pool[def.id] = (game.pool[def.id] ?? 0) + copies;
+  // 진화한 캐릭터는 뿌리(데보이트)로 공용 풀에 돌아간다.
+  const evolved = EVOLVED_FROM[def.id];
+  if (evolved) game.pool[evolved.root] = (game.pool[evolved.root] ?? 0) + evolved.copies * copies;
+  else game.pool[def.id] = (game.pool[def.id] ?? 0) + copies;
   if (found.unit.weapon) player.weapons[found.unit.weapon] = (player.weapons[found.unit.weapon] ?? 0) + 1;
   if ("bench" in found.where) player.bench[found.where.bench] = null;
   else player.board.splice(found.where.board, 1);
@@ -572,6 +628,8 @@ export function finishRound(game: ChessGame): void {
   }
   game.players[0].gold += combat.goldBonus[0];
   game.players[1].gold += combat.goldBonus[1];
+  gainEvolution(game.players[0]);
+  gainEvolution(game.players[1]);
   if (combat.result.winner !== null) game.roundWins[combat.result.winner] += 1;
   game.history.push({
     round: game.round, boards: combat.boards, units: combat.units, frames: combat.frames, events: combat.events,

@@ -70,6 +70,9 @@ export const ABILITIES: Record<AbilityId, Cast> = {
   "relic-shield": () => {},
   spore: () => {},
   hunger: () => {},
+  // 데보이트·데도키온도 패시브다 (되살리기는 sim.ts 의 resolveDeaths, 유전 흡수는 onKill)
+  origin: () => {},
+  "gene-absorb": () => {},
   // 아군 1명(공격력이 가장 높은)의 공격력 +20%, 5박자
   inspire: (s, u) => {
     const target = [...alliesOf(s, u, true)].sort((a, b) => b.atk - a.atk || comparePerspective(u)(a, b))[0];
@@ -183,10 +186,17 @@ export function onDeath(state: CombatState, unit: CombatUnit): void {
   }
 }
 
-/** 처치했을 때 발동하는 패시브 (스크리치). */
-export function onKill(state: CombatState, killer: CombatUnit): void {
+/** 처치했을 때 발동하는 패시브 (스크리치, 데도키온). */
+export function onKill(state: CombatState, killer: CombatUnit, victim?: CombatUnit): void {
   killer.kills += 1;
-  if (!killer.summon && unitDef(killer.defId)?.ability === "hunger") killer.atkStack *= 1 + 0.2 * starPower(killer);
+  const ability = killer.summon ? undefined : unitDef(killer.defId)?.ability;
+  if (ability === "hunger") killer.atkStack *= 1 + 0.2 * starPower(killer);
+  // 유전 흡수: 처치한 적 최대 체력의 10%만큼 최대 체력이 오르고 그만큼 회복한다.
+  if (ability === "gene-absorb" && victim) {
+    const gain = victim.maxHp * 0.1 * starPower(killer);
+    killer.maxHp += gain;
+    killer.hp = Math.min(killer.maxHp, killer.hp + gain);
+  }
 }
 
 export { inBounds };
