@@ -273,7 +273,8 @@ struct ChessPrepView: View {
                 let showStrip: Bool = showCoach || (!tipSeen && chess.round == 2)
                 let stripH: CGFloat = showStrip ? (compact ? 40 : 58) : 0
                 let headH: CGFloat = compact ? 52 : 86
-                let gaps: CGFloat = compact ? 30 : 52
+                // 여유: 헤더·띠가 예상보다 조금 커도 오른쪽 패널(준비 끝 버튼)이 화면 밖으로 밀리지 않게
+                let gaps: CGFloat = compact ? 40 : 60
                 let boardAvail: CGFloat = geo.size.height - headH - stripH - shopH - gaps
                 let cell: CGFloat = max(18, min((leftW - 14) / 8, boardAvail / 5.1))
                 VStack(spacing: compact ? 4 : 8) {
@@ -341,10 +342,7 @@ struct ChessPrepView: View {
                     Circle().fill(n <= step.n ? Theme.warn : Color.white.opacity(0.2)).frame(width: 9, height: 9)
                 }
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text("처음이시네요! \(step.n) / 4").font(.caption.bold()).foregroundStyle(Theme.warn)
-                Text(step.text).font(compact ? .caption : .subheadline).lineLimit(2).minimumScaleFactor(0.8)
-            }
+            stripText(title: "처음이시네요! \(step.n) / 4", body: step.text)
             Spacer()
             Button("가이드") { model.openGuide(.prep) }.buttonStyle(SecondaryButtonStyle())
             Button("건너뛰기") { coachDismissed = true }.buttonStyle(SecondaryButtonStyle())
@@ -353,13 +351,23 @@ struct ChessPrepView: View {
     }
 
     /// 첫 전투가 끝난 뒤 2라운드에서 한 번만 보이는 팁.
+    /// 안내 띠의 글: 아이폰(가로)에서는 제목과 함께 한 줄로 줄여서, 띠 높이가 판 크기 계산(stripH)을 넘지 않게 한다.
+    @ViewBuilder
+    private func stripText(title: String, body: String) -> some View {
+        if compact {
+            (Text(title + "  ").bold().foregroundStyle(Theme.warn) + Text(body))
+                .font(.caption).lineLimit(1).minimumScaleFactor(0.6)
+        } else {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.caption.bold()).foregroundStyle(Theme.warn)
+                Text(body).font(.subheadline).lineLimit(2).minimumScaleFactor(0.8)
+            }
+        }
+    }
+
     private var tipCard: some View {
         HStack(alignment: .center, spacing: 14) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("다음 단계 팁").font(.caption.bold()).foregroundStyle(Theme.warn)
-                Text("① 골드 10마다 이자 +1 (최대 +3)  ② 같은 캐릭터 3장 = ★2, 훨씬 강해져요  ③ 같은 기물(킹·룩·비숍·폰...)을 2명 이상 올리면 시너지 보너스")
-                    .font(compact ? .caption : .subheadline).lineLimit(2).minimumScaleFactor(0.8)
-            }
+            stripText(title: "다음 단계 팁", body: "① 골드 10마다 이자 +1 (최대 +3)  ② 같은 캐릭터 3장 = ★2, 훨씬 강해져요  ③ 같은 기물(킹·룩·비숍·폰...)을 2명 이상 올리면 시너지 보너스")
             Spacer()
             Button("가이드") { model.openGuide(.synergy) }.buttonStyle(SecondaryButtonStyle())
             Button("알겠어요") { tipSeen = true }.buttonStyle(SecondaryButtonStyle())
