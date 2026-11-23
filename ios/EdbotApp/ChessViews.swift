@@ -1079,8 +1079,9 @@ struct ChessArena: View {
                     ForEach(combat.units.indices, id: \.self) { index in
                         unitView(index, position: position, cell: cell, frontCells: frontCells)
                     }
-                    floatsLayer(position: position, cell: cell)
-                    banner(position: position)
+                    // 말은 zIndex 1~2 라서, 데미지 숫자와 결과 띠는 그보다 앞에 둔다.
+                    floatsLayer(position: position, cell: cell).zIndex(3)
+                    banner(position: position).zIndex(4)
                 }
                 .frame(width: cell * CGFloat(chessBoardSize), height: cell * CGFloat(chessBoardSize))
             }
