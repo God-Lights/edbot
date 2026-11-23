@@ -276,7 +276,9 @@ struct ChessPrepView: View {
                 // 여유: 헤더·띠가 예상보다 조금 커도 오른쪽 패널(준비 끝 버튼)이 화면 밖으로 밀리지 않게
                 let gaps: CGFloat = compact ? 40 : 60
                 let boardAvail: CGFloat = geo.size.height - headH - stripH - shopH - gaps
-                let cell: CGFloat = max(18, min((leftW - 14) / 8, boardAvail / 5.1))
+                // 판 왼쪽의 시너지 목록 폭
+                let traitW: CGFloat = compact ? 84 : 132
+                let cell: CGFloat = max(18, min((leftW - traitW - 20) / 8, boardAvail / 5.1))
                 VStack(spacing: compact ? 4 : 8) {
                     ChessHeader(room: room, chess: chess, seat: seat)
                     if showCoach {
@@ -286,9 +288,14 @@ struct ChessPrepView: View {
                     }
                     HStack(alignment: .top, spacing: 10) {
                         VStack(spacing: compact ? 3 : 6) {
-                            boardView(me, cell: cell)
-                                .overlay(alignment: .bottomLeading) { selectedOverlay(me) }
-                            benchView(me, cell: cell)
+                            HStack(alignment: .top, spacing: 6) {
+                                traitColumn(me, width: traitW)
+                                VStack(spacing: compact ? 3 : 6) {
+                                    boardView(me, cell: cell)
+                                        .overlay(alignment: .bottomLeading) { selectedOverlay(me) }
+                                    benchView(me, cell: cell)
+                                }
+                            }
                             shopRow(me, height: shopH)
                         }
                         .frame(width: leftW)
@@ -874,8 +881,9 @@ struct ChessPrepView: View {
             .animation(.spring(response: 0.35, dampingFraction: 0.6), value: me.board.count)
 
             VStack(alignment: .leading, spacing: compact ? 2 : 4) {
-                Text("시너지").font(.caption2).foregroundStyle(.secondary)
-                synergyChips(me)
+                // 시너지는 판 왼쪽 목록으로 옮겼다. 여기는 상점 등장 확률.
+                Text("상점 등장 확률").font(.caption2).foregroundStyle(.secondary)
+                oddsChips
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -892,54 +900,84 @@ struct ChessPrepView: View {
         return counts
     }
 
-    /// 판 위의 기물로 모은 시너지: 켜진 것은 밝게, 모으는 중인 것은 진행도(예: 1/2)와 함께
-    @ViewBuilder
-    private func synergyChips(_ me: ChessSelfSnapshot) -> some View {
+    /// 시너지 단계(필요한 수). 서버 도감에서 읽고, 없으면 기본값.
+    private func synergySteps(_ piece: Piece) -> [Int] {
+        let needs: [Int] = Array(Set(model.chessSynergies.filter { $0.piece == piece }.map(\.need))).sorted()
+        return needs.isEmpty ? (piece == .pawn ? [2, 4] : [2, 3]) : needs
+    }
+
+    /// 왼쪽 시너지 목록 (롤토체스처럼): 판 위의 기물 종류마다 육각 아이콘, 이름, 단계. 켜진 것은 금색이고 위로 온다.
+    private func traitColumn(_ me: ChessSelfSnapshot, width: CGFloat) -> some View {
         let counts: [Piece: Int] = pieceCounts(me)
-        let active: [Piece] = [Piece.king, .queen, .rook, .bishop, .knight, .pawn].filter { (counts[$0] ?? 0) > 0 }
-        if active.isEmpty {
-            Text("같은 기물을 2명 이상 올리면 시너지가 켜져요.").font(.caption2).foregroundStyle(.secondary)
-        } else {
-            ForEach(active, id: \.self) { piece in
-                synergyChip(piece, count: counts[piece] ?? 0)
+        let order: [Piece] = [.king, .queen, .rook, .bishop, .knight, .pawn]
+        let pieces: [Piece] = order.filter { (counts[$0] ?? 0) > 0 }.sorted { a, b in
+            let ta = synergySteps(a).filter { (counts[a] ?? 0) >= $0 }.count
+            let tb = synergySteps(b).filter { (counts[b] ?? 0) >= $0 }.count
+            if ta != tb { return ta > tb }
+            return (counts[a] ?? 0) > (counts[b] ?? 0)
+        }
+        return VStack(alignment: .leading, spacing: compact ? 3 : 5) {
+            Text("시너지").font(.system(size: 10, weight: .bold)).foregroundStyle(.secondary)
+            if pieces.isEmpty {
+                Text("같은 기물을 2명 이상 올리면 켜져요").font(.system(size: 10)).foregroundStyle(.secondary)
+            }
+            ForEach(pieces, id: \.self) { piece in
+                traitRow(piece, count: counts[piece] ?? 0)
             }
         }
+        .frame(width: width, alignment: .topLeading)
+        .animation(.easeOut(duration: 0.3), value: pieces)
     }
 
-    private func synergyChip(_ piece: Piece, count: Int) -> some View {
-        let thresholds: [Int] = piece == .pawn ? [2, 4] : [2, 3]
-        let tier: Int = thresholds.filter { count >= $0 }.count
-        let need: Int = tier >= 2 ? thresholds[1] : thresholds[tier]
-        let shown: ChessSynergyInfo? = model.chessSynergy("\(piece.rawValue)-\(max(tier, 1))")
-        let detail: String = tier > 0 ? (shown?.text ?? "") : "\(need - count)명 더 모으면 " + (shown?.text ?? "")
-        let color: Color = Theme.color(for: piece)
-        return HStack(spacing: 6) {
-            Image(Labels.pieceImageName(piece))
-                .resizable()
-                .scaledToFit()
-                .frame(width: 18, height: 18)
-                .foregroundStyle(color)
+    private func traitRow(_ piece: Piece, count: Int) -> some View {
+        let steps: [Int] = synergySteps(piece)
+        let tier: Int = steps.filter { count >= $0 }.count
+        let gold = Color(red: 0.97, green: 0.78, blue: 0.30)
+        let info: ChessSynergyInfo? = model.chessSynergy("\(piece.rawValue)-\(max(tier, 1))")
+        let hex: CGFloat = compact ? 22 : 30
+        var stepsText: Text = Text("\(count) ").bold()
+        for (index, step) in steps.enumerated() {
+            stepsText = stepsText + Text(index == 0 ? "/ " : " · ") + Text("\(step)").foregroundStyle(count >= step ? gold : Color.white.opacity(0.45))
+        }
+        return HStack(spacing: 5) {
+            ZStack {
+                Hexagon().fill(tier > 0
+                    ? AnyShapeStyle(LinearGradient(colors: [Color(red: 1.0, green: 0.93, blue: 0.68), Color(red: 0.62, green: 0.45, blue: 0.16)], startPoint: .top, endPoint: .bottom))
+                    : AnyShapeStyle(Color.white.opacity(0.12)))
+                Image(Labels.pieceImageName(piece))
+                    .resizable().scaledToFit()
+                    .frame(width: hex * 0.55, height: hex * 0.55)
+                    .foregroundStyle(tier > 0 ? Color.black.opacity(0.8) : Theme.color(for: piece))
+            }
+            .frame(width: hex, height: hex * 1.12)
             VStack(alignment: .leading, spacing: 0) {
-                Text("\(Labels.pieceName(piece)) \(count)/\(need)").font(.caption.bold())
-                if !compact { Text(detail).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1) }
+                Text(Labels.pieceName(piece)).font(.system(size: compact ? 10 : 12, weight: .bold)).lineLimit(1)
+                stepsText.font(.system(size: compact ? 9 : 11).monospacedDigit()).lineLimit(1).minimumScaleFactor(0.7)
             }
+            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 7).padding(.vertical, compact ? 1 : 3)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(color.opacity(tier > 0 ? 0.2 : 0.06)))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(color.opacity(tier > 0 ? 0.65 : 0), lineWidth: 1))
-        .shadow(color: tier >= 2 ? color.opacity(0.6) : .clear, radius: tier >= 2 ? 6 : 0)
-        .opacity(tier > 0 ? 1 : 0.65)
-        .animation(.easeOut(duration: 0.3), value: tier)
+        .padding(.horizontal, 4).padding(.vertical, compact ? 2 : 3)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(tier > 0 ? gold.opacity(0.16) : Color.black.opacity(0.3)))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(tier > 0 ? gold.opacity(0.75) : Color.white.opacity(0.08), lineWidth: 1))
+        .shadow(color: tier >= 2 ? gold.opacity(0.5) : .clear, radius: tier >= 2 ? 5 : 0)
+        .contextMenu {
+            if let info { Text("\(info.nameKo): \(info.text)") }
+        }
+        .accessibilityLabel("\(Labels.pieceName(piece)) \(count)명, \(info?.text ?? "")")
     }
 
-    private var oddsText: String {
-        let names: [String] = ["1골드", "2골드", "3골드", "4골드"]
-        var parts: [String] = []
-        for (index, percent) in chess.shopOdds.enumerated() where percent > 0 {
-            parts.append("\(names[safe: index] ?? "?") \(percent)%")
+    /// 상점 등장 확률을 가격 색 칩으로
+    private var oddsChips: some View {
+        HStack(spacing: 4) {
+            ForEach(Array(chess.shopOdds.enumerated()), id: \.offset) { index, percent in
+                Text("\(percent)%")
+                    .font(.system(size: compact ? 10 : 12, weight: .bold).monospacedDigit())
+                    .foregroundStyle(percent > 0 ? ChessStyle.costColor(index + 1) : Color.white.opacity(0.3))
+                    .lineLimit(1).fixedSize()
+                    .padding(.horizontal, 5).padding(.vertical, 2)
+                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(ChessStyle.costColor(index + 1).opacity(percent > 0 ? 0.7 : 0.2), lineWidth: 1))
+            }
         }
-        return "등장 확률: " + parts.joined(separator: " · ")
     }
 
     /// 상점 카드: 가격 색 바탕에 큰 기물 그림, 기물 종류 태그, 이름, 가격. 능력 설명은 길게 눌러서 본다.
@@ -1545,5 +1583,21 @@ struct ChessArena: View {
                 .background(Capsule().fill(Color.black.opacity(0.6)))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+}
+
+/// 뾰족한 위아래의 육각형 (시너지 아이콘)
+struct Hexagon: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let w = rect.width, h = rect.height
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.minX + w, y: rect.minY + h * 0.25))
+        path.addLine(to: CGPoint(x: rect.minX + w, y: rect.minY + h * 0.75))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + h * 0.75))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + h * 0.25))
+        path.closeSubpath()
+        return path
     }
 }
