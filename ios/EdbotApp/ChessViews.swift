@@ -556,9 +556,11 @@ struct ChessPrepView: View {
 
             // 자원 패널은 남는 높이 안에서만 보인다. (스크롤 없음)
             if !chess.market.isEmpty || !chess.tiles.isEmpty || !me.materials.isEmpty || !me.weapons.isEmpty {
+                // minHeight 0: 공간이 모자라면 자원 패널이 먼저 줄어든다(잘린다). 준비 끝 버튼은 늘 보인다.
                 resourcePanel(me)
-                    .frame(maxHeight: .infinity, alignment: .top)
+                    .frame(minHeight: 0, maxHeight: .infinity, alignment: .top)
                     .clipped()
+                    .layoutPriority(-1)
             } else {
                 Spacer(minLength: 0)
             }

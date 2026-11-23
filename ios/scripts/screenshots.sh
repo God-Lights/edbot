@@ -40,6 +40,8 @@ for kind in iPad iPhone; do
     # 앱은 가로 전용이라 세로로 찍힌 화면을 돌린다.
     w=$(sips -g pixelWidth "$file" | awk '/pixelWidth/{print $2}'); h=$(sips -g pixelHeight "$file" | awk '/pixelHeight/{print $2}')
     if [ "$h" -gt "$w" ]; then sips -r 270 "$file" >/dev/null; fi
+    # 올려서 보기 쉽게 크기를 줄인다(압축 파일이 10MB를 넘지 않게).
+    sips -Z 1600 "$file" >/dev/null
     echo "찍었다: $file"
   done
   xcrun simctl shutdown "$udid" || true
