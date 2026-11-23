@@ -33,7 +33,8 @@ for kind in iPad iPhone; do
   for screen in prep combat; do
     xcrun simctl terminate "$udid" com.officialgl.commander 2>/dev/null || true
     xcrun simctl launch "$udid" com.officialgl.commander -demo "$screen" >/dev/null
-    sleep 6
+    # 앱이 뜨는 시간을 기다린다. 전투는 끝나기 전에(진행 중인 모습) 찍는다.
+    if [ "$screen" = combat ]; then sleep 4; else sleep 6; fi
     file="$out/$kind-$screen.png"
     xcrun simctl io "$udid" screenshot "$file" >/dev/null
     # 앱은 가로 전용이라 세로로 찍힌 화면을 돌린다.

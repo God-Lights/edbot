@@ -60,6 +60,13 @@ const result = await new Promise<{ welcome: Record<string, unknown>; prep: Room;
 });
 
 // 앱은 welcome 으로 내 자리를 알고, room 으로 화면을 그린다.
+// 시연 화면이 멈춘 듯 보이지 않게: 준비는 25초 남은 상태, 전투는 막 시작한 상태로 맞춘다.
+const timed = (room: Room, startNow: boolean, ms: number) => {
+  const r = room as Room & { serverTime: number; phaseStartedAt: number; phaseEndsAt: number };
+  return { ...r, phaseStartedAt: startNow ? r.serverTime : r.phaseStartedAt, phaseEndsAt: r.serverTime + ms };
+};
+result.prep = timed(result.prep, false, 25_000);
+result.combat = timed(result.combat, true, 30_000);
 for (const [name, room] of [["prep", result.prep], ["combat", result.combat]] as const) {
   writeFileSync(join(out, `demo-${name}.json`), JSON.stringify({ ...result.welcome, room }));
 }
