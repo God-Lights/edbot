@@ -83,7 +83,7 @@ export const unitInfo = (id) => S.catalog?.units.find((u) => u.id === id);
 export const materialInfo = (id) => S.catalog?.materials.find((m) => m.id === id);
 /** 기본 무기뿐 아니라 ★2(`id*`)·융합(`a+b`) 무기도 이름과 설명을 돌려준다. */
 export const weaponInfo = (id) => weaponView(id, S.catalog) ?? undefined;
-export const synergyInfo = (id) => S.catalog?.synergies.find((s) => s.id === id);
+export const synergyInfo = (id) => S.catalog?.synergies.find((s) => s.id === id) ?? S.catalog?.traits?.find((s) => s.id === id);
 
 // ---- 연결 ----
 
@@ -118,6 +118,12 @@ export const conn = new Connection((event) => {
 
 function observe(room) {
   const prev = S.room;
+  // 라운드가 바뀔 때 진화한 기물이 있으면 알린다 (데도키온 -> 토가로가 / 드워곤)
+  if (prev?.chess?.round !== room.chess?.round) {
+    for (const e of room.chess?.me?.evolved ?? []) {
+      toast(`${unitInfo(e.from)?.nameKo ?? e.from}이(가) ${unitInfo(e.to)?.nameKo ?? e.to}(으)로 진화했어요!`);
+    }
+  }
   if (prev?.phase === "lobby" && room.phase === "prep") S.sessionRounds = {};
   if (room.phase === "combat" && room.chess?.combat) {
     S.sessionRounds[room.chess.round] = { round: room.chess.round, ...room.chess.combat };

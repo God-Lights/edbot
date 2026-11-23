@@ -334,3 +334,10 @@ small { font-size: .8em; color: var(--muted); }
 .srvband.development { background: rgba(255,184,77,.14); border-color: rgba(255,184,77,.4); }
 .srvband.local { background: rgba(107,217,140,.12); border-color: rgba(107,217,140,.4); }
 .srvband .sub { margin-left: auto; }
+
+/* 데도키온 진화 진행도 */
+.evo { padding: 6px 8px; margin-top: 6px; display: grid; gap: 3px; }
+.evo-row { display: grid; grid-template-columns: 64px 1fr auto; gap: 6px; align-items: center; font-size: 12px; }
+.evo-bar { height: 6px; background: rgba(0,0,0,.5); border-radius: 3px; overflow: hidden; }
+.evo-bar i { display: block; height: 100%; background: linear-gradient(90deg, #c8aa6e, #f0d9a0); }
+.evo-row b { font-variant-numeric: tabular-nums; }

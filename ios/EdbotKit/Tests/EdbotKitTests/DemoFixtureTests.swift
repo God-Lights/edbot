@@ -18,4 +18,13 @@ final class DemoFixtureTests: XCTestCase {
             XCTAssertNotNil(room.chess, name)
         }
     }
+
+    func testEvolutionFieldsDecode() throws {
+        let unit = try JSONDecoder().decode(ChessUnitView.self, from: Data(#"{"uid":"i1","defId":"dedokion","star":1,"evo":{"engine":9.4,"core":25}}"#.utf8))
+        XCTAssertEqual(unit.evo, ChessEvo(engine: 9.4, core: 25))
+        let old = try JSONDecoder().decode(ChessUnitView.self, from: Data(#"{"uid":"i1","defId":"relic","star":1}"#.utf8))
+        XCTAssertNil(old.evo)
+        let rule = try JSONDecoder().decode(ChessEvolutionRule.self, from: Data(#"{"from":"dedokion","enginePerCombat":9.4,"engineNeed":18.8,"corePerCombat":25,"coreNeed":50,"shardsNeed":2,"shardUnit":80,"branches":[{"code":"e-code-xe","material":"ancient-shard","to":"toka-loga"}]}"#.utf8))
+        XCTAssertEqual(rule.branches.first?.to, "toka-loga")
+    }
 }

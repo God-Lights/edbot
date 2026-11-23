@@ -212,7 +212,37 @@ function synergyHtml(me) {
       <span class="gicon" style="--pc:${PIECE_COLOR[p]};--img:url(assets/pieces/${p}.png)"></span>
       <span><b>${PIECE_NAME[p]} ${n}/${need}</b><small>${esc(detail)}</small></span></div>`;
   });
+  // 계보 시너지 "근원" (데보이트 계보): 같은 계보 캐릭터 수
+  for (const trait of [S.catalog?.traits?.[0]].filter(Boolean)) {
+    const steps = (S.catalog.traits ?? []).map((t) => t.need);
+    const n = [...seen].filter((id) => trait.members.includes(id)).length;
+    if (!n) continue;
+    const tier = steps.filter((t) => n >= t).length;
+    const need = steps[Math.min(tier, steps.length - 1)];
+    const shown = S.catalog.traits[Math.max(0, tier - 1)];
+    const detail = tier ? shown.text : `${need - n}명 더 모으면 ${shown.text}`;
+    chips.push(`<div class="synchip${tier ? " on" : ""}${tier >= 2 ? " max" : ""}" style="--pc:#c8aa6e" title="${esc("근원 " + n + "/" + need + " · " + detail)}">
+      <span class="gicon" style="--pc:#c8aa6e;--img:url(assets/pieces/pawn.png)"></span>
+      <span><b>근원 ${n}/${need}</b><small>${esc(detail)}</small></span></div>`);
+  }
   return chips.length ? chips.join("") : `<div class="sub">같은 기물(킹·룩·비숍...)을 2명 이상 올리면 시너지가 켜져요.</div>`;
+}
+
+/** 데도키온의 진화 진행도: 엔진 탑재율, A-C 코어, 고대조각/재상트 */
+function evolutionHtml(me, unit) {
+  const evo = S.catalog?.evolution;
+  if (!evo || unit.defId !== evo.from) return "";
+  const branch = evo.branches.find((b) => unit.weapon && unit.weapon.split(/[+*]/).includes(b.code));
+  const e = unit.evo ?? { engine: 0, core: 0 };
+  const shards = branch ? Math.min(evo.shardsNeed, me.materials[branch.material] ?? 0) : 0;
+  const bar = (label, value, max, text) => `<div class="evo-row"><span>${label}</span><span class="evo-bar"><i style="width:${Math.round(Math.min(1, value / max) * 100)}%"></i></span><b>${text}</b></div>`;
+  const target = branch ? unitInfo(branch.to)?.nameKo ?? branch.to : "E 코드를 끼우세요";
+  const matName = branch ? (materialInfo(branch.material)?.nameKo ?? branch.material) : "고대조각/재상트";
+  return `<div class="evo panel"><div class="sub">진화: <b>${esc(target)}</b></div>
+    ${bar("엔진", e.engine, evo.engineNeed, `${e.engine}% / ${evo.engineNeed}%`)}
+    ${bar("A-C 코어", e.core, evo.coreNeed, `${e.core} / ${evo.coreNeed}`)}
+    ${bar(esc(matName), shards, evo.shardsNeed, `${shards * evo.shardUnit} / ${evo.shardsNeed * evo.shardUnit}`)}
+    <div class="sub">다 차면 다음 라운드 시작에 진화해요. (X-E 엔진 → 토가로가, V-E 엔진 → 드워곤)</div></div>`;
 }
 
 export function findUnit(me, uid) {
@@ -230,6 +260,7 @@ function selectedHtml(me) {
     <span class="sub">${PIECE_NAME[info?.piece] ?? ""} · ${esc(info?.role ?? "")}</span><span class="grow"></span><button class="ibtn" data-act="sel-close" title="닫기">✕</button></div>
     ${info ? `<div>${ic("heart")} ${Math.round(info.hp * f)} &nbsp; ${ic("sword")} ${Math.round(info.atk * f)}</div><div class="sub">${esc(info.abilityText)}</div>` : ""}
     ${w ? `<div class="wline">${ic("shield")} <b>${esc(w.nameKo)}</b> <button class="mini" data-act="unequip-sel">무기 빼기</button></div>` : ""}
+    ${evolutionHtml(me, unit)}
     <div class="btnrow">${onBoard ? `<button class="mini" data-act="bench-sel">대기석으로</button>` : ""}
     <button class="mini" data-act="sell-sel">판매 +${sellValue(info?.cost ?? 1, unit.star)}</button></div></div>`;
 }
