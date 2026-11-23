@@ -578,27 +578,44 @@ struct ChessPrepView: View {
         }
     }
 
-    /// 왼쪽 아래: 상점을 한 줄로. 카드마다 기물 그림, 이름, 값.
+    /// 왼쪽 아래 상점 바 (롤토체스처럼): 왼쪽에 골드와 새로고침, 오른쪽에 그림 중심 카드 다섯 장.
     private func shopRow(_ me: ChessSelfSnapshot, height: CGFloat) -> some View {
-        HStack(spacing: 6) {
+        let gold = Color(red: 0.97, green: 0.78, blue: 0.30)
+        let canReroll: Bool = me.gold >= me.rerollCost && !me.done
+        return HStack(spacing: 6) {
+            VStack(spacing: 4) {
+                // 골드: 상점 바 한 곳에서 본다. 다음 라운드 수입(이자 포함)도 함께.
+                VStack(spacing: 0) {
+                    Text("\(Image(systemName: "dollarsign.circle.fill")) \(me.gold)")
+                        .font(.system(size: compact ? 17 : 22, weight: .heavy, design: .rounded).monospacedDigit())
+                        .foregroundStyle(gold)
+                        .contentTransition(.numericText())
+                        .animation(.spring(response: 0.35, dampingFraction: 0.6), value: me.gold)
+                    Text("다음 +\(me.nextIncome)").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.black.opacity(0.35)))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(gold.opacity(0.6), lineWidth: 1))
+                Button { model.chessReroll() } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.clockwise").font(.system(size: 13, weight: .bold))
+                        Text("\(Image(systemName: "dollarsign.circle.fill"))\(me.rerollCost)").font(.system(size: 12, weight: .bold).monospacedDigit())
+                    }
+                    .foregroundStyle(canReroll ? Color.white : Theme.silver)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panelStrong))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("새로고침 \(me.rerollCost)골드")
+                .disabled(!canReroll)
+                .opacity(canReroll ? 1 : 0.45)
+            }
+            .frame(width: max(64, height * 0.85), height: height)
             ForEach(me.shop.indices, id: \.self) { slot in
                 shopCard(me, slot: slot, height: height)
                     .id(me.shop[slot] ?? "sold-\(slot)")
                     .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
             }
-            Button { model.chessReroll() } label: {
-                VStack(spacing: 2) {
-                    Image(systemName: "arrow.clockwise").font(.title3)
-                    Text("새로고침").font(.caption2)
-                    Text("\(me.rerollCost)골드").font(.caption2.bold())
-                }
-                .foregroundStyle(Theme.silver)
-                .frame(width: max(54, height * 0.9), height: height)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.panelStrong))
-            }
-            .buttonStyle(.plain)
-            .disabled(me.gold < me.rerollCost || me.done)
-            .opacity(me.gold < me.rerollCost || me.done ? 0.4 : 1)
         }
         .frame(height: height)
         .animation(.easeOut(duration: 0.3), value: me.shop)
@@ -831,26 +848,20 @@ struct ChessPrepView: View {
                     .stroke(ringColor, style: StrokeStyle(lineWidth: 9, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .shadow(color: ringColor.opacity(0.6), radius: 4)
+                // 골드는 상점 바로 옮겼다. 고리는 판에 놓은 수/놓을 수 있는 수.
                 VStack(spacing: 0) {
-                    Image(systemName: "dollarsign.circle.fill").font(.system(size: 14)).foregroundStyle(Color(red: 0.95, green: 0.78, blue: 0.3))
-                    Text("\(me.gold)")
-                        .font(.system(size: compact ? 18 : 24, weight: .bold, design: .rounded).monospacedDigit())
+                    Text("\(me.board.count)/\(cap)")
+                        .font(.system(size: compact ? 16 : 22, weight: .bold, design: .rounded).monospacedDigit())
                         .contentTransition(.numericText())
+                    Text("배치").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
             }
             .frame(width: compact ? 64 : 92, height: compact ? 64 : 92)
             .animation(.easeOut(duration: 0.5), value: ratio)
-            .animation(.spring(response: 0.35, dampingFraction: 0.6), value: me.gold)
-            .overlay(alignment: .bottom) {
-                Text("판 \(me.board.count)/\(cap)")
-                    .font(.system(size: 11, weight: ratio >= 1 ? .bold : .regular))
-                    .foregroundStyle(ratio >= 1 ? Theme.good : Color.secondary)
-                    .offset(y: 14)
-            }
-            .padding(.bottom, compact ? 10 : 12)
+            .animation(.spring(response: 0.35, dampingFraction: 0.6), value: me.board.count)
 
             VStack(alignment: .leading, spacing: compact ? 2 : 4) {
-                Text("시너지 · 다음 라운드 \(Image(systemName: "dollarsign.circle.fill")) +\(me.nextIncome)").font(.caption2).foregroundStyle(.secondary)
+                Text("시너지").font(.caption2).foregroundStyle(.secondary)
                 synergyChips(me)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -918,37 +929,89 @@ struct ChessPrepView: View {
         return "등장 확률: " + parts.joined(separator: " · ")
     }
 
+    /// 상점 카드: 가격 색 바탕에 큰 기물 그림, 기물 종류 태그, 이름, 가격. 능력 설명은 길게 눌러서 본다.
     private func shopCard(_ me: ChessSelfSnapshot, slot: Int, height: CGFloat) -> some View {
         let defId: String? = me.shop[slot]
         let info: ChessUnitInfo? = defId.flatMap { model.chessUnit($0) }
         let cost: Int = info?.cost ?? 0
+        let color: Color = ChessStyle.costColor(cost)
         let affordable: Bool = me.gold >= cost
+        let piece: Piece = info?.piece ?? .pawn
+        // 이미 가진 같은 캐릭터 수(대기석+판). 2장이면 하나 더 사면 ★2가 된다.
+        let owned: Int = defId.map { ownedCount(me, defId: $0) } ?? 0
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         return Button {
             if defId != nil { model.chessBuy(slot: slot) }
         } label: {
-            VStack(spacing: 1) {
+            ZStack {
                 if let defId {
-                    ChessToken(defId: defId, star: 1).frame(width: max(30, height - 40), height: max(30, height - 40))
-                    Text(info?.nameKo ?? defId).font(.system(size: 12, weight: .bold)).lineLimit(1).minimumScaleFactor(0.6)
-                    Text("\(Image(systemName: "dollarsign.circle.fill"))\(cost)").font(.system(size: 11, weight: .heavy).monospacedDigit())
-                        .foregroundStyle(Color.black.opacity(0.85))
-                        .padding(.horizontal, 7)
-                        .background(Capsule().fill(ChessStyle.costColor(cost)))
+                    shape.fill(LinearGradient(colors: [color.opacity(0.55), color.opacity(0.12), Color.black.opacity(0.55)], startPoint: .topTrailing, endPoint: .bottomLeading))
+                    Image(Labels.pieceImageName(piece))
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(Theme.color(for: piece))
+                        .frame(height: height * 0.62)
+                        .shadow(color: .black.opacity(0.5), radius: 3, y: 2)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .padding(.top, height * 0.06)
+                    VStack(spacing: 0) {
+                        HStack(alignment: .top) {
+                            Text(Labels.pieceName(piece))
+                                .font(.system(size: 9, weight: .bold))
+                                .padding(.horizontal, 4).padding(.vertical, 1)
+                                .background(Color.black.opacity(0.55))
+                            Spacer(minLength: 0)
+                            if owned > 0 {
+                                Text(owned >= 2 ? "★2 가능" : "보유 \(owned)")
+                                    .font(.system(size: 9, weight: .heavy))
+                                    .foregroundStyle(owned >= 2 ? Color.black : Color.white)
+                                    .padding(.horizontal, 4).padding(.vertical, 1)
+                                    .background(owned >= 2 ? Color(red: 0.97, green: 0.78, blue: 0.30) : Color.black.opacity(0.55))
+                            }
+                        }
+                        Spacer(minLength: 0)
+                        HStack(alignment: .lastTextBaseline, spacing: 2) {
+                            Text(info?.nameKo ?? defId)
+                                .font(.system(size: compact ? 11 : 13, weight: .heavy))
+                                .lineLimit(1).minimumScaleFactor(0.6)
+                            Spacer(minLength: 0)
+                            Text("\(Image(systemName: "dollarsign.circle.fill"))\(cost)")
+                                .font(.system(size: 11, weight: .heavy).monospacedDigit())
+                                .foregroundStyle(Color.black.opacity(0.85))
+                                .padding(.horizontal, 5)
+                                .background(Capsule().fill(color))
+                        }
+                        .padding(.horizontal, 5).padding(.vertical, 3)
+                        .background(LinearGradient(colors: [.clear, .black.opacity(0.75)], startPoint: .top, endPoint: .bottom))
+                    }
+                    .padding(3)
+                    shape.strokeBorder(owned >= 2 ? Color(red: 0.97, green: 0.78, blue: 0.30) : color, lineWidth: owned >= 2 ? 3 : 2.5)
                 } else {
+                    shape.fill(Theme.panel)
                     Text("구매 완료").font(.caption2).foregroundStyle(.secondary)
                 }
             }
-            .padding(3)
             .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
-            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(
-                defId == nil ? AnyShapeStyle(Theme.panel)
-                    : AnyShapeStyle(LinearGradient(colors: [ChessStyle.costColor(cost).opacity(0.30), Theme.panel], startPoint: .top, endPoint: .bottom))))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(defId == nil ? Color.clear : ChessStyle.costColor(cost), lineWidth: 2.5))
-            .opacity(defId == nil || !affordable ? 0.45 : 1)
+            .clipShape(shape)
+            .opacity(defId == nil ? 0.35 : (affordable ? 1 : 0.5))
         }
         .buttonStyle(.plain)
         .disabled(defId == nil || me.done)
+        .contextMenu {
+            if let info {
+                Text("\(info.nameKo) · \(Labels.pieceName(info.piece)) · \(info.cost)골드")
+                Text(info.abilityText)
+            }
+        }
+        .accessibilityLabel(info.map { "\($0.nameKo), \($0.cost)골드. \($0.abilityText)" } ?? "구매 완료")
+    }
+
+    /// 대기석과 판에 있는 같은 캐릭터 ★1 수
+    private func ownedCount(_ me: ChessSelfSnapshot, defId: String) -> Int {
+        var count = 0
+        for unit in me.board where unit.defId == defId && unit.star == 1 { count += 1 }
+        for case let unit? in me.bench where unit.defId == defId && unit.star == 1 { count += 1 }
+        return count
     }
 
     private func findUnit(_ me: ChessSelfSnapshot, uid: String) -> ChessUnitView? {
