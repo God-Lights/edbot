@@ -6,13 +6,14 @@ import SwiftUI
 private let chessStartHp = 30
 
 enum ChessStyle {
-    /// 가격별 테두리 색
+    /// 가격별 색 (롤토체스처럼): 1 회색 · 2 초록 · 3 파랑 · 4 보라 · 5 금색
     static func costColor(_ cost: Int) -> Color {
         switch cost {
-        case 1: return Color(white: 0.72)
-        case 2: return Theme.good
-        case 3: return Theme.mine
-        default: return Color(red: 0.95, green: 0.78, blue: 0.30)
+        case ...1: return Color(red: 0.62, green: 0.64, blue: 0.70)
+        case 2: return Color(red: 0.18, green: 0.75, blue: 0.42)
+        case 3: return Color(red: 0.20, green: 0.56, blue: 0.95)
+        case 4: return Color(red: 0.72, green: 0.32, blue: 0.95)
+        default: return Color(red: 0.97, green: 0.73, blue: 0.22)
         }
     }
 
@@ -57,7 +58,7 @@ private extension View {
     }
 }
 
-/// 기물 하나: 기물 글자, 이름, 별. tint가 있으면 그 색 테두리(전투에서 팀 색).
+/// 기물 하나: 기물 글자, 이름, 별. 테두리와 바탕은 가격 색이다. tint가 있으면 아래쪽 띠로 팀 색을 보여 준다(전투).
 struct ChessToken: View {
     @Environment(AppModel.self) private var model
     let defId: String
@@ -72,14 +73,21 @@ struct ChessToken: View {
     var body: some View {
         let info = model.chessUnit(defId)
         let piece: Piece = info?.piece ?? .pawn
-        let border: Color = selected ? Color.white : (tint ?? ChessStyle.costColor(info?.cost ?? 1))
+        let cost: Color = ChessStyle.costColor(info?.cost ?? 1)
+        let border: Color = selected ? Color.white : cost
         GeometryReader { geo in
             let side = min(geo.size.width, geo.size.height)
+            let shape = RoundedRectangle(cornerRadius: side * 0.2, style: .continuous)
             ZStack {
-                RoundedRectangle(cornerRadius: side * 0.2, style: .continuous)
-                    .fill(Theme.color(for: piece).opacity(0.28))
-                RoundedRectangle(cornerRadius: side * 0.2, style: .continuous)
-                    .strokeBorder(border, lineWidth: selected ? 3 : 2)
+                shape.fill(LinearGradient(colors: [cost.opacity(0.42), cost.opacity(0.12)], startPoint: .top, endPoint: .bottom))
+                if let tint {
+                    // 팀 색 띠: 아래쪽
+                    Rectangle().fill(tint)
+                        .frame(height: max(3, side * 0.09))
+                        .frame(maxHeight: .infinity, alignment: .bottom)
+                        .clipShape(shape)
+                }
+                shape.strokeBorder(border, lineWidth: selected ? 3 : max(2, side * 0.05))
                 VStack(spacing: 0) {
                     Image(Labels.pieceImageName(piece))
                         .resizable()
@@ -878,18 +886,21 @@ struct ChessPrepView: View {
                 if let defId {
                     ChessToken(defId: defId, star: 1).frame(width: max(30, height - 40), height: max(30, height - 40))
                     Text(info?.nameKo ?? defId).font(.system(size: 12, weight: .bold)).lineLimit(1).minimumScaleFactor(0.6)
-                    Text("\(Image(systemName: "dollarsign.circle.fill"))\(cost)").font(.system(size: 11, weight: .bold).monospacedDigit())
-                        .padding(.horizontal, 6)
-                        .background(Capsule().fill(ChessStyle.costColor(cost).opacity(0.3)))
+                    Text("\(Image(systemName: "dollarsign.circle.fill"))\(cost)").font(.system(size: 11, weight: .heavy).monospacedDigit())
+                        .foregroundStyle(Color.black.opacity(0.85))
+                        .padding(.horizontal, 7)
+                        .background(Capsule().fill(ChessStyle.costColor(cost)))
                 } else {
                     Text("구매 완료").font(.caption2).foregroundStyle(.secondary)
                 }
             }
             .padding(3)
             .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
-            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.panel))
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(
+                defId == nil ? AnyShapeStyle(Theme.panel)
+                    : AnyShapeStyle(LinearGradient(colors: [ChessStyle.costColor(cost).opacity(0.30), Theme.panel], startPoint: .top, endPoint: .bottom))))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(defId == nil ? Color.clear : ChessStyle.costColor(cost).opacity(0.7), lineWidth: 1.5))
+                .strokeBorder(defId == nil ? Color.clear : ChessStyle.costColor(cost), lineWidth: 2.5))
             .opacity(defId == nil || !affordable ? 0.45 : 1)
         }
         .buttonStyle(.plain)

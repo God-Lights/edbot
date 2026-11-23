@@ -66,6 +66,19 @@ const timed = (room: Room, startNow: boolean, ms: number) => {
   return { ...r, phaseStartedAt: startNow ? r.serverTime : r.phaseStartedAt, phaseEndsAt: r.serverTime + ms };
 };
 result.prep = timed(result.prep, false, 25_000);
+
+// 디자인 확인용: 상점과 대기석에 1~4코스트 말을 섞어 가격 색이 다 보이게 한다.
+{
+  const units = (JSON.parse(catalog) as { units: Array<{ id: string; cost: number }> }).units;
+  const byCost = (c: number, i = 0) => units.filter((u) => u.cost === c)[i]?.id ?? units[0]!.id;
+  const me = (result.prep as unknown as { chess: { me: { shop: Array<string | null>; bench: Array<Record<string, unknown> | null> } } }).chess.me;
+  me.shop = [byCost(1), byCost(2), byCost(3), byCost(4), byCost(2, 1)];
+  const sample = me.bench.find((u) => u);
+  if (sample) {
+    me.bench[3] = { ...sample, uid: "demo0", defId: byCost(3), weapon: null };
+    me.bench[4] = { ...sample, uid: "demo1", defId: byCost(4), weapon: null };
+  }
+}
 result.combat = timed(result.combat, true, 30_000);
 for (const [name, room] of [["prep", result.prep], ["combat", result.combat]] as const) {
   writeFileSync(join(out, `demo-${name}.json`), JSON.stringify({ ...result.welcome, room }));
