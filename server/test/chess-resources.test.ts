@@ -27,14 +27,15 @@ const giveUnit = (g: ChessGame, seat: 0 | 1, defId: string) => {
 };
 
 describe("재료와 무기 데이터", () => {
-  it("재료 13종, 무기 13종이 하나씩 짝을 이룬다", () => {
-    expect(MATERIALS).toHaveLength(13);
-    expect(WEAPONS).toHaveLength(13);
+  it("재료 16종(진화 재료 3종 포함), 무기 16종이 하나씩 짝을 이룬다", () => {
+    expect(MATERIALS).toHaveLength(16);
+    expect(MATERIALS.filter((m) => m.special).map((m) => m.id)).toEqual(["xe-code", "ve-code", "zesent"]);
+    expect(WEAPONS).toHaveLength(16);
     for (const m of MATERIALS) {
       expect(weaponDef(m.weaponId)?.materialId).toBe(m.id);
       expect(weaponDef(m.weaponId)?.rarity).toBe(m.rarity);
     }
-    expect(new Set(WEAPONS.map((w) => w.id)).size).toBe(13);
+    expect(new Set(WEAPONS.map((w) => w.id)).size).toBe(16);
   });
 
   it("시장 가격: 흔함 3, 보통 5, 희귀 8, 전설은 팔지 않는다", () => {

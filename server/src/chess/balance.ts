@@ -2,7 +2,7 @@
 // 같은 예산(골드)으로 만든 팀끼리 싸우므로 "비싼 캐릭터가 이긴다"가 아니라 "가격 대비 강한가"를 본다.
 
 import { roster, unitDef } from "./roster";
-import { ALL_SYNERGIES, activeSynergies } from "./synergy";
+import { ALL_SYNERGIES, LINEAGE_TRAITS, activeSynergies } from "./synergy";
 import { runCombat } from "./sim";
 import type { Placement, UnitDef } from "./types";
 
@@ -114,7 +114,7 @@ export interface BalanceReport {
 export function runBalance(options: BalanceOptions): BalanceReport {
   const rng = makeRng(options.seed);
   const stats = new Map<string, UnitStat>(roster().map((d) => [d.id, { defId: d.id, games: 0, wins: 0, draws: 0 }]));
-  const synergy = new Map<string, { games: number; wins: number }>(ALL_SYNERGIES.map((s) => [s.id, { games: 0, wins: 0 }]));
+  const synergy = new Map<string, { games: number; wins: number }>([...ALL_SYNERGIES, ...LINEAGE_TRAITS].map((s) => [s.id, { games: 0, wins: 0 }]));
   let draws = 0;
   let sudden = 0;
   let beats = 0;

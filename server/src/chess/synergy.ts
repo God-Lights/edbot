@@ -1,7 +1,7 @@
 // 기물 시너지 (설계 8장). 같은 기물이 2명(폰은 2명/4명) 모이면 팀 전체 보너스, 3명(폰 4명)이면 효과가 약 2배.
 // 같은 캐릭터는 몇 장이든 한 명으로 센다. 수치는 시뮬레이션으로 조정하는 초안이다.
 
-import { unitDef } from "./roster";
+import { LINEAGE, unitDef } from "./roster";
 import type { Piece, SynergyBonus } from "./types";
 
 export interface SynergyInfo {
@@ -49,7 +49,24 @@ export const ALL_SYNERGIES: readonly SynergyInfo[] = (Object.keys(THRESHOLDS) as
   })),
 );
 
-/** 켜진 시너지 id. 각 기물은 가장 높은 단계 하나만 켜진다. */
+/** 계보 시너지(기물 종류가 아니라 이야기 계열로 묶는다). 도감에서는 synergies 와 따로 traits 로 보낸다. */
+export interface TraitInfo {
+  id: string;
+  nameKo: string;
+  need: number;
+  tier: 1 | 2;
+  text: string;
+  /** 이 계보에 드는 캐릭터 id */
+  members: readonly string[];
+}
+
+/** 데보이트 계보 "근원": 2명이면 팀 체력 +8%, 3명 이상이면 +16% */
+export const LINEAGE_TRAITS: readonly TraitInfo[] = [
+  { id: "lineage-1", nameKo: "근원 2명", need: 2, tier: 1, text: "팀 전체 체력 +8%", members: LINEAGE },
+  { id: "lineage-2", nameKo: "근원 3명", need: 3, tier: 2, text: "팀 전체 체력 +16%", members: LINEAGE },
+];
+
+/** 켜진 시너지 id. 각 기물은 가장 높은 단계 하나만 켜진다. 계보 시너지도 같은 목록에 들어간다(예: "lineage-1"). */
 export function activeSynergies(defIds: string[]): string[] {
   const unique = [...new Set(defIds)];
   const counts = new Map<Piece, number>();
@@ -64,17 +81,22 @@ export function activeSynergies(defIds: string[]): string[] {
     if (n >= t2) active.push(synergyId(piece, 2));
     else if (n >= t1) active.push(synergyId(piece, 1));
   }
+  const lineage = unique.filter((id) => LINEAGE.includes(id)).length;
+  if (lineage >= LINEAGE_TRAITS[1]!.need) active.push("lineage-2");
+  else if (lineage >= LINEAGE_TRAITS[0]!.need) active.push("lineage-1");
   return active;
 }
 
 export function neutralBonus(): SynergyBonus {
-  return { energyGain: 1, abilityDamage: 1, dmgTaken: 1, healShield: 1, knightBoost: false, pawnAtk: 1, pawnHp: 1, teamAtk: 1 };
+  return { energyGain: 1, abilityDamage: 1, dmgTaken: 1, healShield: 1, knightBoost: false, pawnAtk: 1, pawnHp: 1, teamAtk: 1, teamHp: 1 };
 }
 
 /** 켜진 시너지를 효과 수치로 합친다. (2단계는 효과가 1.5배) */
 export function combineBonuses(ids: string[]): SynergyBonus {
   const b = neutralBonus();
   for (const id of ids) {
+    if (id === "lineage-1") { b.teamHp *= 1.08; continue; }
+    if (id === "lineage-2") { b.teamHp *= 1.16; continue; }
     const info = synergyInfo(id);
     if (!info) continue;
     const k = info.tier === 2 ? 2 : 1;

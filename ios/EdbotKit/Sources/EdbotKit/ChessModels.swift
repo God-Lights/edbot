@@ -18,8 +18,49 @@ public struct ChessUnitView: Codable, Equatable, Sendable, Identifiable {
     public let row: Int?
     /// 낀 무기 id
     public let weapon: String?
+    /// 데도키온의 진화 진행도 (엔진 탑재율 %, A-C 코어). 없으면 nil.
+    public var evo: ChessEvo? = nil
 
     public var id: String { uid }
+}
+
+/// 데도키온의 진화 진행도
+public struct ChessEvo: Codable, Equatable, Sendable {
+    public let engine: Double
+    public let core: Double
+    public init(engine: Double, core: Double) { self.engine = engine; self.core = core }
+}
+
+/// 이번 라운드 시작에 진화한 기물
+public struct ChessEvolved: Codable, Equatable, Sendable {
+    public let uid: String
+    public let from: String
+    public let to: String
+}
+
+/// 계보 시너지 (예: 근원). 기물 종류 시너지와 따로 온다.
+public struct ChessTraitInfo: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let nameKo: String
+    public let need: Int
+    public let tier: Int
+    public let text: String
+    public let members: [String]
+}
+
+/// 데도키온 진화 규칙 (서버 roster.ts 의 EVOLUTION)
+public struct ChessEvolutionRule: Codable, Equatable, Sendable {
+    public struct Branch: Codable, Equatable, Sendable {
+        public let code: String
+        public let material: String
+        public let to: String
+    }
+    public let from: String
+    public let engineNeed: Double
+    public let coreNeed: Double
+    public let shardsNeed: Int
+    public let shardUnit: Int
+    public let branches: [Branch]
 }
 
 public struct ChessSelfSnapshot: Codable, Equatable, Sendable {
@@ -38,6 +79,8 @@ public struct ChessSelfSnapshot: Codable, Equatable, Sendable {
     public let weapons: [String: Int]
     public let smelters: [String?]
     public let marketBought: Bool
+    /// 이번 라운드 시작에 진화한 기물. 오래된 서버면 nil.
+    public var evolved: [ChessEvolved]? = nil
 }
 
 /// 광물 시장의 한 칸
@@ -277,6 +320,9 @@ public struct ChessCatalog: Codable, Equatable, Sendable {
     public let fusions: [ChessFusion]?
     /// 규칙 묶음 이름(공식이면 "official"). 오래된 서버면 nil.
     public let ruleset: String?
+    /// 계보 시너지와 진화 규칙. 오래된 서버면 nil.
+    public var traits: [ChessTraitInfo]? = nil
+    public var evolution: ChessEvolutionRule? = nil
 }
 
 // MARK: 게스트 로그인과 관전 목록

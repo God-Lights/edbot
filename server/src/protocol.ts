@@ -254,6 +254,8 @@ export interface ChessUnitView {
   row?: number;
   /** 낀 무기 id */
   weapon?: string;
+  /** 데도키온의 진화 진행도: 엔진 탑재율(%, 18.8이면 완료)과 A-C 코어(50이면 완료) */
+  evo?: { engine: number; core: number };
 }
 
 export interface ChessSelfSnapshot {
@@ -274,6 +276,8 @@ export interface ChessSelfSnapshot {
   weapons: Record<string, number>;
   smelters: Array<string | null>;
   marketBought: boolean;
+  /** 이번 라운드 시작에 진화한 기물 (예: 데도키온 -> 토가로가). 없으면 빈 목록 */
+  evolved?: Array<{ uid: string; from: string; to: string }>;
 }
 
 /** 광물 시장의 한 칸 */

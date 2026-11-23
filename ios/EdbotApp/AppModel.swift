@@ -95,6 +95,9 @@ final class AppModel {
     private(set) var chessMaterials: [ChessMaterialInfo] = []
     private(set) var chessWeapons: [ChessWeaponInfo] = []
     private(set) var chessFusions: [ChessFusion] = []
+    /// 계보 시너지(근원)와 데도키온 진화 규칙
+    private(set) var chessTraits: [ChessTraitInfo] = []
+    private(set) var chessEvolution: ChessEvolutionRule?
     /// 탭으로 조합하는 방식이 켜져 있다 (아이템 둘을 차례로 누른다)
     private(set) var combineMode = false
     /// 조합 방식에서 먼저 누른 아이템
@@ -133,6 +136,8 @@ final class AppModel {
             chessMaterials = catalog.materials
             chessWeapons = catalog.weapons
             chessFusions = catalog.fusions ?? []
+            chessTraits = catalog.traits ?? []
+            chessEvolution = catalog.evolution
         }
         guard let url = Bundle.main.url(forResource: "demo-\(kind)", withExtension: "json"),
               let text = try? String(contentsOf: url, encoding: .utf8),
@@ -308,7 +313,7 @@ final class AppModel {
 
     /// 서버가 바뀌면 그 서버의 말·재료·무기 목록(팩 포함)이 다르다. 비워 두면 다음에 다시 읽는다.
     private func clearChessCatalog() {
-        chessUnits = []; chessSynergies = []; chessMaterials = []; chessWeapons = []; chessFusions = []
+        chessUnits = []; chessSynergies = []; chessMaterials = []; chessWeapons = []; chessFusions = []; chessTraits = []; chessEvolution = nil
     }
 
     private func loadChess(from url: URL) {
@@ -320,6 +325,8 @@ final class AppModel {
                 chessMaterials = catalog.materials
                 chessWeapons = catalog.weapons
                 chessFusions = catalog.fusions ?? []
+                chessTraits = catalog.traits ?? []
+                chessEvolution = catalog.evolution
             }
         }
     }
@@ -851,6 +858,10 @@ final class AppModel {
             interpolator.reset()
         }
         playChangeSounds(from: previous, to: room)
+        // 라운드가 바뀔 때 진화한 기물이 있으면 알린다 (데도키온 -> 토가로가 / 드워곤)
+        if previous?.chess?.round != room.chess?.round, let evolved = room.chess?.me?.evolved, !evolved.isEmpty {
+            message = evolved.map { "\(chessUnit($0.from)?.nameKo ?? $0.from)이(가) \(chessUnit($0.to)?.nameKo ?? $0.to)(으)로 진화했어요!" }.joined(separator: " ")
+        }
         Sfx.shared.setScene(Self.musicScene(for: room))
         self.room = room
     }

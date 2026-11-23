@@ -5,7 +5,7 @@ import {
 } from "../src/chess/game";
 import type { ChessGame, ChessPlayer } from "../src/chess/game";
 import { addBotIfNeeded, createRoom, joinRoom, setReady } from "../src/room-state";
-import { POOL_COPIES, ROSTER, unitDef } from "../src/chess/roster";
+import { EVOLVED_FROM, POOL_COPIES, ROSTER, unitDef } from "../src/chess/roster";
 
 const newGame = (seed = 1): ChessGame => {
   const g = createChessGame(seed);
@@ -15,12 +15,15 @@ const newGame = (seed = 1): ChessGame => {
 
 /** 풀에 남은 것 + 상점에 나온 것 + 가진 것(★2는 3장)의 합이 처음 복사본 수와 같아야 한다. */
 function conserved(g: ChessGame): boolean {
-  for (const def of ROSTER) {
+  // 진화로만 얻는 캐릭터는 풀에 없고, 뿌리(데보이트) 몇 장으로 센다.
+  for (const def of ROSTER.filter((d) => !d.evolveOnly)) {
     let total = g.pool[def.id] ?? 0;
     for (const p of g.players) {
       total += p.shop.filter((id) => id === def.id).length;
       for (const u of [...p.board, ...p.bench.filter((x) => x !== null)]) {
+        const evolved = EVOLVED_FROM[u!.defId];
         if (u!.defId === def.id) total += u!.star === 2 ? 3 : 1;
+        else if (evolved?.root === def.id) total += evolved.copies * (u!.star === 2 ? 3 : 1);
       }
     }
     if (total !== POOL_COPIES[def.cost]) return false;
@@ -162,12 +165,12 @@ describe("사기, 팔기, 새로고침", () => {
   it("팔면 산 값을 돌려받고 복사본이 풀로 돌아간다 (★2는 3장 값)", () => {
     const g = newGame();
     const p = g.players[0];
-    give(g, 0, "dwargon", 1); // 4골드
-    const before = g.pool["dwargon"]!;
+    give(g, 0, "ankio", 1); // 4골드
+    const before = g.pool["ankio"]!;
     p.gold = 0;
     expect(sell(g, 0, p.bench.find((u) => u)!.uid)).toEqual({ ok: true });
     expect(p.gold).toBe(4);
-    expect(g.pool["dwargon"]).toBe(before + 1);
+    expect(g.pool["ankio"]).toBe(before + 1);
 
     give(g, 0, "nut-wolf", 3);
     p.gold = 0;

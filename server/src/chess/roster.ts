@@ -74,10 +74,48 @@ export const ROSTER: readonly UnitDef[] = [
   def("bwtkan-jaws", "부캉죠스", "knight", "야수", 3, "암살", "leap-bite", "가장 약한 적에게 도약해 물어 기절시킨다"),
   def("zephyr", "제피르", "knight", "이계", 3, "기동", "dimension-leap", "적이 모인 곳으로 도약해 주변 적에게 피해를 준다"),
   def("ancient-lord", "에이션트 로드", "king", "고대", 4, "지휘", "pact", "아군 전체가 3초간 받는 피해 -35%"),
-  def("toka-loga", "토카로가", "queen", "고대", 4, "딜러", "thunder", "공격력이 높은 적 3명에게 낙뢰를 내린다"),
-  def("dwargon", "드워곤", "rook", "야수", 4, "딜러", "dragon-breath", "앞 직선의 적 모두에게 화염을 뿜는다"),
+  // 토가로가·드워곤은 데도키온이 진화해야만 나온다 (설계 29장). 아이디는 전적·다시 보기 호환을 위해 그대로 둔다.
+  { ...def("toka-loga", "토가로가", "queen", "고대", 4, "딜러", "thunder", "공격력이 높은 적 3명에게 낙뢰를 내린다"), evolveOnly: true },
+  { ...def("dwargon", "드워곤", "rook", "야수", 4, "딜러", "dragon-breath", "앞 직선의 적 모두에게 화염을 뿜는다"), evolveOnly: true },
   def("ankio", "안키오", "knight", "이계", 4, "암살", "flank", "적 후열로 순간이동해 큰 피해를 준다"),
+  // 데보이트 계보: 데보이트(모든 생명의 근원) -> 데도키온(유전의 전사) -> 토가로가 / 드워곤
+  def("devoit", "데보이트", "pawn", "근원", 1, "서포터", "origin", "처음 쓰러지는 아군 1명을 체력 30%로 되살린다 (전투마다 한 번)", true),
+  { ...def("dedokion", "데도키온", "knight", "근원", 3, "딜러", "gene-absorb", "적을 처치할 때마다 그 적 최대 체력의 10%만큼 최대 체력이 오르고 회복한다", true), evolveOnly: true },
 ];
+
+/** 같은 캐릭터 3장을 합치면 ★2 대신 다른 캐릭터(★1)가 된다: 데보이트 3장 -> 데도키온 */
+export const MERGE_EVOLVE: Readonly<Record<string, string>> = { devoit: "dedokion" };
+
+/** 진화로 얻은 캐릭터의 뿌리와 ★1 한 장이 뿌리 몇 장인가 (팔 때 공용 풀에 돌려줄 수) */
+export const EVOLVED_FROM: Readonly<Record<string, { root: string; copies: number }>> = {
+  dedokion: { root: "devoit", copies: 3 },
+  "toka-loga": { root: "devoit", copies: 3 },
+  dwargon: { root: "devoit", copies: 3 },
+};
+
+/** 데보이트 계보 (계보 시너지 "근원") */
+export const LINEAGE: readonly string[] = ["devoit", "ankio", "dedokion", "toka-loga", "dwargon"];
+
+/**
+ * 데도키온의 진화 (게임용 수치. 설정의 값을 화면에 그대로 보여 주되, 8라운드 안에 끝나게 줄였다).
+ * - 엔진 탑재율: E 코드를 끼고 전투에 나갈 때마다 +9.4%, 18.8%면 완료 (2전투)
+ * - A-C 코어: 전투에 나갈 때마다 +25, 50이면 완료 (2전투)
+ * - 고대조각 / 재상트: 재료 2개 (화면에는 1개 = 80, 160이면 완료)
+ * 다 채우면 다음 라운드 시작에 E 코드와 재료 2개를 쓰고 진화한다.
+ */
+export const EVOLUTION = {
+  from: "dedokion",
+  enginePerCombat: 9.4,
+  engineNeed: 18.8,
+  corePerCombat: 25,
+  coreNeed: 50,
+  shardsNeed: 2,
+  shardUnit: 80,
+  branches: [
+    { code: "e-code-xe", material: "ancient-shard", to: "toka-loga" },
+    { code: "e-code-ve", material: "zesent", to: "dwargon" },
+  ],
+} as const;
 
 export const ENERGY_MAX: Record<1 | 2 | 3 | 4, number> = { 1: BASE[1].energy, 2: BASE[2].energy, 3: BASE[3].energy, 4: BASE[4].energy };
 

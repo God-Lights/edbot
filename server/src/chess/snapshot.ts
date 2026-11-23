@@ -8,8 +8,8 @@ import { activeSynergies } from "./synergy";
 import { MARKET_PRICE, materialDef } from "./weapons";
 
 function self(player: ChessPlayer): ChessSelfSnapshot {
-  const view = (u: { uid: string; defId: string; star: 1 | 2; weapon?: string }): ChessUnitView => ({
-    uid: u.uid, defId: u.defId, star: u.star, ...(u.weapon ? { weapon: u.weapon } : {}),
+  const view = (u: { uid: string; defId: string; star: 1 | 2; weapon?: string; evo?: { engine: number; core: number } }): ChessUnitView => ({
+    uid: u.uid, defId: u.defId, star: u.star, ...(u.weapon ? { weapon: u.weapon } : {}), ...(u.evo ? { evo: { ...u.evo } } : {}),
   });
   return {
     hp: player.hp,
@@ -25,6 +25,7 @@ function self(player: ChessPlayer): ChessSelfSnapshot {
     weapons: Object.fromEntries(Object.entries(player.weapons).filter(([, n]) => n > 0)),
     smelters: [...player.smelters],
     marketBought: player.marketBought,
+    evolved: [...(player.evolved ?? [])],
   };
 }
 

@@ -9,6 +9,8 @@ export interface MaterialDef {
   id: string;
   nameKo: string;
   rarity: Rarity;
+  /** 자원 칸·광물 시장에 나오지 않고 정해진 조합으로만 만드는 재료 (진화 재료). 자동 조합표에도 들어가지 않는다. */
+  special?: boolean;
   /** 재련하면 나오는 무기 */
   weaponId: string;
 }
@@ -38,6 +40,10 @@ export const MATERIALS: readonly MaterialDef[] = [
   M("chaos-crystal", "혼돈의 결정체", "rare", "chaos-staff"),
   M("bitcoin", "비트코인", "legendary", "bitcoin-greatsword"),
   M("digital-miner", "디지털 채굴기", "legendary", "digital-miner-pouch"),
+  // 데도키온 진화 재료 (조합으로만): 비트 + 혼돈의 결정체 -> X-E, 비트 + 어둠의 정수 -> V-E, 클로우스톤 + 타이타늄 -> 재상트
+  { ...M("xe-code", "X-E 엔진 E 코드", "rare", "e-code-xe"), special: true },
+  { ...M("ve-code", "V-E 엔진 E 코드", "rare", "e-code-ve"), special: true },
+  { ...M("zesent", "재상트", "uncommon", "zesent-blade"), special: true },
 ];
 
 export const WEAPONS: readonly WeaponDef[] = [
@@ -54,6 +60,9 @@ export const WEAPONS: readonly WeaponDef[] = [
   W("chaos-staff", "혼돈의 지팡이", "chaos-crystal", "rare", "공격 3번에 한 번 약화 (기절 1초 / 속박 3초 / 방어 감소 3초 번갈아)"),
   W("bitcoin-greatsword", "비트코인 대검", "bitcoin", "legendary", "공격 +40%, 살아남으면 라운드 종료 골드 +2"),
   W("digital-miner-pouch", "디지털 채굴기 포대", "digital-miner", "legendary", "공격 +20%, 매 라운드 시작 때 비트 1개 생성"),
+  W("e-code-xe", "E 코드 (X-E 엔진)", "xe-code", "rare", "에너지 충전 +20%. 데도키온이 끼면 엔진 탑재율이 올라 토가로가로 진화할 수 있다"),
+  W("e-code-ve", "E 코드 (V-E 엔진)", "ve-code", "rare", "에너지 충전 +20%. 데도키온이 끼면 엔진 탑재율이 올라 드워곤으로 진화할 수 있다"),
+  W("zesent-blade", "재상트 칼날", "zesent", "uncommon", "공격 +10%"),
 ];
 
 /** 지금 적용된 재료·무기(공식 + 팩). 팩이 없으면 MATERIALS·WEAPONS와 같다. */
@@ -68,7 +77,7 @@ export const MARKET_PRICE: Record<Rarity, number | null> = { common: 3, uncommon
 
 /** 공식 무기가 주는 공격력 배율 */
 export const WEAPON_ATK: Record<string, number> = {
-  "clawstone-axe": 1.15, "edcoin-sling": 1.1, "bitcoin-greatsword": 1.4, "digital-miner-pouch": 1.2,
+  "clawstone-axe": 1.15, "edcoin-sling": 1.1, "bitcoin-greatsword": 1.4, "digital-miner-pouch": 1.2, "zesent-blade": 1.1,
 };
 
 /** 무기의 공격력 배율: 팩이 만든 무기는 팩의 값, 공식 무기는 위 표 */

@@ -924,6 +924,9 @@ struct ChessPrepView: View {
             ForEach(pieces, id: \.self) { piece in
                 traitRow(piece, count: counts[piece] ?? 0)
             }
+            if let lineage = lineageCount(me), lineage > 0 {
+                lineageRow(count: lineage)
+            }
         }
         .frame(width: width, alignment: .topLeading)
         .animation(.easeOut(duration: 0.3), value: pieces)
@@ -964,6 +967,88 @@ struct ChessPrepView: View {
             if let info { Text("\(info.nameKo): \(info.text)") }
         }
         .accessibilityLabel("\(Labels.pieceName(piece)) \(count)명, \(info?.text ?? "")")
+    }
+
+    /// 판 위의 데보이트 계보 캐릭터 수 (같은 캐릭터는 한 명). 계보 시너지가 없는 서버면 nil.
+    private func lineageCount(_ me: ChessSelfSnapshot) -> Int? {
+        guard let members = model.chessTraits.first?.members else { return nil }
+        return Set(me.board.map(\.defId)).filter { members.contains($0) }.count
+    }
+
+    /// 계보 시너지 "근원" 한 줄: 금색 육각에 반짝이 아이콘
+    private func lineageRow(count: Int) -> some View {
+        let steps: [Int] = model.chessTraits.map(\.need).sorted()
+        let tier: Int = steps.filter { count >= $0 }.count
+        let gold = Color(red: 0.97, green: 0.78, blue: 0.30)
+        let hex: CGFloat = compact ? 22 : 30
+        let shown: ChessTraitInfo? = model.chessTraits.first { $0.tier == max(tier, 1) }
+        var stepsText: Text = Text("\(count) ").bold()
+        for (index, step) in steps.enumerated() {
+            stepsText = stepsText + Text(index == 0 ? "/ " : " · ") + Text("\(step)").foregroundStyle(count >= step ? gold : Color.white.opacity(0.45))
+        }
+        return HStack(spacing: 5) {
+            ZStack {
+                Hexagon().fill(tier > 0
+                    ? AnyShapeStyle(LinearGradient(colors: [Color(red: 1.0, green: 0.93, blue: 0.68), Color(red: 0.62, green: 0.45, blue: 0.16)], startPoint: .top, endPoint: .bottom))
+                    : AnyShapeStyle(Color.white.opacity(0.12)))
+                Image(systemName: "sparkles")
+                    .font(.system(size: hex * 0.42, weight: .bold))
+                    .foregroundStyle(tier > 0 ? Color.black.opacity(0.8) : gold)
+            }
+            .frame(width: hex, height: hex * 1.12)
+            VStack(alignment: .leading, spacing: 0) {
+                Text("근원").font(.system(size: compact ? 10 : 12, weight: .bold)).lineLimit(1)
+                stepsText.font(.system(size: compact ? 9 : 11).monospacedDigit()).lineLimit(1).minimumScaleFactor(0.7)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 4).padding(.vertical, compact ? 2 : 3)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(tier > 0 ? gold.opacity(0.16) : Color.black.opacity(0.3)))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(tier > 0 ? gold.opacity(0.75) : Color.white.opacity(0.08), lineWidth: 1))
+        .contextMenu {
+            if let shown { Text("근원 (데보이트 계보): \(shown.text)") }
+        }
+    }
+
+    /// 데도키온의 진화 진행도: 엔진 탑재율, A-C 코어, 고대조각/재상트
+    @ViewBuilder
+    private func evolutionPanel(_ me: ChessSelfSnapshot, unit: ChessUnitView) -> some View {
+        if let rule = model.chessEvolution, unit.defId == rule.from {
+            let parts: [String] = (unit.weapon ?? "").split(whereSeparator: { $0 == "+" || $0 == "*" }).map(String.init)
+            let branch: ChessEvolutionRule.Branch? = rule.branches.first { parts.contains($0.code) }
+            let evo: ChessEvo = unit.evo ?? ChessEvo(engine: 0, core: 0)
+            let shards: Int = branch.map { min(rule.shardsNeed, me.materials[$0.material] ?? 0) } ?? 0
+            let target: String = branch.map { model.chessUnit($0.to)?.nameKo ?? $0.to } ?? "E 코드를 끼우세요"
+            let materialName: String = branch.map { model.chessMaterial($0.material)?.nameKo ?? $0.material } ?? "고대조각/재상트"
+            VStack(alignment: .leading, spacing: 3) {
+                Text("진화: \(target)").font(.caption.bold()).foregroundStyle(Color(red: 0.97, green: 0.78, blue: 0.30))
+                evolutionBar("엔진", value: evo.engine, max: rule.engineNeed, text: "\(formatPercent(evo.engine))% / \(formatPercent(rule.engineNeed))%")
+                evolutionBar("A-C 코어", value: evo.core, max: rule.coreNeed, text: "\(Int(evo.core)) / \(Int(rule.coreNeed))")
+                evolutionBar(materialName, value: Double(shards), max: Double(rule.shardsNeed), text: "\(shards * rule.shardUnit) / \(rule.shardsNeed * rule.shardUnit)")
+                if !compact {
+                    Text("다 차면 다음 라운드 시작에 진화해요. (X-E 엔진 → 토가로가, V-E 엔진 → 드워곤)").font(.system(size: 10)).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func formatPercent(_ value: Double) -> String {
+        value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
+    }
+
+    private func evolutionBar(_ label: String, value: Double, max: Double, text: String) -> some View {
+        HStack(spacing: 6) {
+            Text(label).font(.system(size: 10, weight: .semibold)).frame(width: 58, alignment: .leading).lineLimit(1).minimumScaleFactor(0.7)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.black.opacity(0.5))
+                    Capsule().fill(LinearGradient(colors: [Color(red: 0.78, green: 0.67, blue: 0.43), Color(red: 0.94, green: 0.85, blue: 0.63)], startPoint: .leading, endPoint: .trailing))
+                        .frame(width: geo.size.width * Swift.min(1, max > 0 ? value / max : 0))
+                }
+            }
+            .frame(height: 6)
+            Text(text).font(.system(size: 10, weight: .bold).monospacedDigit()).lineLimit(1).fixedSize()
+        }
     }
 
     /// 상점 등장 확률을 가격 색 칩으로
@@ -1100,6 +1185,7 @@ struct ChessPrepView: View {
                     Button("무기 빼기") { model.chessUnequip(unit.uid) }.buttonStyle(SecondaryButtonStyle())
                 }
             }
+            evolutionPanel(me, unit: unit)
             HStack(spacing: 8) {
                 if onBoard {
                     Button("대기석으로") { model.chessBench(unit.uid) }.buttonStyle(SecondaryButtonStyle())

@@ -1,7 +1,8 @@
 import { roster } from "./chess/roster";
 import { MARKET_PRICE, materials, weapons as chessWeapons } from "./chess/weapons";
 import { HYBRID_POWER, STAR_POWER, fusions } from "./chess/crafting";
-import { ALL_SYNERGIES } from "./chess/synergy";
+import { ALL_SYNERGIES, LINEAGE_TRAITS } from "./chess/synergy";
+import { EVOLUTION } from "./chess/roster";
 import { CHARACTERS } from "./characters";
 import { AuthStore } from "./auth-store";
 import { USER_HEADER, authMode, authRequired, authStore, bearerToken, identify, loginRedirectUrl } from "./auth";
@@ -298,10 +299,14 @@ export default {
     // GET /api/chess -> 체스판 자동 전투의 캐릭터 20명과 기물 시너지.
     if (request.method === "GET" && parts.length === 2 && parts[0] === "api" && parts[1] === "chess") {
       return json({
-        units: roster().map(({ id, nameKo, piece, faction, cost, role, hp, atk, abilityText, passive }) => ({
-          id, nameKo, piece, faction, cost, role, hp, atk, abilityText, passive,
+        units: roster().map(({ id, nameKo, piece, faction, cost, role, hp, atk, abilityText, passive, evolveOnly }) => ({
+          id, nameKo, piece, faction, cost, role, hp, atk, abilityText, passive, ...(evolveOnly ? { evolveOnly: true } : {}),
         })),
         synergies: ALL_SYNERGIES.map(({ id, piece, need, tier, nameKo, text }) => ({ id, piece, need, tier, nameKo, text })),
+        // 계보 시너지(기물 종류가 아닌 묶음). 오래된 앱이 synergies 의 piece 를 해석하지 못하지 않게 따로 보낸다.
+        traits: LINEAGE_TRAITS.map(({ id, nameKo, need, tier, text, members }) => ({ id, nameKo, need, tier, text, members })),
+        // 데도키온의 진화 규칙 (진행 막대를 그리는 데 쓴다)
+        evolution: EVOLUTION,
         materials: materials().map((m) => ({ ...m, price: MARKET_PRICE[m.rarity] })),
         weapons: chessWeapons(),
         // 조합: 재료 조합표(재료 둘 -> 한 단계 위 재료)와 무기 조합의 효과 배율

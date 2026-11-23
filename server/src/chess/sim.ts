@@ -70,13 +70,15 @@ export function createCombat(boards: [Placement[], Placement[]], tiles: Resource
       // 콘텐츠 팩이 만든 무기의 능력치(체력·받는 피해·에너지 충전)도 같은 방식으로 power배로 더한다. 공식 무기는 영향이 없다.
       const extra = (key: "hp" | "dmgTaken" | "energy"): number =>
         parts.reduce((m, id) => m * (1 + ((activeContent()?.weaponStats[id]?.[key] ?? 1) - 1) * power), 1);
-      const maxHp = def.hp * k * pawnHp * (parts.includes("titanium-shield") ? 1 + 0.15 * power : 1) * extra("hp");
+      const maxHp = def.hp * k * pawnHp * state.bonuses[seat].teamHp * (parts.includes("titanium-shield") ? 1 + 0.15 * power : 1) * extra("hp");
       const unit = createUnit(state, {
         defId: def.id, seat, star: placement.star, x, y, hp: maxHp, maxHp, atk: def.atk * k * atkMult,
         energyMax: def.passive ? null : ENERGY_MAX[def.cost], piece: def.piece, summon: false, weapon,
       });
       if (parts.includes("titanium-shield")) unit.dmgMult = 1 - 0.1 * power;
       if (parts.includes("bit-dagger")) unit.energyMult = 1 + 0.35 * power;
+      // E 코드(X-E / V-E): 에너지 충전 +20%
+      for (const code of ["e-code-xe", "e-code-ve"]) if (parts.includes(code)) unit.energyMult *= 1 + 0.2 * power;
       unit.dmgMult *= extra("dmgTaken");
       unit.energyMult *= extra("energy");
       if (parts.includes("ancient-staff")) {
@@ -280,8 +282,29 @@ function applyHits(state: CombatState): void {
   state.hits = [];
 }
 
+/**
+ * 데보이트(생명의 근원): 같은 팀의 살아 있는 데보이트가 있으면, 처음 쓰러지는 아군(소환수 제외) 1명을 체력 30%(★2 45%)로 되살린다.
+ * 데보이트마다 전투에 한 번. 되살아난 기물은 쓰러진 적이 없는 것으로 친다.
+ */
+function reviveByOrigin(state: CombatState, dying: CombatUnit[]): CombatUnit[] {
+  const stillDead: CombatUnit[] = [];
+  for (const unit of dying) {
+    const savior = unit.summon || unit.cloneOf ? undefined : state.units.find((u) =>
+      u.alive && u.hp > 0 && u.team === unit.team && u.id !== unit.id && !u.summon && !u.procs.origin && unitDef(u.defId)?.ability === "origin");
+    if (!savior) {
+      stillDead.push(unit);
+      continue;
+    }
+    savior.procs.origin = 1;
+    unit.hp = Math.max(1, unit.maxHp * (savior.star === 2 ? 0.45 : 0.3));
+    unit.effects = [];
+    pushEvent(state, { type: "ability", unitId: savior.id, targetId: unit.id, text: "origin" });
+  }
+  return stillDead;
+}
+
 function resolveDeaths(state: CombatState): void {
-  const dead = state.units.filter((u) => u.alive && u.hp <= 0);
+  const dead = reviveByOrigin(state, state.units.filter((u) => u.alive && u.hp <= 0));
   // 연동: 본체가 쓰러지면 그 본체의 분신도 모두 사라진다.
   for (let i = 0; i < dead.length; i++) {
     for (const clone of state.units.filter((u) => u.alive && u.cloneOf === dead[i]!.id && !dead.includes(u))) {
@@ -298,7 +321,7 @@ function resolveDeaths(state: CombatState): void {
     const by = unit.lastHitBy;
     const killer = by ? state.units.find((u) => u.id === by && u.alive) : undefined;
     if (killer) {
-      onKill(state, killer);
+      onKill(state, killer, unit);
       // 에드코인 슬링: 처치할 때마다 골드 +1 (라운드당 최대 3)
       if (hasWeapon(killer, "edcoin-sling") && (killer.procs.gold ?? 0) < Math.max(1, Math.round(3 * killer.weaponPower))) {
         killer.procs.gold = (killer.procs.gold ?? 0) + 1;

@@ -15,7 +15,8 @@ export type AbilityId =
   | "clone" | "hatch" | "relic-shield" | "spore" | "hunger"
   | "inspire" | "heal" | "rally" | "shield-wall" | "stone-skin"
   | "formation" | "invest" | "bloom" | "bind" | "leap-bite"
-  | "dimension-leap" | "pact" | "thunder" | "dragon-breath" | "flank";
+  | "dimension-leap" | "pact" | "thunder" | "dragon-breath" | "flank"
+  | "origin" | "gene-absorb";
 
 export interface UnitDef {
   id: string;
@@ -32,6 +33,8 @@ export interface UnitDef {
   /** true면 에너지로 발동하지 않는 패시브(쓰러질 때, 처치할 때 같은 조건으로 발동) */
   passive: boolean;
   abilityText: string;
+  /** 상점에 나오지 않고 진화로만 얻는다 (데도키온, 토가로가, 드워곤) */
+  evolveOnly?: boolean;
 }
 
 /** 내 쪽 시점의 배치: col 0~7(왼쪽부터), row 0~3(0이 가운데에 가장 가까운 앞줄) */
@@ -145,6 +148,8 @@ export interface SynergyBonus {
   pawnHp: number;
   /** 팀 전체 공격력 배율 */
   teamAtk: number;
+  /** 팀 전체 체력 배율 (계보 시너지 "근원") */
+  teamHp: number;
 }
 
 /** 전투 옵션. mobius가 true면 무한 모드(뫼비우스 규칙)로 싸운다. */
