@@ -118,6 +118,28 @@ final class AppModel {
         authToken = tokens.load()
         if authToken != nil { Task { await restoreLogin() } }
         refreshServerInfo()
+        loadDemoIfRequested()
+    }
+
+    /// 화면 확인용(CI 스크린샷): 실행 인자 `-demo prep` 또는 `-demo combat` 이면 앱에 담긴 고정 데이터로 방 화면을 띄운다.
+    /// 서버에 붙지 않는다. 데이터는 local-server/scripts/capture-demo.ts 가 실제 서버에서 받아 둔 것이다.
+    private func loadDemoIfRequested() {
+        guard let kind = UserDefaults.standard.string(forKey: "demo") else { return }
+        if let url = Bundle.main.url(forResource: "demo-catalog", withExtension: "json"),
+           let data = try? Data(contentsOf: url),
+           let catalog = MessageCodec.parseChessCatalog(data) {
+            chessUnits = catalog.units
+            chessSynergies = catalog.synergies
+            chessMaterials = catalog.materials
+            chessWeapons = catalog.weapons
+            chessFusions = catalog.fusions ?? []
+        }
+        guard let url = Bundle.main.url(forResource: "demo-\(kind)", withExtension: "json"),
+              let text = try? String(contentsOf: url, encoding: .utf8),
+              case let .welcome(playerId, _, room)? = MessageCodec.parse(text) else { return }
+        myPlayerId = playerId
+        status = .connected
+        observe(room)
     }
 
     /// QR이나 링크(commander://connect?url=...)로 받은 서버를 입력칸에 채운다.
