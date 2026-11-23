@@ -29,6 +29,17 @@ enum ChessStyle {
 
     static func starText(_ star: Int) -> String { star >= 2 ? "★★" : "★" }
 
+    /// 능력을 쓰는 데 필요한 마나 (서버 server/src/chess/roster.ts 의 BASE.energy). 패시브만 있는 말은 nil.
+    static func energyMax(cost: Int, passive: Bool) -> Double? {
+        if passive { return nil }
+        switch cost {
+        case ...1: return 60
+        case 2: return 80
+        case 3: return 100
+        default: return 120
+        }
+    }
+
     /// 팔 때 돌려받는 골드: ★1은 산 값, ★2는 3장 값
     static func sellValue(cost: Int, star: Int) -> Int { cost * (star >= 2 ? 3 : 1) }
 }
@@ -117,6 +128,39 @@ struct ChessToken: View {
             // ★2는 금색으로 은은하게 빛난다
             .shadow(color: star >= 2 ? Color(red: 0.95, green: 0.78, blue: 0.30).opacity(0.6) : .clear, radius: star >= 2 ? 6 : 0)
         }
+    }
+}
+
+/// 전투 중 말 위의 막대: 체력(내 편 초록, 상대 빨강) + 보호막(흰색) + 마나(파랑).
+private struct UnitBars: View {
+    let hp: Double
+    let shield: Double
+    /// nil 이면 마나 막대가 없다(패시브만 있는 말).
+    let energy: Double?
+    let mine: Bool
+    let width: CGFloat
+
+    var body: some View {
+        let hpColor: Color = mine ? Color(red: 0.30, green: 0.85, blue: 0.40) : Color(red: 0.95, green: 0.27, blue: 0.27)
+        VStack(spacing: 1) {
+            ZStack(alignment: .leading) {
+                Rectangle().fill(Color.black.opacity(0.75))
+                HStack(spacing: 0) {
+                    Rectangle().fill(hpColor).frame(width: width * hp)
+                    Rectangle().fill(Color.white.opacity(0.9)).frame(width: width * shield)
+                }
+            }
+            .frame(width: width, height: max(5, width * 0.09))
+            if let energy {
+                ZStack(alignment: .leading) {
+                    Rectangle().fill(Color.black.opacity(0.75))
+                    Rectangle().fill(Color(red: 0.35, green: 0.70, blue: 1.0)).frame(width: width * energy)
+                }
+                .frame(width: width, height: max(3, width * 0.045))
+            }
+        }
+        .overlay(Rectangle().strokeBorder(Color.black, lineWidth: 1))
+        .allowsHitTesting(false)
     }
 }
 
@@ -1314,6 +1358,10 @@ struct ChessArena: View {
             let stacked: Bool = ghost && frontCells.contains(Int(frame.y.rounded()) * chessBoardSize + Int(frame.x.rounded()))
             let bob: CGFloat = ghost && !stacked ? CGFloat(sin(position * 3.2 + Double(index))) * cell * 0.04 : 0
             let open: Bool = ghost && frame.gauge >= chessWormholeBeats
+            let info: ChessUnitInfo? = model.chessUnit(unit.defId)
+            let shieldRatio: Double = unit.maxHp > 0 ? min(1 - ratio, frame.shield / unit.maxHp) : 0
+            let energyMax: Double? = ChessStyle.energyMax(cost: info?.cost ?? 1, passive: info?.passive ?? false)
+            let energyRatio: Double? = energyMax.map { min(1, max(0, frame.energy / $0)) }
             ZStack(alignment: .bottom) {
                 ChessToken(defId: unit.defId, star: unit.star, tint: unit.seat == seat ? Theme.mine : Theme.theirs, armed: unit.weapon != nil, weaponId: unit.weapon)
                     .brightness(flash * 0.6)
@@ -1343,17 +1391,11 @@ struct ChessArena: View {
                         .shadow(color: .black, radius: 1)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
-                VStack(spacing: 1) {
-                    if frame.shield > 0 {
-                        Capsule().fill(Color.white.opacity(0.8)).frame(width: side * 0.8, height: 3)
-                    }
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.black.opacity(0.5))
-                        Capsule().fill(unit.seat == seat ? Theme.mine : Theme.theirs).frame(width: side * 0.8 * ratio)
-                    }
-                    .frame(width: side * 0.8, height: 5)
-                }
-                .padding(.bottom, 2)
+            }
+            // 롤토체스처럼 말 위에 체력(편 색)·보호막(흰색)·마나(파랑) 막대
+            .overlay(alignment: .top) {
+                UnitBars(hp: ratio, shield: shieldRatio, energy: energyRatio, mine: unit.seat == seat, width: side * 0.92)
+                .offset(y: -max(9, side * 0.14))
                 .opacity(ghost ? 0.6 : 1)
             }
             .frame(width: side, height: side)
