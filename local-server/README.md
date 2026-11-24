@@ -77,3 +77,14 @@ sudo apt install ./dist/commander-server_0.1.0_amd64.deb
 - 터미널: `commander-server-launcher start|stop|status|log [--expert]`. 설정은 `~/.config/commander-server/config`(`PORT=`, `NAME=`, `EDITION=`), 데이터는 `~/.local/share/commander-server`(플러그인은 그 안 `plugins/`).
 - 로그인할 때마다 켜려면 `systemctl --user enable --now commander-server`.
 - 같은 와이파이의 폰이 못 찾으면 방화벽에서 8787(TCP)과 5353(UDP)을 연다: `sudo ufw allow 8787/tcp && sudo ufw allow 5353/udp`.
+
+## 맥 (macOS)
+```bash
+bun build.ts                    # 이 맥용 commander-server (애플 실리콘이면 arm64)
+bun build.ts --edition expert   # 엑스퍼트
+```
+CI(`local-server.yml`의 `macos`)가 맥에서 만들어 실행 점검까지 하고, 결과물 `commander-server-macos`로 올린다.
+서명하지 않은 실행파일이라 처음 열 때 맥이 막으면 터미널에서 한 번 풀어 준다:
+```bash
+xattr -d com.apple.quarantine ./commander-server-macos
+```

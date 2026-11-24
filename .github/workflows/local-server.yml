@@ -196,3 +196,64 @@ jobs:
           if (-not $chess.Contains("example:moon-guard")) { throw "새 캐릭터가 도감에 없다" }
           if (-not $connect.Contains("<svg")) { throw "접속 QR 화면이 없다" }
           Write-Host "엑스퍼트 exe에서 팩이 적용된다 ($($info.ruleset))."
+
+  macos:
+    name: 맥에서 만들고 실행 점검
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: 맥용 실행파일 만들기 (바닐라, 엑스퍼트)
+        working-directory: local-server
+        run: |
+          bun install --frozen-lockfile
+          bun build.ts
+          bun build.ts --edition expert
+          mv dist/commander-server dist/commander-server-macos
+          mv dist/commander-server-expert dist/commander-server-expert-macos
+          file dist/commander-server-macos
+          ls -lh dist
+      - name: 실행파일 하나만 있는 폴더에서 실행하고 점검
+        run: |
+          dir="$RUNNER_TEMP/mac-test"; mkdir -p "$dir"
+          cp local-server/dist/commander-server-macos "$dir/"
+          (cd "$dir" && ./commander-server-macos --port 8787 --phase-scale 0.08 > out.log 2>&1 &)
+          for i in $(seq 1 30); do curl -sf localhost:8787/health >/dev/null && break; sleep 1; done
+          cat "$dir/out.log" | head -20
+          bun local-server/scripts/smoke.ts http://localhost:8787 ADMN
+          curl -sf localhost:8787/connect | grep -q "<svg" || { echo "접속 QR 화면이 없다"; exit 1; }
+          test -f "$dir/commander-data/data/players.json" || { echo "데이터 폴더가 실행파일 옆에 없다"; exit 1; }
+          # 같은 데이터 폴더로 두 번째 서버는 막힌다
+          (cd "$dir" && ./commander-server-macos --port 8788 > out2.log 2>&1 &)
+          sleep 3
+          if curl -sf localhost:8788/health >/dev/null; then echo "두 번째 서버가 켜졌다"; exit 1; fi
+          cat "$dir/out2.log"
+          pkill -f commander-server-macos || true
+          sleep 2
+          # 껐다 켜도 전적이 남는다
+          (cd "$dir" && ./commander-server-macos --port 8787 > out3.log 2>&1 &)
+          for i in $(seq 1 30); do curl -sf localhost:8787/health >/dev/null && break; sleep 1; done
+          count=$(curl -s "localhost:8787/api/leaderboard?limit=50" | python3 -c "import json,sys; print(len(json.load(sys.stdin)['entries']))")
+          pkill -f commander-server-macos || true
+          echo "껐다 켠 뒤 순위표: $count 줄"
+          [ "$count" -ge 2 ] || { echo "전적이 남지 않았다"; exit 1; }
+      - name: 엑스퍼트는 plugins 폴더의 팩을 적용한다
+        run: |
+          dir="$RUNNER_TEMP/mac-expert"; mkdir -p "$dir/commander-data/plugins"
+          cp local-server/dist/commander-server-expert-macos "$dir/"
+          cp server/packs/example-pack.json "$dir/commander-data/plugins/"
+          (cd "$dir" && ./commander-server-expert-macos --port 8790 > out.log 2>&1 &)
+          for i in $(seq 1 30); do curl -sf localhost:8790/health >/dev/null && break; sleep 1; done
+          curl -s localhost:8790/api/server | grep -q '"edition":"expert"'
+          curl -s localhost:8790/api/chess | grep -q "example:moon-guard"
+          pkill -f commander-server-expert-macos || true
+          echo "엑스퍼트 팩이 적용된다."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: commander-server-macos
+          path: |
+            local-server/dist/commander-server-macos
+            local-server/dist/commander-server-expert-macos
+          retention-days: 14
