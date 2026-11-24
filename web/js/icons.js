@@ -11,6 +11,7 @@ const P = {
   "log-out": ['<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>', '<path d="m16 17 5-5-5-5"/>', '<path d="M21 12H9"/>'],
   "trash": ['<path d="M3 6h18"/>', '<path d="M8 6V4h8v2"/>', '<path d="m19 6-1 14H6L5 6"/>', '<path d="M10 11v6"/>', '<path d="M14 11v6"/>'],
   "trophy": ['<path d="M8 21h8"/>', '<path d="M12 17v4"/>', '<path d="M7 4h10v5a5 5 0 0 1-10 0z"/>', '<path d="M7 5H4v2a3 3 0 0 0 3 3"/>', '<path d="M17 5h3v2a3 3 0 0 1-3 3"/>'],
+  "users": ['<circle cx="9" cy="8" r="3.5"/>', '<path d="M2.5 20a6.5 6.5 0 0 1 13 0"/>', '<circle cx="17" cy="9" r="2.5"/>', '<path d="M16 14.2a5 5 0 0 1 6 4.8"/>'],
   "bot": ['<rect x="4" y="8" width="16" height="12" rx="2"/>', '<path d="M12 8V4"/>', '<circle cx="12" cy="3" r="1"/>', '<path d="M9 13v2"/>', '<path d="M15 13v2"/>', '<path d="M2 14h2"/>', '<path d="M20 14h2"/>'],
   "swords": ['<path d="M14.5 17.5 3 6V3h3l11.5 11.5"/>', '<path d="m13 19 6-6"/>', '<path d="m16 16 4 4"/>', '<path d="m19 21 2-2"/>', '<path d="M14.5 6.5 18 3h3v3l-3.5 3.5"/>', '<path d="m5 14 4 4"/>', '<path d="m7 17-3 3"/>', '<path d="m3 19 2 2"/>'],
   "sword": ['<path d="M14.5 17.5 3 6V3h3l11.5 11.5"/>', '<path d="m13 19 6-6"/>', '<path d="m16 16 4 4"/>', '<path d="m19 21 2-2"/>'],

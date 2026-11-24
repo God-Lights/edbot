@@ -12,7 +12,8 @@ import {
 export function token(defId, star, opts = {}) {
   const info = unitInfo(defId);
   const piece = info?.piece ?? "pawn";
-  const border = opts.tint ?? COST_COLOR[info?.cost ?? 1];
+  // 테두리와 바탕은 가격 색. tint(전투의 편 색)는 아래쪽 띠로 보여 준다.
+  const border = COST_COLOR[info?.cost ?? 1];
   const drag = opts.uid ? ` data-uid="${esc(opts.uid)}" data-drag="unit" draggable="true"` : "";
   // 새로 생긴 기물은 튀어나오고(★2는 반짝), 무기가 새로 끼워진 기물은 번쩍인다.
   let fx = "";
@@ -20,7 +21,7 @@ export function token(defId, star, opts = {}) {
     if (!S.fx.uids.has(opts.uid)) fx += star >= 2 ? " pop merge" : " pop";
     else if (opts.armed && S.fx.weapons[opts.uid] !== opts.weapon) fx += " equipflash";
   }
-  return `<div class="token${opts.selected ? " sel" : ""}${fx}" style="--pc:${PIECE_COLOR[piece]};--bc:${border}"${drag}>
+  return `<div class="token${opts.selected ? " sel" : ""}${fx}${opts.tint ? " sided" : ""}" style="--pc:${PIECE_COLOR[piece]};--bc:${border}${opts.tint ? `;--tc:${opts.tint}` : ""}"${drag}>
     <span class="icon" style="--img:url(assets/pieces/${piece}.png)"></span>
     <span class="nm">${esc(info?.nameKo ?? defId)}</span>
     <span class="star">${starText(star)}</span>${opts.armed ? '<span class="armed" title="무기">${ic("shield")}</span>' : ""}</div>`;
@@ -76,7 +77,7 @@ function boardHtml(chess, me, seat) {
       const tile = tileAt(chess, seat, col, row);
       const rarity = tile ? materialInfo(tile.material)?.rarity ?? "common" : null;
       const tileHtml = tile
-        ? `<div class="tile ${unit ? "under" : ""}" style="--rc:${RARITY_COLOR[rarity]}"><i>◆</i>${unit ? "" : `<small>${esc(materialInfo(tile.material)?.nameKo ?? "")}</small>`}</div>`
+        ? `<div class="tile ${unit ? "under" : ""}" style="--rc:${RARITY_COLOR[rarity]}"><i class="gem"></i>${unit ? "" : `<small>${esc(materialInfo(tile.material)?.nameKo ?? "")}</small>`}</div>`
         : "";
       html += `<div class="cell ${(col + row) % 2 ? "dark" : ""}" data-act="cell" data-drop="cell" data-col="${col}" data-row="${row}"${tile ? ` style="--rc:${RARITY_COLOR[rarity]}"` : ""}>${tileHtml}${
         unit ? token(unit.defId, unit.star, { uid: unit.uid, selected: S.selUid === unit.uid, armed: !!unit.weapon, weapon: unit.weapon }) : ""
@@ -100,26 +101,44 @@ function benchHtml(me, canAuto) {
 
 // ---- 오른쪽 패널 ----
 
+/** 대기석과 판에 있는 같은 캐릭터 ★1 수 (하나 더 사면 ★2가 되는지) */
+function ownedCount(me, defId) {
+  return [...me.board, ...me.bench.filter(Boolean)].filter((u) => u.defId === defId && u.star === 1).length;
+}
+
+/** 상점 바 (롤토체스처럼): 왼쪽에 골드와 새로고침, 오른쪽에 그림 중심 카드 다섯 장. 능력 설명은 마우스를 올리면 보인다. */
 function shopHtml(chess, me) {
   const sig = me.shop.join("|");
   // 상점이 통째로 새로 채워졌을 때(새로고침, 새 라운드)만 카드가 차례로 나타난다. 하나를 산 경우는 아니다.
   const deal = S.fx.shop !== "" && S.fx.shop !== sig && me.shop.every(Boolean) ? " deal" : "";
+  const bump = S.fx.gold != null && S.fx.gold !== me.gold ? " bump" : "";
   const cards = me.shop
     .map((id, slot) => {
-      if (!id) return `<div class="shopcard sold"><span>구매<br>완료</span></div>`;
+      if (!id) return `<div class="shopcard sold"><span>구매 완료</span></div>`;
       const info = unitInfo(id);
       const cost = info?.cost ?? 0;
+      const piece = info?.piece ?? "pawn";
+      const owned = ownedCount(me, id);
       const off = me.gold < cost ? " dim" : "";
-      return `<button class="shopcard${off}${deal}" data-act="buy" data-slot="${slot}" style="--bc:${COST_COLOR[cost]};--i:${slot}" title="${esc((info?.nameKo ?? id) + " · " + (info?.abilityText ?? ""))}">
-        ${token(id, 1)}
-        <span class="si"><b>${esc(info?.nameKo ?? id)}</b><small>${esc(info?.abilityText ?? "")}</small></span>
-        <span class="cost" style="background:${COST_COLOR[cost]}55">${ic("coin")}${cost}</span></button>`;
+      const tag = owned >= 2 ? `<span class="own star2">★2 가능</span>` : owned ? `<span class="own">보유 ${owned}</span>` : "";
+      return `<button class="shopcard${off}${deal}${owned >= 2 ? " ready" : ""}" data-act="buy" data-slot="${slot}" style="--bc:${COST_COLOR[cost]};--pc:${PIECE_COLOR[piece]};--i:${slot}" title="${esc((info?.nameKo ?? id) + " · " + PIECE_NAME[piece] + " · " + cost + "골드\n" + (info?.abilityText ?? ""))}">
+        <span class="art" style="--img:url(assets/pieces/${piece}.png)"></span>
+        <span class="ptag">${PIECE_NAME[piece]}</span>${tag}
+        <span class="foot"><b>${esc(info?.nameKo ?? id)}</b><span class="cost">${ic("coin")}${cost}</span></span></button>`;
     })
     .join("");
   const names = ["1골드", "2골드", "3골드", "4골드"];
   const odds = chess.shopOdds.map((p, i) => (p > 0 ? `${names[i]} ${p}%` : "")).filter(Boolean).join(" · ");
-  return `<div class="shop${coachStep(chess, me)?.n === 1 && showCoach(chess) ? " hl" : ""}">${cards}
-    <button class="shopcard reroll" data-act="reroll"${me.gold < me.rerollCost ? " disabled" : ""} title="새로고침 · 등장 확률: ${esc(odds)}"><span class="rr">${ic("refresh")}</span><small>새로고침</small><b>${ic("coin")}${me.rerollCost}</b></button></div>`;
+  return `<div class="shop${coachStep(chess, me)?.n === 1 && showCoach(chess) ? " hl" : ""}">
+    <div class="goldcol"><div class="goldbox${bump}"><b>${ic("coin")} ${me.gold}</b><small>다음 +${me.nextIncome}</small></div>
+      <button class="rerollbtn" data-act="reroll"${me.gold < me.rerollCost ? " disabled" : ""} title="새로고침 · 등장 확률: ${esc(odds)}">${ic("refresh")} ${ic("coin")}${me.rerollCost}</button></div>
+    ${cards}</div>`;
+}
+
+/** 상점 등장 확률을 가격 색 칩으로 */
+function oddsHtml(chess) {
+  return `<div class="odds"><small>상점 등장 확률</small><div>${chess.shopOdds
+    .map((p, i) => `<span class="${p > 0 ? "" : "zero"}" style="--bc:${COST_COLOR[i + 1]}">${p}%</span>`).join("")}</div></div>`;
 }
 
 const itemLabel = (item) => itemName(item, S.catalog);
@@ -185,47 +204,50 @@ function ringHtml(count, cap, gold) {
   return `<div class="ringbox${count >= cap ? " full" : ""}" title="판에 올린 기물 ${count} / ${cap}">
     <svg viewBox="0 0 100 100"><circle class="trk" cx="50" cy="50" r="${RING_R}"/>
       <circle class="prg" cx="50" cy="50" r="${RING_R}" stroke-dasharray="${RING_C.toFixed(2)}" style="--from:${(RING_C * (1 - prev)).toFixed(2)};--to:${(RING_C * (1 - ratio)).toFixed(2)}"/></svg>
-    <div class="mid${bump}"><span class="coin">${ic("coin")}</span><b>${gold}</b></div>
-    <div class="cap">판 ${count}/${cap}</div></div>`;
+    <div class="mid"><b>${count}/${cap}</b><small>배치</small></div></div>`;
 }
 
 const SYN_PIECES = ["king", "queen", "rook", "bishop", "knight", "pawn"];
 
-/** 판 위의 기물로 모은 시너지: 켜진 것은 밝게, 모으는 중인 것은 진행도(예: 1/2)와 함께 */
-function synergyHtml(me) {
-  const seen = new Set();
+/** 시너지 단계(필요한 수). 서버 도감에서 읽고, 없으면 기본값. */
+function synergySteps(piece) {
+  const needs = [...new Set((S.catalog?.synergies ?? []).filter((s) => s.piece === piece).map((s) => s.need))].sort((a, b) => a - b);
+  return needs.length ? needs : piece === "pawn" ? [2, 4] : [2, 3];
+}
+
+function traitRow(name, count, steps, icon, color, text) {
+  const tier = steps.filter((t) => count >= t).length;
+  const stepsHtml = steps.map((t) => `<span class="${count >= t ? "on" : ""}">${t}</span>`).join(" · ");
+  return `<div class="trait${tier ? " on" : ""}${tier >= 2 ? " max" : ""}" style="--pc:${color}" title="${esc(name + " " + count + "명 · " + (text ?? ""))}">
+    <span class="hex">${icon}</span><span class="tt"><b>${esc(name)}</b><small><b>${count}</b> / ${stepsHtml}</small></span></div>`;
+}
+
+/** 판 왼쪽 시너지 목록 (롤토체스처럼): 기물 종류마다 육각 아이콘, 이름, 지금 수 / 단계. 켜진 것은 금색이고 위로 온다. */
+function traitsHtml(me) {
+  const seen = new Set(me.board.map((u) => u.defId));
   const counts = {};
-  for (const u of me.board) {
-    if (seen.has(u.defId)) continue;
-    seen.add(u.defId);
-    const piece = unitInfo(u.defId)?.piece;
+  for (const id of seen) {
+    const piece = unitInfo(id)?.piece;
     if (piece) counts[piece] = (counts[piece] ?? 0) + 1;
   }
-  const chips = SYN_PIECES.filter((p) => counts[p]).map((p) => {
-    const th = p === "pawn" ? [2, 4] : [2, 3];
-    const n = counts[p];
-    const tier = th.filter((t) => n >= t).length;
-    const need = tier >= 2 ? th[1] : th[tier];
-    const shown = synergyInfo(`${p}-${tier || 1}`);
-    const detail = tier ? shown?.text : `${need - n}명 더 모으면 ${shown?.text ?? ""}`;
-    return `<div class="synchip${tier ? " on" : ""}${tier >= 2 ? " max" : ""}" style="--pc:${PIECE_COLOR[p]}" title="${esc(PIECE_NAME[p] + " " + n + "/" + need + " · " + detail)}">
-      <span class="gicon" style="--pc:${PIECE_COLOR[p]};--img:url(assets/pieces/${p}.png)"></span>
-      <span><b>${PIECE_NAME[p]} ${n}/${need}</b><small>${esc(detail)}</small></span></div>`;
+  const rows = SYN_PIECES.filter((p) => counts[p]).map((p) => {
+    const steps = synergySteps(p);
+    const tier = steps.filter((t) => counts[p] >= t).length;
+    const info = synergyInfo(`${p}-${tier || 1}`);
+    return { tier, n: counts[p], html: traitRow(PIECE_NAME[p], counts[p], steps, `<span class="gicon" style="--pc:currentColor;--img:url(assets/pieces/${p}.png)"></span>`, PIECE_COLOR[p], info?.text) };
   });
-  // 계보 시너지 "근원" (데보이트 계보): 같은 계보 캐릭터 수
-  for (const trait of [S.catalog?.traits?.[0]].filter(Boolean)) {
-    const steps = (S.catalog.traits ?? []).map((t) => t.need);
-    const n = [...seen].filter((id) => trait.members.includes(id)).length;
-    if (!n) continue;
-    const tier = steps.filter((t) => n >= t).length;
-    const need = steps[Math.min(tier, steps.length - 1)];
-    const shown = S.catalog.traits[Math.max(0, tier - 1)];
-    const detail = tier ? shown.text : `${need - n}명 더 모으면 ${shown.text}`;
-    chips.push(`<div class="synchip${tier ? " on" : ""}${tier >= 2 ? " max" : ""}" style="--pc:#c8aa6e" title="${esc("근원 " + n + "/" + need + " · " + detail)}">
-      <span class="gicon" style="--pc:#c8aa6e;--img:url(assets/pieces/pawn.png)"></span>
-      <span><b>근원 ${n}/${need}</b><small>${esc(detail)}</small></span></div>`);
+  // 계보 시너지 "근원" (데보이트 계보)
+  const traits = S.catalog?.traits ?? [];
+  if (traits.length) {
+    const n = [...seen].filter((id) => traits[0].members.includes(id)).length;
+    if (n) {
+      const steps = traits.map((t) => t.need).sort((a, b) => a - b);
+      const tier = steps.filter((t) => n >= t).length;
+      rows.push({ tier, n, html: traitRow("근원", n, steps, ic("sparkles"), "#c8aa6e", traits[Math.max(0, tier - 1)]?.text) });
+    }
   }
-  return chips.length ? chips.join("") : `<div class="sub">같은 기물(킹·룩·비숍...)을 2명 이상 올리면 시너지가 켜져요.</div>`;
+  rows.sort((a, b) => b.tier - a.tier || b.n - a.n);
+  return `<div class="traits"><small class="sub">시너지</small>${rows.length ? rows.map((r) => r.html).join("") : `<div class="sub tiny">같은 기물 2명 이상이면 켜져요</div>`}</div>`;
 }
 
 /** 데도키온의 진화 진행도: 엔진 탑재율, A-C 코어, 고대조각/재상트 */
@@ -304,15 +326,15 @@ export function prepView(room) {
   return `<div class="game prepgame">${gameBar(room, chess)}${coachHtml(chess, me)}
     <main class="gmain">
       <section class="gleft">
-        <div class="gboardwrap"><div class="gboardbox">
+        <div class="gboardwrap"><div class="gboardrow">${traitsHtml(me)}<div class="gboardbox">
           <div class="${step === 2 ? "hl" : ""}">${boardHtml(chess, me, seat)}</div>
           ${benchHtml(me, canAuto)}
-        </div></div>
+        </div></div></div>
         <div class="gshop">${shopHtml(chess, me)}</div>
       </section>
       <aside class="gside">
         <div class="gstat">${ringHtml(me.board.length, chess.deployCap, me.gold)}
-          <div class="synbox"><div class="sub gnext">다음 라운드 ${ic("coin")}+${me.nextIncome}${chess.lite ? ' · <span class="badge">입문</span>' : ""}</div>${synergyHtml(me)}</div></div>
+          <div class="synbox">${oddsHtml(chess)}${chess.lite ? '<span class="badge">입문</span>' : ""}</div></div>
         <div class="gres">${res}<div class="sellzone" data-drop="sell" title="기물을 여기로 끌어다 놓으면 팔아요">${ic("trash")} 끌어서 팔기</div></div>
         <button class="btn primary gdone${step === 4 ? " hl" : ""}" data-act="done"${me.done ? " disabled" : ""}>${me.done ? "준비 완료 · 상대를 기다리는 중" : "준비 끝"}</button>
       </aside>

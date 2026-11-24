@@ -63,9 +63,9 @@ function lobbyView() {
       </div>
       <div class="mgroup">
         <div class="panel stack tight">
-          <button class="btn primary wide" data-act="quick"${S.quick ? " disabled" : ""}>${ic("swords")} 빠른 대전</button>
-          <label class="chk" title="앞면·밑면, 이음매, 웜홀이 있는 뫼비우스 규칙으로 싸워요"><input type="checkbox" id="mobius"${S.mobius ? " checked" : ""}> ${ic("infinity")} 무한 모드로 만들기</label>
-          <button class="btn sec wide" data-act="create"${S.creating ? " disabled" : ""}>${S.creating ? "방을 만드는 중..." : "방 만들기"}</button>
+          <button class="btn primary wide findmatch" data-act="quick"${S.quick ? " disabled" : ""}><span>${ic("swords")} 게임 찾기</span><small>비슷한 실력의 상대와 1:1</small></button>
+          <button class="modecard" data-act="create"${S.creating ? " disabled" : ""}><span class="mi">${ic("users")}</span><span><b>${S.creating ? "만드는 중..." : "방 만들기"}</b><small>${S.mobius ? "친구와 · 무한 모드" : "친구와 · 방 코드로"}</small></span></button>
+          <label class="chk" title="앞면·밑면, 이음매, 웜홀이 있는 뫼비우스 규칙으로 싸워요"><input type="checkbox" id="mobius"${S.mobius ? " checked" : ""}> ${ic("infinity")} 방을 무한 모드로</label>
           <form class="row tight" data-form="join"><input id="code" class="input code" maxlength="4" placeholder="방 코드 4자리" autocapitalize="characters" autocomplete="off" value="${esc(S.roomCode)}">
             <button class="btn sec" type="submit">입장</button></form>
           <form class="row tight" data-form="watch"><input id="watch" class="input code" maxlength="4" placeholder="관전할 방 코드" autocapitalize="characters" autocomplete="off" value="${esc(S.watchCode ?? "")}">
@@ -79,9 +79,9 @@ function lobbyView() {
           <label class="levelrow"><span class="sub">봇 난이도</span>
             <select id="botlevel" class="input sel">${[["", "기본"], ["easy", "쉬움"], ["normal", "보통"], ["hard", "어려움"]]
               .map(([v, t]) => `<option value="${v}"${S.botLevel === v ? " selected" : ""}>${t}</option>`).join("")}</select></label>
-          <button class="btn sec wide" data-act="join-code" data-code="ADMN" title="봇과 한 판, 쉬운 캐릭터만">${ic("bot")} 연습 대전</button>
-          <button class="btn sec wide" data-act="join-code" data-code="ADMF" title="봇, 모든 캐릭터와 자원 시스템">${ic("bot")} 전체 대전</button>
-          <button class="btn sec wide" data-act="join-code" data-code="ADMX" title="봇, 앞면·밑면과 이음매가 있는 무한 모드">${ic("infinity")} 무한 대전</button>
+          <button class="modecard" data-act="join-code" data-code="ADMN" title="봇과 한 판, 쉬운 캐릭터만"><span class="mi">${ic("bot")}</span><span><b>연습 대전</b><small>봇과 · 쉬운 캐릭터</small></span></button>
+          <button class="modecard" data-act="join-code" data-code="ADMF" title="봇, 모든 캐릭터와 자원 시스템"><span class="mi">${ic("bot")}</span><span><b>전체 대전</b><small>봇과 · 모든 캐릭터</small></span></button>
+          <button class="modecard" data-act="join-code" data-code="ADMX" title="봇, 앞면·밑면과 이음매가 있는 무한 모드"><span class="mi">${ic("infinity")}</span><span><b>무한 대전</b><small>봇과 · 뫼비우스 규칙</small></span></button>
         </div>
         <div class="panel two tight"><button class="btn sec" data-act="ranking">${ic("trophy")} 랭킹</button><button class="btn sec" data-act="guide" data-tab="flow">${ic("book")} 가이드</button></div>
       </div>

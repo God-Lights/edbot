@@ -3,8 +3,8 @@
 import { ic } from "./icons.js";
 import { gameBar, token } from "./prep.js";
 import { sfx } from "./sfx.js";
-import { S, conn, materialInfo, mySeat, synergyInfo } from "./state.js";
-import { BOARD, DEPLOY_ROWS, MINE, MOBIUS_SUDDEN_BEAT, RARITY_COLOR, SUDDEN_BEAT, THEIRS, WORMHOLE_BEATS, esc } from "./util.js";
+import { S, conn, materialInfo, mySeat, synergyInfo, unitInfo } from "./state.js";
+import { BOARD, DEPLOY_ROWS, ENERGY_MAX, MINE, MOBIUS_SUDDEN_BEAT, RARITY_COLOR, SUDDEN_BEAT, THEIRS, WORMHOLE_BEATS, esc } from "./util.js";
 
 /** 박자 위치(소수)에서 기물 i의 모습. 두 박자 사이는 위치·체력만 부드럽게 잇는다. */
 export function interpolated(combat, position, index) {
@@ -52,10 +52,10 @@ export function arenaHtml(combat, seat) {
   const units = combat.units
     .map((u, i) => `<div class="au" data-i="${i}" style="display:none">${token(u.defId, u.star, { tint: u.seat === seat ? MINE : THEIRS, armed: !!u.weapon })}
       <i class="whring"></i><i class="gbadge">${ic("ghost")}</i>
-      <div class="ubar"><i class="shield"></i><div><b style="background:${u.seat === seat ? MINE : THEIRS}"></b></div></div></div>`)
+      <div class="ubar ${u.seat === seat ? "mine" : "theirs"}"><div class="hpb"><b></b><i class="shield"></i></div>${unitInfo(u.defId)?.passive ? "" : '<div class="mpb"><b></b></div>'}</div></div>`)
     .join("");
   const tiles = combat.tiles
-    .map((t, i) => `<text class="atile" data-t="${i}" fill="${RARITY_COLOR[materialInfo(t.material)?.rarity ?? "common"]}" text-anchor="middle" dominant-baseline="central" font-size="0.55">◆</text>`)
+    .map((t, i) => `<text class="atile" data-t="${i}" fill="${RARITY_COLOR[materialInfo(t.material)?.rarity ?? "common"]}" style="--rc:${RARITY_COLOR[materialInfo(t.material)?.rarity ?? "common"]}" text-anchor="middle" dominant-baseline="central" font-size="0.55">◆</text>`)
     .join("");
   return `<div class="arena-wrap"><div class="arena${combat.mobius ? " mobius" : ""}" id="arena">${cells}${units}
     <svg class="fx" viewBox="0 0 ${BOARD} ${BOARD}" preserveAspectRatio="none">${tiles}<g id="lines"></g></svg>
@@ -221,8 +221,14 @@ export function playArena(combat, seat, getPos) {
       const dying = next && (next[5] & 1) === 0;
       el.style.opacity = String((dying ? Math.max(0, 1 - (pos - k)) : 1) * (f.fade ?? 1));
       el.firstElementChild.style.scale = dying ? String(0.55 + 0.45 * Math.max(0, 1 - (pos - k))) : "1";
-      el.querySelector(".ubar b").style.width = `${u.maxHp > 0 ? Math.min(100, Math.max(0, (f.hp / u.maxHp) * 100)) : 0}%`;
-      el.querySelector(".ubar .shield").style.display = f.shield > 0 ? "block" : "none";
+      // 말 위의 막대: 체력(편 색) + 보호막(흰색, 체력 뒤에 이어서) + 마나(파랑)
+      const hpRatio = u.maxHp > 0 ? Math.min(1, Math.max(0, f.hp / u.maxHp)) : 0;
+      el.querySelector(".hpb b").style.width = `${hpRatio * 100}%`;
+      const shield = el.querySelector(".hpb .shield");
+      shield.style.left = `${hpRatio * 100}%`;
+      shield.style.width = `${u.maxHp > 0 ? Math.min(1 - hpRatio, f.shield / u.maxHp) * 100 : 0}%`;
+      const mp = el.querySelector(".mpb b");
+      if (mp) mp.style.width = `${Math.min(100, Math.max(0, (f.energy / (ENERGY_MAX[unitInfo(u.defId)?.cost ?? 1] ?? 60)) * 100))}%`;
     });
     combat.tiles.forEach((t, i) => {
       const [x, y] = flip(t.x, t.y);
