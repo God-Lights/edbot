@@ -23,6 +23,30 @@ final class StubHTTP: HTTPTransport, @unchecked Sendable {
 final class ApiTests: XCTestCase {
     let base = URL(string: "https://x.test")!
 
+    func testMatchJoinPollAndCancel() async throws {
+        let waiting = StubHTTP { _ in (#"{"ticket":"t1","status":"waiting","code":null,"waitedMs":0,"waiting":3}"#, 200) }
+        let ticket = try await ApiClient(baseURL: base, http: waiting).matchJoin(name: "에드 봇")
+        XCTAssertEqual(ticket.ticket, "t1")
+        XCTAssertNil(ticket.code)
+        XCTAssertEqual(ticket.waiting, 3)
+        XCTAssertEqual(waiting.last?.httpMethod, "POST")
+        XCTAssertTrue(waiting.last?.url?.absoluteString.contains("/api/match/join?name=") ?? false)
+        let matched = StubHTTP { _ in (#"{"ticket":"t1","status":"matched","code":"ABCD","waitedMs":1500,"waiting":0}"#, 200) }
+        let status = try await ApiClient(baseURL: base, http: matched).matchPoll(ticket: "t1")
+        XCTAssertEqual(status?.code, "ABCD")
+        let gone = StubHTTP { _ in (#"{"error":"ticket_expired"}"#, 404) }
+        let none = try await ApiClient(baseURL: base, http: gone).matchPoll(ticket: "t1")
+        XCTAssertNil(none)
+        let denied = StubHTTP { _ in (#"{"error":"unauthorized"}"#, 401) }
+        do {
+            _ = try await ApiClient(baseURL: base, http: denied).matchJoin(name: "x")
+            XCTFail("401 이면 unauthorized")
+        } catch ApiError.unauthorized {}
+        let cancel = StubHTTP { _ in (#"{"ok":true}"#, 200) }
+        await ApiClient(baseURL: base, http: cancel).matchCancel(ticket: "t1")
+        XCTAssertTrue(cancel.last?.url?.absoluteString.hasSuffix("/api/match/cancel?ticket=t1") ?? false)
+    }
+
     func testCreateRoomSendsTokenAndReturnsCode() async throws {
         let http = StubHTTP { _ in (#"{"code":"ABCD"}"#, 201) }
         let code = try await ApiClient(baseURL: base, authToken: "tok", http: http).createRoom()

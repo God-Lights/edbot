@@ -767,6 +767,79 @@ final class AppModel {
         if let connection { Task { await connection.stop() } }
     }
 
+    // MARK: 빠른 대전 (게임 찾기)
+
+    struct QuickMatch: Equatable {
+        let ticket: String
+        let startedAt: Date
+        var waiting: Int
+    }
+    /// 매칭 줄에서 기다리는 중이면 값이 있다.
+    private(set) var quickMatch: QuickMatch?
+    private(set) var isJoiningMatch = false
+    private var matchTask: Task<Void, Never>?
+    /// 매칭으로 들어간 방에서는 로비 단계에서 자동으로 준비한다.
+    private var autoReady = false
+
+    func startQuickMatch() {
+        guard quickMatch == nil, !isJoiningMatch, let url = serverURL else {
+            if serverURL == nil { message = "서버 주소를 확인해 주세요." }
+            return
+        }
+        message = nil
+        isJoiningMatch = true
+        let api = ApiClient(baseURL: url, authToken: authToken)
+        let name: String = user?.nickname ?? playerName
+        matchTask = Task { [weak self] in
+            do {
+                let first = try await api.matchJoin(name: name)
+                guard let self else { return }
+                self.isJoiningMatch = false
+                if let code = first.code { self.enterMatchedRoom(code); return }
+                self.quickMatch = QuickMatch(ticket: first.ticket, startedAt: Date(), waiting: first.waiting ?? 0)
+                while !Task.isCancelled {
+                    try await Task.sleep(nanoseconds: 1_500_000_000)
+                    guard let status = try await api.matchPoll(ticket: first.ticket) else {
+                        self.quickMatch = nil
+                        self.message = "매칭이 끊겼어요. 다시 시도해 주세요."
+                        return
+                    }
+                    if let code = status.code { self.enterMatchedRoom(code); return }
+                    self.quickMatch?.waiting = status.waiting ?? 0
+                }
+            } catch is CancellationError {
+                return
+            } catch ApiError.unauthorized {
+                self?.isJoiningMatch = false
+                self?.quickMatch = nil
+                self?.message = "로그인이 필요해요. 로그인하기를 눌러 주세요."
+            } catch {
+                self?.isJoiningMatch = false
+                self?.quickMatch = nil
+                self?.message = "매칭을 시작할 수 없어요."
+            }
+        }
+    }
+
+    func cancelQuickMatch() {
+        matchTask?.cancel()
+        matchTask = nil
+        isJoiningMatch = false
+        if let ticket = quickMatch?.ticket, let url = serverURL {
+            let api = ApiClient(baseURL: url, authToken: authToken)
+            Task { await api.matchCancel(ticket: ticket) }
+        }
+        quickMatch = nil
+    }
+
+    private func enterMatchedRoom(_ code: String) {
+        quickMatch = nil
+        matchTask = nil
+        join(code: code)
+        autoReady = true // join()이 상태를 비우므로 그 뒤에 켠다
+        play(.ready)
+    }
+
     func setReady(_ ready: Bool) {
         guard let connection else { return }
         play(.ready)
@@ -842,6 +915,11 @@ final class AppModel {
     }
 
     private func observe(_ room: RoomSnapshot) {
+        // 매칭으로 들어간 방: 로비에 들어오면 바로 준비한다.
+        if autoReady, room.phase == .lobby, connection != nil {
+            autoReady = false
+            Task { [weak self] in await self?.connection?.sendReady(true) }
+        }
         clock.observe(serverTime: room.serverTime, localNowMs: currentTimeMs())
         let previous = self.room
         if previous?.phase != room.phase || previous?.game?.turnSeat != room.game?.turnSeat

@@ -17,6 +17,38 @@ public struct ApiClient: Sendable {
 
     private struct CreatedRoom: Decodable { let code: String }
 
+    /// 빠른 대전 줄의 표. code 가 있으면 짝이 지어진 것이다.
+    public struct MatchTicket: Decodable, Equatable, Sendable {
+        public let ticket: String
+        public let status: String
+        public let code: String?
+        /// 지금 줄에서 기다리는 사람 수
+        public let waiting: Int?
+    }
+
+    /// POST /api/match/join: 빠른 대전 줄에 선다. 비슷한 레이팅의 상대가 있으면 바로 방 코드가 온다.
+    public func matchJoin(name: String) async throws -> MatchTicket {
+        let encoded: String = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=+#"))) ?? "Player"
+        let (data, status) = try await http.send(Http.request(baseURL, "/api/match/join?name=\(encoded)", method: "POST", token: authToken))
+        if status == 401 { throw ApiError.unauthorized }
+        guard (200..<300).contains(status) else { throw ApiError.status(status) }
+        guard let ticket = try? JSONDecoder().decode(MatchTicket.self, from: data) else { throw ApiError.badResponse }
+        return ticket
+    }
+
+    /// GET /api/match/poll: 기다리는 중인지, 짝이 지어졌는지. 표가 없어졌으면 nil.
+    public func matchPoll(ticket: String) async throws -> MatchTicket? {
+        let (data, status) = try await http.send(Http.request(baseURL, "/api/match/poll?ticket=\(ticket)", token: authToken))
+        if status == 404 { return nil }
+        guard (200..<300).contains(status) else { throw ApiError.status(status) }
+        return try? JSONDecoder().decode(MatchTicket.self, from: data)
+    }
+
+    /// POST /api/match/cancel: 줄에서 나온다.
+    public func matchCancel(ticket: String) async {
+        _ = try? await http.send(Http.request(baseURL, "/api/match/cancel?ticket=\(ticket)", method: "POST", token: authToken))
+    }
+
     /// 서버의 이름·환경·로그인 방식 등. /api/server 가 없는 오래된 서버면 nil.
     public func serverInfo() async throws -> ServerInfo? {
         let (data, status) = try await http.send(Http.request(baseURL, "/api/server"))

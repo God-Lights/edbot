@@ -180,55 +180,39 @@ struct LobbyView: View {
         .panel(padding: compact ? 8 : 16)
     }
 
+    /// 오른쪽: 롤토체스처럼 큰 "게임 찾기" 버튼, 그 아래 모드 카드, 맨 아래 작은 메뉴와 방 코드.
     private var roomCard: some View {
         @Bindable var model = model
-        let cols: [GridItem] = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
+        let modeCols: [GridItem] = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
         return VStack(spacing: compact ? 6 : 12) {
-            Toggle(isOn: $model.createMobius) { Label("무한 모드로 만들기", systemImage: "infinity") }
-                .font(.subheadline)
-                .tint(Theme.accent)
-            Button { model.createRoomAndJoin() } label: {
-                Text(model.isCreatingRoom ? "방을 만드는 중..." : "방 만들기").frame(maxWidth: .infinity)
-            }
-            .buttonStyle(PrimaryButtonStyle())
-            .disabled(model.isCreatingRoom)
+            findMatchButton
 
-            LazyVGrid(columns: cols, spacing: 8) {
-                if model.user != nil {
-                    Button { model.createGuestRoom() } label: {
-                        Label(model.isCreatingGuestRoom ? "만드는 중..." : "게스트 방", systemImage: "graduationcap").frame(maxWidth: .infinity)
+            LazyVGrid(columns: modeCols, spacing: 8) {
+                modeCard(title: "연습 대전", detail: "봇과 · 쉬운 캐릭터", icon: "cpu") { model.joinTestMatch() }
+                modeCard(title: "전체 대전", detail: "봇과 · 모든 캐릭터", icon: "cpu.fill") { model.join(code: "ADMF") }
+                modeCard(title: "무한 대전", detail: "봇과 · 뫼비우스 규칙", icon: "infinity") { model.join(code: "ADMX") }
+                modeCard(
+                    title: model.isCreatingRoom ? "만드는 중..." : "방 만들기",
+                    detail: model.createMobius ? "친구와 · 무한 모드" : "친구와 · 방 코드로",
+                    icon: "person.2.fill"
+                ) { model.createRoomAndJoin() }
+                .disabled(model.isCreatingRoom)
+            }
+            Toggle(isOn: $model.createMobius) { Label("방을 무한 모드로", systemImage: "infinity").font(.caption) }
+                .tint(Theme.gold)
+
+            // 작은 메뉴
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    smallButton("랭킹", icon: "trophy") { model.openRanking() }
+                    smallButton("가이드", icon: "book") { model.openGuide() }
+                    if model.user != nil {
+                        smallButton("관전", icon: "eye") { model.showLive = true }
+                        smallButton(model.isCreatingGuestRoom ? "만드는 중..." : "게스트 방", icon: "graduationcap") { model.createGuestRoom() }
+                            .disabled(model.isCreatingGuestRoom)
+                        smallButton("내 방", icon: "trash") { model.showMyRooms = true }
                     }
-                    .buttonStyle(SecondaryButtonStyle())
-                    .disabled(model.isCreatingGuestRoom)
-                    Button { model.showLive = true } label: {
-                        Label("경기 관전", systemImage: "eye").frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
-                    Button { model.showMyRooms = true } label: {
-                        Label("내 방 관리", systemImage: "trash").frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
                 }
-                Button { model.openRanking() } label: {
-                    Label("랭킹", systemImage: "trophy").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(SecondaryButtonStyle())
-                Button { model.openGuide() } label: {
-                    Label("가이드", systemImage: "book").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(SecondaryButtonStyle())
-                Button { model.joinTestMatch() } label: {
-                    Label("연습 대전", systemImage: "cpu").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(SecondaryButtonStyle())
-                Button { model.join(code: "ADMF") } label: {
-                    Label("전체 대전", systemImage: "cpu.fill").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(SecondaryButtonStyle())
-                Button { model.join(code: "ADMX") } label: {
-                    Label("무한 대전", systemImage: "infinity").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(SecondaryButtonStyle())
             }
 
             HStack(spacing: 10) {
@@ -247,6 +231,71 @@ struct LobbyView: View {
             }
         }
         .panel(padding: compact ? 8 : 16)
+    }
+
+    /// 큰 금색 "게임 찾기": 비슷한 실력의 상대와 1:1 매칭. 기다리는 동안은 시간과 취소 버튼.
+    @ViewBuilder private var findMatchButton: some View {
+        if let match = model.quickMatch {
+            HStack(spacing: 10) {
+                ProgressView().tint(Theme.gold)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("상대를 찾는 중...").font(compact ? .subheadline.bold() : .headline)
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        let seconds = Int(context.date.timeIntervalSince(match.startedAt))
+                        Text(String(format: "%d:%02d · 줄에 %d명", seconds / 60, seconds % 60, match.waiting))
+                            .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                Button("취소") { model.cancelQuickMatch() }.buttonStyle(SecondaryButtonStyle())
+            }
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: compact ? 48 : 64)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.black.opacity(0.35)))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.gold, lineWidth: 1.5))
+        } else {
+            Button { model.startQuickMatch() } label: {
+                VStack(spacing: 1) {
+                    Label(model.isJoiningMatch ? "줄 서는 중..." : "게임 찾기", systemImage: "scope")
+                        .font(.system(size: compact ? 18 : 24, weight: .heavy))
+                    if !compact { Text("비슷한 실력의 상대와 1:1").font(.caption.weight(.semibold)).opacity(0.75) }
+                }
+                .frame(maxWidth: .infinity, minHeight: compact ? 48 : 70)
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(model.isJoiningMatch)
+        }
+    }
+
+    /// 모드 카드: 아이콘, 이름, 한 줄 설명
+    private func modeCard(title: String, detail: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: compact ? 16 : 20, weight: .semibold))
+                    .foregroundStyle(Theme.goldHi)
+                    .frame(width: compact ? 22 : 28)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title).font(compact ? .subheadline.bold() : .headline).lineLimit(1).minimumScaleFactor(0.7)
+                    Text(detail).font(.system(size: compact ? 9 : 11)).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.7)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: compact ? 42 : 58)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(LinearGradient(colors: [Theme.panelTop, Theme.panelBottom], startPoint: .top, endPoint: .bottom)))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.gold.opacity(0.5), lineWidth: 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func smallButton(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon).font(.caption.weight(.semibold)).lineLimit(1)
+        }
+        .buttonStyle(SecondaryButtonStyle())
     }
 
     @State private var discovery = ServerDiscovery()
