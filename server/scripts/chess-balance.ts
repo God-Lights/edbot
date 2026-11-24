@@ -5,7 +5,7 @@
 // 같은 예산으로 무작위 팀을 만들어 서로 싸우게 하고, 캐릭터와 시너지의 승률을 표로 출력한다.
 import { runBalance } from "../src/chess/balance";
 import { unitDef } from "../src/chess/roster";
-import { ALL_SYNERGIES } from "../src/chess/synergy";
+import { ALL_SYNERGIES, LINEAGE_TRAITS } from "../src/chess/synergy";
 
 const [matches = "2000", budget = "14", cap = "6", seed = "1"] = process.argv.slice(2) as string[];
 const report = runBalance({ matches: Number(matches), budget: Number(budget), cap: Number(cap), seed: Number(seed) });
@@ -20,6 +20,6 @@ for (const s of [...report.units].sort((a, b) => b.wins / (b.games || 1) - a.win
 }
 console.log("\n시너지");
 for (const s of report.synergies) {
-  const info = ALL_SYNERGIES.find((x) => x.id === s.id)!;
+  const info = [...ALL_SYNERGIES, ...LINEAGE_TRAITS].find((x) => x.id === s.id)!;
   console.log(`${info.nameKo.padEnd(8, "　")} ${String(s.games).padStart(5)}판 승률 ${pct(s.wins, s.games)}`);
 }

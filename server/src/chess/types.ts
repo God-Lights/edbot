@@ -16,7 +16,8 @@ export type AbilityId =
   | "inspire" | "heal" | "rally" | "shield-wall" | "stone-skin"
   | "formation" | "invest" | "bloom" | "bind" | "leap-bite"
   | "dimension-leap" | "pact" | "thunder" | "dragon-breath" | "flank"
-  | "origin" | "gene-absorb";
+  | "origin" | "gene-absorb"
+  | "array-strike" | "loyal-guard" | "inferno" | "resonance";
 
 export interface UnitDef {
   id: string;
