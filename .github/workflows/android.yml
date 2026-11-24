@@ -95,8 +95,8 @@ jobs:
           ls -lh app/build/outputs/apk/*/ build-*.apk
           # minSdk 26 (안드로이드 8.0) 확인
           aapt=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
-          "$aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -E "^package|sdkVersion|targetSdkVersion"
-          "$aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -q "sdkVersion:'26'" || { echo "minSdk 가 26 이 아니다"; exit 1; }
+          "$aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -E "^package|[sS]dkVersion"
+          "$aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -Eq "^(minSdkVersion|sdkVersion):'26'" || { echo "minSdk 가 26 이 아니다"; exit 1; }
 
       - uses: actions/upload-artifact@v4
         if: always()
