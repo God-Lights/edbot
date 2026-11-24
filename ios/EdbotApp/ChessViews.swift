@@ -1174,21 +1174,22 @@ struct ChessPrepView: View {
             if let info {
                 Text("\(Image(systemName: "heart.fill")) \(Int((Double(info.hp) * factor).rounded()))   \(Image(systemName: "flame.fill")) \(Int((Double(info.atk) * factor).rounded()))")
                     .font(compact ? .caption.monospacedDigit() : .subheadline.monospacedDigit())
-                // 아이폰에서는 한 줄로 줄여서 아래(무기, 진화 막대)가 스크롤 없이 보이게 한다
-                Text(info.abilityText).font(compact ? .caption2 : .caption).foregroundStyle(.secondary).lineLimit(compact ? 1 : 4)
+                // 아이폰(판이 작다)에서는 능력 설명을 빼고, 진화 막대를 무기보다 위에 둬서 스크롤 없이 보이게 한다
+                if !compact { Text(info.abilityText).font(.caption).foregroundStyle(.secondary).lineLimit(4) }
             }
+            if compact { evolutionPanel(me, unit: unit) }
             if let weaponId = unit.weapon {
                 HStack {
                     Image(systemName: "bolt.shield.fill").foregroundStyle(Theme.warn)
                     VStack(alignment: .leading, spacing: 0) {
                         Text(model.chessWeapon(weaponId)?.nameKo ?? weaponId).font(.caption.bold())
-                        Text(model.chessWeapon(weaponId)?.text ?? "").font(.system(size: 10)).foregroundStyle(.secondary)
+                        if !compact { Text(model.chessWeapon(weaponId)?.text ?? "").font(.system(size: 10)).foregroundStyle(.secondary) }
                     }
                     Spacer()
                     Button("무기 빼기") { model.chessUnequip(unit.uid) }.buttonStyle(SecondaryButtonStyle())
                 }
             }
-            evolutionPanel(me, unit: unit)
+            if !compact { evolutionPanel(me, unit: unit) }
             HStack(spacing: 8) {
                 if onBoard {
                     Button("대기석으로") { model.chessBench(unit.uid) }.buttonStyle(SecondaryButtonStyle())
