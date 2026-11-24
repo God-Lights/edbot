@@ -383,9 +383,9 @@ struct ChessPrepView: View {
     }
 
     private func boardView(_ me: ChessSelfSnapshot, cell: CGFloat) -> some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 0) {
             ForEach(0..<chessDeployRows, id: \.self) { row in
-                HStack(spacing: 2) {
+                HStack(spacing: 0) {
                     ForEach(0..<chessBoardSize, id: \.self) { col in
                         boardCell(me, col: col, row: row)
                             .frame(width: cell, height: cell)
@@ -404,6 +404,9 @@ struct ChessPrepView: View {
                 .allowsHitTesting(false)
             }
         }
+        // 헥스텍 금색 판 테두리
+        .overlay(Rectangle().strokeBorder(Theme.gold, lineWidth: 2).allowsHitTesting(false))
+        .shadow(color: .black.opacity(0.6), radius: 10, y: 6)
         .coachHighlight(showCoach && coachStep(me).n == 2)
     }
 
@@ -413,15 +416,15 @@ struct ChessPrepView: View {
         let tile: ChessTileView? = tileAt(col: col, row: row)
         let tileRarity: String = tile.flatMap { model.chessMaterial($0.material)?.rarity } ?? "common"
         return ZStack {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color.white.opacity(dark ? 0.12 : 0.06))
+            // 판 칸: 남색 체스판 무늬
+            Rectangle()
+                .fill(dark ? Theme.boardDark : Theme.boardLight)
             if let tile {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(ChessStyle.rarityColor(tileRarity).opacity(0.18))
+                Rectangle()
+                    .fill(ChessStyle.rarityColor(tileRarity).opacity(0.14))
                 VStack(spacing: 0) {
-                    Image(systemName: "diamond.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(ChessStyle.rarityColor(tileRarity))
+                    CrystalGem(color: ChessStyle.rarityColor(tileRarity))
+                        .frame(maxWidth: unit == nil ? 26 : 14, maxHeight: unit == nil ? 26 : 14)
                     if unit == nil {
                         Text(model.chessMaterial(tile.material)?.nameKo ?? "")
                             .font(.system(size: 8))
@@ -1171,13 +1174,14 @@ struct ChessPrepView: View {
         let factor: Double = unit.star >= 2 ? 1.8 : 1
         return VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("\(info?.nameKo ?? unit.defId) \(ChessStyle.starText(unit.star))").font(.headline)
+                Text("\(info?.nameKo ?? unit.defId) \(ChessStyle.starText(unit.star))").font(compact ? .subheadline.bold() : .headline)
                 if let info { Text("\(Labels.pieceName(info.piece)) · \(info.faction) · \(info.role)").font(.caption).foregroundStyle(.secondary) }
             }
             if let info {
                 Text("\(Image(systemName: "heart.fill")) \(Int((Double(info.hp) * factor).rounded()))   \(Image(systemName: "flame.fill")) \(Int((Double(info.atk) * factor).rounded()))")
-                    .font(.subheadline.monospacedDigit())
-                Text(info.abilityText).font(.caption).foregroundStyle(.secondary).lineLimit(compact ? 2 : 4)
+                    .font(compact ? .caption.monospacedDigit() : .subheadline.monospacedDigit())
+                // 아이폰에서는 한 줄로 줄여서 아래(무기, 진화 막대)가 스크롤 없이 보이게 한다
+                Text(info.abilityText).font(compact ? .caption2 : .caption).foregroundStyle(.secondary).lineLimit(compact ? 1 : 4)
             }
             if let weaponId = unit.weapon {
                 HStack {
@@ -1291,6 +1295,10 @@ struct ChessArena: View {
                     banner(position: position).zIndex(4)
                 }
                 .frame(width: cell * CGFloat(chessBoardSize), height: cell * CGFloat(chessBoardSize))
+                // 헥스텍 금색 판 테두리와, 롤토체스처럼 살짝 눕힌 판 (전투는 만질 일이 없어서 원근을 준다)
+                .overlay(Rectangle().strokeBorder(Theme.gold, lineWidth: 2).allowsHitTesting(false))
+                .rotation3DEffect(.degrees(14), axis: (x: 1, y: 0, z: 0), anchor: .bottom, perspective: 0.45)
+                .shadow(color: .black.opacity(0.6), radius: 12, y: 8)
             }
         }
         .task { await soundLoop() }
@@ -1490,8 +1498,7 @@ struct ChessArena: View {
                         let dark: Bool = (row + col) % 2 == 1
                         let mineSide: Bool = row >= chessBoardSize - chessDeployRows
                         Rectangle()
-                            .fill(Color.white.opacity(dark ? 0.12 : 0.06))
-                            .overlay(Rectangle().fill((mineSide ? Theme.mine : Theme.theirs).opacity(0.05)))
+                            .fill(mineSide ? (dark ? Theme.boardDark : Theme.boardLight) : (dark ? Theme.boardEnemyDark : Theme.boardEnemyLight))
                             .frame(width: cell, height: cell)
                     }
                 }
@@ -1622,10 +1629,8 @@ struct ChessArena: View {
             if !mined.contains(index) {
                 let tile = combat.tiles[index]
                 let point = display(x: Double(tile.x), y: Double(tile.y))
-                Image(systemName: "diamond.fill")
-                    .font(.system(size: cell * 0.42))
-                    .foregroundStyle(ChessStyle.rarityColor(model.chessMaterial(tile.material)?.rarity ?? "common"))
-                    .opacity(0.85)
+                CrystalGem(color: ChessStyle.rarityColor(model.chessMaterial(tile.material)?.rarity ?? "common"))
+                    .frame(width: cell * 0.5, height: cell * 0.5)
                     .position(x: (point.x + 0.5) * cell, y: (point.y + 0.5) * cell)
             }
         }
