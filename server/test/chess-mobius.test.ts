@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attackableEnemies, distanceBetween, enemiesOf, moveDestinations, stepCell } from "../src/chess/board";
+import { GHOST_LOCK_BEATS, attackableEnemies, distanceBetween, enemiesOf, moveDestinations, stepCell } from "../src/chess/board";
 import { CODE_ALPHABET, CODE_LENGTH, RESERVED_CODES } from "../src/codes";
 import { makeRng, placeTeam, randomTeam } from "../src/chess/balance";
 import { addEffect, createUnit } from "../src/chess/core";
@@ -8,9 +8,11 @@ import {
 } from "../src/chess/sim";
 import type { CombatState, CombatUnit, Face, Piece, Seat } from "../src/chess/types";
 
-/** 무한 모드 빈 판에 기물을 직접 놓는다. */
+/** 무한 모드 빈 판에 기물을 직접 놓는다. 초반 고스트 무브 금지가 끝난 박자에서 시작한다. (금지 자체는 따로 시험한다) */
 function arena(mobius = true): CombatState {
-  return createCombat([[], []], [], { mobius });
+  const state = createCombat([[], []], [], { mobius });
+  state.beat = GHOST_LOCK_BEATS + 1;
+  return state;
 }
 function put(state: CombatState, u: { seat: Seat; piece: Piece; x: number; y: number; face?: Face; hp?: number; atk?: number }): CombatUnit {
   return createUnit(state, {
@@ -36,6 +38,21 @@ describe("이음매", () => {
     expect(squares(moveDestinations(s, rook))).toContain("0,4,1"); // (7,3)을 지나 (0,4)로, 밑면
     expect(squares(moveDestinations(s, rook))).toContain("7,3,0");
     expect(squares(moveDestinations(s, rook))).not.toContain("0,3,0"); // 같은 면 같은 y로는 못 간다
+  });
+  it("초반 고스트 무브 금지: 처음 2박자는 이음매를 넘어 면을 바꾸지 못한다 (규칙서 v2.3)", () => {
+    const s = arena();
+    const rook = put(s, { seat: 0, piece: "rook", x: 6, y: 3 });
+    for (let beat = 0; beat <= GHOST_LOCK_BEATS; beat++) {
+      s.beat = beat;
+      const cells = moveDestinations(s, rook);
+      expect(cells.every((c) => c.face === 0), `박자 ${beat}`).toBe(true);
+      expect(squares(cells)).toContain("7,3,0"); // 이음매 앞까지는 간다
+    }
+    s.beat = GHOST_LOCK_BEATS + 1;
+    expect(squares(moveDestinations(s, rook))).toContain("0,4,1");
+    // 일반 규칙에는 영향이 없다
+    const plain = createCombat([[], []], [], { mobius: false });
+    expect(moveDestinations(plain, put(plain, { seat: 0, piece: "rook", x: 6, y: 3 })).length).toBeGreaterThan(0);
   });
   it("비숍은 이음매를 지나면 대각선 방향이 이어진다", () => {
     const s = arena();

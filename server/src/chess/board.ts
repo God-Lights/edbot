@@ -13,6 +13,11 @@ export const KNIGHT_JUMPS: ReadonlyArray<readonly [number, number]> = [
 /** 퀸, 룩, 비숍이 한 박자에 움직이는 최대 칸 수와 공격이 닿는 최대 칸 수 */
 export const SLIDE_MOVE = 3;
 export const SLIDE_ATTACK = 4;
+/**
+ * 무한 모드: 전투를 시작하고 이 박자까지는 이음매를 넘어 면을 바꾸는 이동(고스트 무브)을 하지 못한다.
+ * 규칙서 v2.3의 "각 진영의 첫 3수는 고스트 무브 금지"를 자동 전투에 맞춘 것. 시작하자마자 밑면으로 숨는 것을 막는다.
+ */
+export const GHOST_LOCK_BEATS = 2;
 
 export const inBounds = (x: number, y: number): boolean => x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE;
 
@@ -125,6 +130,8 @@ export function moveDestinations(state: CombatState, unit: CombatUnit): Cell[] {
       break;
     }
   }
+  // 초반 고스트 무브 금지: 면이 바뀌는 칸은 뺀다 (슬라이딩은 이음매에서 멈춘 것과 같다)
+  if (state.mobius && state.beat <= GHOST_LOCK_BEATS) return out.filter((c) => c.face === unit.face);
   return out;
 }
 
