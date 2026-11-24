@@ -271,7 +271,7 @@ struct ChessPrepView: View {
                 let leftW: CGFloat = geo.size.width - sideW - 10
                 let shopH: CGFloat = min(108, max(60, geo.size.height * 0.17))
                 let showStrip: Bool = showCoach || (!tipSeen && chess.round == 2)
-                let stripH: CGFloat = showStrip ? (compact ? 40 : 58) : 0
+                let stripH: CGFloat = showStrip ? (compact ? 40 : 50) : 0
                 let headH: CGFloat = compact ? 52 : 86
                 // 여유: 헤더·띠가 예상보다 조금 커도 오른쪽 패널(준비 끝 버튼)이 화면 밖으로 밀리지 않게
                 let gaps: CGFloat = compact ? 40 : 60
@@ -358,18 +358,10 @@ struct ChessPrepView: View {
     }
 
     /// 첫 전투가 끝난 뒤 2라운드에서 한 번만 보이는 팁.
-    /// 안내 띠의 글: 아이폰(가로)에서는 제목과 함께 한 줄로 줄여서, 띠 높이가 판 크기 계산(stripH)을 넘지 않게 한다.
-    @ViewBuilder
+    /// 안내 띠의 글: 제목과 함께 한 줄로 줄여서 띠를 낮게 둔다. (띠 높이가 판 크기 계산(stripH)을 넘지 않게, 판이 그만큼 커진다)
     private func stripText(title: String, body: String) -> some View {
-        if compact {
-            (Text(title + "  ").bold().foregroundStyle(Theme.warn) + Text(body))
-                .font(.caption).lineLimit(1).minimumScaleFactor(0.6)
-        } else {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.caption.bold()).foregroundStyle(Theme.warn)
-                Text(body).font(.subheadline).lineLimit(2).minimumScaleFactor(0.8)
-            }
-        }
+        (Text(title + "  ").bold().foregroundStyle(Theme.warn) + Text(body))
+            .font(compact ? .caption : .subheadline).lineLimit(1).minimumScaleFactor(0.6)
     }
 
     private var tipCard: some View {
@@ -1115,9 +1107,11 @@ struct ChessPrepView: View {
                         }
                         Spacer(minLength: 0)
                         HStack(alignment: .lastTextBaseline, spacing: 2) {
+                            // 긴 이름(에이션트 로드 등)은 말줄임 대신 글자를 줄여서 다 보이게
                             Text(info?.nameKo ?? defId)
                                 .font(.system(size: compact ? 11 : 13, weight: .heavy))
-                                .lineLimit(1).minimumScaleFactor(0.6)
+                                .lineLimit(1).minimumScaleFactor(0.4)
+                                .allowsTightening(true)
                             Spacer(minLength: 0)
                             Text("\(Image(systemName: "dollarsign.circle.fill"))\(cost)")
                                 .font(.system(size: 11, weight: .heavy).monospacedDigit())
