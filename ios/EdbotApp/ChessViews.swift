@@ -1174,13 +1174,14 @@ struct ChessPrepView: View {
         let factor: Double = unit.star >= 2 ? 1.8 : 1
         return VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("\(info?.nameKo ?? unit.defId) \(ChessStyle.starText(unit.star))").font(.headline)
+                Text("\(info?.nameKo ?? unit.defId) \(ChessStyle.starText(unit.star))").font(compact ? .subheadline.bold() : .headline)
                 if let info { Text("\(Labels.pieceName(info.piece)) · \(info.faction) · \(info.role)").font(.caption).foregroundStyle(.secondary) }
             }
             if let info {
                 Text("\(Image(systemName: "heart.fill")) \(Int((Double(info.hp) * factor).rounded()))   \(Image(systemName: "flame.fill")) \(Int((Double(info.atk) * factor).rounded()))")
-                    .font(.subheadline.monospacedDigit())
-                Text(info.abilityText).font(.caption).foregroundStyle(.secondary).lineLimit(compact ? 2 : 4)
+                    .font(compact ? .caption.monospacedDigit() : .subheadline.monospacedDigit())
+                // 아이폰에서는 한 줄로 줄여서 아래(무기, 진화 막대)가 스크롤 없이 보이게 한다
+                Text(info.abilityText).font(compact ? .caption2 : .caption).foregroundStyle(.secondary).lineLimit(compact ? 1 : 4)
             }
             if let weaponId = unit.weapon {
                 HStack {
