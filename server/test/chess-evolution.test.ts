@@ -4,7 +4,9 @@ import { buy, combineItems, createChessGame, equip, finishRound, runRoundCombat,
 import type { ChessGame, OwnedUnit } from "../src/chess/game";
 import { EVOLUTION, ROSTER, unitDef } from "../src/chess/roster";
 import { createCombat, recordCombat } from "../src/chess/sim";
-import { onKill } from "../src/chess/abilities";
+import { castAbility, onKill } from "../src/chess/abilities";
+import { runChessBot } from "../src/bot";
+import { createRoom, joinRoom, setReady } from "../src/room-state";
 import { activeSynergies, combineBonuses } from "../src/chess/synergy";
 import { MATERIALS } from "../src/chess/weapons";
 import { fuseMaterials } from "../src/chess/crafting";
@@ -91,13 +93,13 @@ describe("데보이트 -> 데도키온", () => {
 
 describe("진화 재료", () => {
   it("E 코드와 재상트는 정해진 조합으로만 만든다", () => {
-    expect(fuseMaterials("bit", "chaos-crystal")).toBe("xe-code");
-    expect(fuseMaterials("dark-essence", "bit")).toBe("ve-code");
+    expect(fuseMaterials("bit", "edgem")).toBe("xe-code");
+    expect(fuseMaterials("redocean", "bit")).toBe("ve-code");
     expect(fuseMaterials("titanium", "clawstone")).toBe("zesent");
     const g = newGame();
     const p = g.players[0];
-    p.materials = { bit: 1, "chaos-crystal": 1 };
-    expect(combineItems(g, 0, { kind: "material", id: "bit" }, { kind: "material", id: "chaos-crystal" })).toEqual({ ok: true });
+    p.materials = { bit: 1, edgem: 1 };
+    expect(combineItems(g, 0, { kind: "material", id: "bit" }, { kind: "material", id: "edgem" })).toEqual({ ok: true });
     expect(p.materials["xe-code"]).toBe(1);
   });
 
@@ -119,14 +121,15 @@ describe("데도키온 -> 토가로가 / 드워곤", () => {
     expect(owned(g).find((u) => u.defId === "dedokion")!.evo).toEqual({ engine: 0, core: EVOLUTION.corePerCombat });
   });
 
-  it("X-E E 코드 + 2전투 + 고대의 파편 2개 -> 다음 라운드 시작에 토가로가", () => {
+  it("X-E E 코드 + 2전투(엔진은 1전투, A-C 코어는 2전투) + 고대의 파편 2개 -> 다음 라운드 시작에 토가로가", () => {
     const g = newGame();
     const unit = dedokionOnBoard(g);
     const p = g.players[0];
     p.weapons["e-code-xe"] = 1;
     expect(equip(g, 0, "e-code-xe", unit.uid)).toEqual({ ok: true });
     playRound(g);
-    expect(owned(g).find((u) => u.uid === unit.uid)!.evo).toEqual({ engine: 9.4, core: 25 });
+    // 엔진은 한 번에 다 차고, A-C 코어는 아직 절반
+    expect(owned(g).find((u) => u.uid === unit.uid)!.evo).toEqual({ engine: 18.8, core: 25 });
     // 재료가 모자라면 다 채워도 진화하지 않는다
     playRound(g);
     expect(owned(g).find((u) => u.uid === unit.uid)!.defId).toBe("dedokion");
@@ -203,5 +206,48 @@ describe("계보 시너지 근원", () => {
     const pair = recordCombat([[{ defId: "ankio", star: 1, col: 0, row: 0 }, { defId: "devoit", star: 1, col: 7, row: 3 }], [{ defId: "relic", star: 1, col: 0, row: 0 }]], []);
     expect(pair.units[0]!.maxHp).toBeCloseTo(alone.units[0]!.maxHp * 1.08, 0);
     expect(ROSTER.find((d) => d.id === "devoit")?.passive).toBe(true);
+  });
+});
+
+describe("안키오: 신의 전달자", () => {
+  it("같은 편에 데보이트 계보가 있으면 순간이동 뒤 보호막을 얻는다", () => {
+    const withKin = createCombat([[{ defId: "ankio", star: 1, col: 3, row: 0 }, { defId: "devoit", star: 1, col: 0, row: 3 }], [{ defId: "relic", star: 1, col: 3, row: 3 }]]);
+    const alone = createCombat([[{ defId: "ankio", star: 1, col: 3, row: 0 }], [{ defId: "relic", star: 1, col: 3, row: 3 }]]);
+    for (const [state, expected] of [[withKin, true], [alone, false]] as const) {
+      const ankio = state.units.find((u) => u.defId === "ankio")!;
+      castAbility(state, ankio);
+      expect(ankio.shield > 0, expected ? "계보가 있으면" : "혼자면").toBe(expected);
+    }
+  });
+});
+
+describe("봇과 데보이트 계보", () => {
+  it("데도키온이 있으면 E 코드를 만들어 끼우고, 진화 재료는 재련하지 않는다", () => {
+    let n = 0;
+    const state = createRoom("ADMF", 0, false, "chess", false);
+    const ids: string[] = [];
+    for (const name of ["가", "나"]) {
+      const r = joinRoom(state, { name, userId: `u${name}` }, 0, () => `id${++n}`);
+      if (!r.ok) throw new Error("join");
+      ids.push(r.player.id);
+    }
+    const rng = () => 0.5;
+    for (const id of ids) setReady(state, id, true, 0, 1, rng);
+    const seat = state.players.find((p) => p.id === ids[0])!.seat;
+    const me = state.chess!.players[seat];
+    me.bench[0] = { uid: "d1", defId: "dedokion", star: 1 };
+    me.materials = { bit: 1, edgem: 1, "ancient-shard": 2 };
+    me.weapons = {};
+    runChessBot(state, ids[0]!, 0, 1, rng);
+    // 비트 + 에드잼 -> X-E E 코드 (재련대에 들어가서 다음 라운드에 무기가 된다)
+    expect(me.materials.bit ?? 0).toBe(0);
+    expect(me.smelters.includes("e-code-xe") || (me.materials["xe-code"] ?? 0) > 0).toBe(true);
+    expect(me.materials["ancient-shard"]).toBe(2); // 진화 재료는 남긴다
+    // 무기가 되면 데도키온에 낀다
+    me.done = false;
+    me.weapons = { "e-code-xe": 1 };
+    runChessBot(state, ids[0]!, 0, 1, rng);
+    const dedokion = [...me.board, ...me.bench].find((u) => u?.uid === "d1")!;
+    expect(dedokion.weapon).toBe("e-code-xe");
   });
 });

@@ -40,7 +40,7 @@ export const MATERIALS: readonly MaterialDef[] = [
   M("chaos-crystal", "혼돈의 결정체", "rare", "chaos-staff"),
   M("bitcoin", "비트코인", "legendary", "bitcoin-greatsword"),
   M("digital-miner", "디지털 채굴기", "legendary", "digital-miner-pouch"),
-  // 데도키온 진화 재료 (조합으로만): 비트 + 혼돈의 결정체 -> X-E, 비트 + 어둠의 정수 -> V-E, 클로우스톤 + 타이타늄 -> 재상트
+  // 데도키온 진화 재료 (조합으로만): 비트 + 에드잼 -> X-E, 비트 + 레드오션 -> V-E, 클로우스톤 + 타이타늄 -> 재상트
   { ...M("xe-code", "X-E 엔진 E 코드", "rare", "e-code-xe"), special: true },
   { ...M("ve-code", "V-E 엔진 E 코드", "rare", "e-code-ve"), special: true },
   { ...M("zesent", "재상트", "uncommon", "zesent-blade"), special: true },

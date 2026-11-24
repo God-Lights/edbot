@@ -5,7 +5,7 @@ import { adjacentUnits, alliesOf, chebyshev, comparePerspective, enemiesOf, forw
 import {
   abilityDamage, addEffect, createUnit, healUnit, pushEvent, shieldUnit, starPower,
 } from "./core";
-import { unitDef } from "./roster";
+import { LINEAGE, unitDef } from "./roster";
 import type { AbilityId, CombatState, CombatUnit } from "./types";
 
 function lowestHp(actor: CombatUnit, units: CombatUnit[]): CombatUnit | undefined {
@@ -161,6 +161,9 @@ export const ABILITIES: Record<AbilityId, Cast> = {
     const spot = freeAdjacent(s, target.x, target.y, u.seat, u.face);
     if (spot) jumpTo(s, u, spot.x, spot.y);
     abilityDamage(s, u, target, 2.2);
+    // 신의 전달자: 같은 편에 데보이트 계보(안키오 말고)가 살아 있으면 순간이동 뒤 최대 체력 20% 보호막 (3박자)
+    const kin = s.units.some((o) => o.alive && o.team === u.team && o.id !== u.id && !o.summon && o.defId !== "ankio" && LINEAGE.includes(o.defId));
+    if (kin) shieldUnit(s, u, u, u.maxHp * 0.2, 3);
   },
 };
 
