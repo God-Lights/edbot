@@ -69,15 +69,23 @@ result.prep = timed(result.prep, false, 25_000);
 
 // 디자인 확인용: 상점과 대기석에 1~4코스트 말을 섞어 가격 색이 다 보이게 한다.
 {
-  const units = (JSON.parse(catalog) as { units: Array<{ id: string; cost: number }> }).units;
+  // 상점에 나오는 캐릭터만 (진화 전용은 뺀다)
+  const units = (JSON.parse(catalog) as { units: Array<{ id: string; cost: number; evolveOnly?: boolean }> }).units.filter((u) => !u.evolveOnly);
   const byCost = (c: number, i = 0) => units.filter((u) => u.cost === c)[i]?.id ?? units[0]!.id;
-  const me = (result.prep as unknown as { chess: { me: { shop: Array<string | null>; bench: Array<Record<string, unknown> | null> } } }).chess.me;
+  const me = (result.prep as unknown as {
+    chess: { me: { shop: Array<string | null>; bench: Array<Record<string, unknown> | null>; board: Array<Record<string, unknown>>; materials: Record<string, number> } };
+  }).chess.me;
   me.shop = [byCost(1), byCost(2), byCost(3), byCost(4), byCost(2, 1)];
   const sample = me.bench.find((u) => u);
   if (sample) {
     me.bench[3] = { ...sample, uid: "demo0", defId: byCost(3), weapon: null };
-    me.bench[4] = { ...sample, uid: "demo1", defId: byCost(4), weapon: null };
+    // 데보이트 계보: E 코드(X-E)를 낀 데도키온이 2전투 중 1전투를 치른 상태 (진행 막대 확인용, -demoSelect demo-dedokion)
+    me.bench[4] = { uid: "demo-dedokion", defId: "dedokion", star: 1, weapon: "e-code-xe", evo: { engine: 9.4, core: 25 } };
   }
+  // 판 위에 데보이트와 안키오: 계보 시너지 "근원" 2명이 켜진다
+  if (me.board[0]) me.board[0] = { ...me.board[0], defId: "devoit", weapon: null };
+  if (me.board[1]) me.board[1] = { ...me.board[1], defId: "ankio", weapon: null };
+  me.materials = { ...me.materials, "ancient-shard": 1 };
 }
 result.combat = timed(result.combat, true, 30_000);
 for (const [name, room] of [["prep", result.prep], ["combat", result.combat]] as const) {

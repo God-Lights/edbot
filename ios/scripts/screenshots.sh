@@ -30,9 +30,13 @@ for kind in iPad iPhone; do
   xcrun simctl boot "$udid" 2>/dev/null || true
   xcrun simctl bootstatus "$udid" -b >/dev/null
   xcrun simctl install "$udid" "$app"
-  for screen in prep combat; do
+  # prep-evo: 준비 화면에서 데도키온을 고른 상태 (진화 진행 막대)
+  for screen in prep prep-evo combat; do
     xcrun simctl terminate "$udid" com.officialgl.commander 2>/dev/null || true
-    xcrun simctl launch "$udid" com.officialgl.commander -demo "$screen" >/dev/null
+    case "$screen" in
+      prep-evo) xcrun simctl launch "$udid" com.officialgl.commander -demo prep -demoSelect demo-dedokion >/dev/null ;;
+      *) xcrun simctl launch "$udid" com.officialgl.commander -demo "$screen" >/dev/null ;;
+    esac
     # 앱이 뜨는 시간을 기다린다. 전투는 끝나기 전에(진행 중인 모습) 찍는다.
     if [ "$screen" = combat ]; then sleep 4; else sleep 6; fi
     file="$out/$kind-$screen.png"
