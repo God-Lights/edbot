@@ -145,6 +145,8 @@ final class AppModel {
         myPlayerId = playerId
         status = .connected
         observe(room)
+        // -demoSelect <uid>: 그 기물을 고른 상태로 띄운다 (고른 기물 정보·진화 진행 막대 확인용)
+        if let selected = UserDefaults.standard.string(forKey: "demoSelect") { selectedUid = selected }
     }
 
     /// QR이나 링크(commander://connect?url=...)로 받은 서버를 입력칸에 채운다.
