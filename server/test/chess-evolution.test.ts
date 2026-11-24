@@ -93,13 +93,13 @@ describe("데보이트 -> 데도키온", () => {
 
 describe("진화 재료", () => {
   it("E 코드와 재상트는 정해진 조합으로만 만든다", () => {
-    expect(fuseMaterials("bit", "chaos-crystal")).toBe("xe-code");
-    expect(fuseMaterials("dark-essence", "bit")).toBe("ve-code");
+    expect(fuseMaterials("bit", "edgem")).toBe("xe-code");
+    expect(fuseMaterials("redocean", "bit")).toBe("ve-code");
     expect(fuseMaterials("titanium", "clawstone")).toBe("zesent");
     const g = newGame();
     const p = g.players[0];
-    p.materials = { bit: 1, "chaos-crystal": 1 };
-    expect(combineItems(g, 0, { kind: "material", id: "bit" }, { kind: "material", id: "chaos-crystal" })).toEqual({ ok: true });
+    p.materials = { bit: 1, edgem: 1 };
+    expect(combineItems(g, 0, { kind: "material", id: "bit" }, { kind: "material", id: "edgem" })).toEqual({ ok: true });
     expect(p.materials["xe-code"]).toBe(1);
   });
 
@@ -235,10 +235,10 @@ describe("봇과 데보이트 계보", () => {
     const seat = state.players.find((p) => p.id === ids[0])!.seat;
     const me = state.chess!.players[seat];
     me.bench[0] = { uid: "d1", defId: "dedokion", star: 1 };
-    me.materials = { bit: 1, "chaos-crystal": 1, "ancient-shard": 2 };
+    me.materials = { bit: 1, edgem: 1, "ancient-shard": 2 };
     me.weapons = {};
     runChessBot(state, ids[0]!, 0, 1, rng);
-    // 비트 + 혼돈의 결정체 -> X-E E 코드 (재련대에 들어가서 다음 라운드에 무기가 된다)
+    // 비트 + 에드잼 -> X-E E 코드 (재련대에 들어가서 다음 라운드에 무기가 된다)
     expect(me.materials.bit ?? 0).toBe(0);
     expect(me.smelters.includes("e-code-xe") || (me.materials["xe-code"] ?? 0) > 0).toBe(true);
     expect(me.materials["ancient-shard"]).toBe(2); // 진화 재료는 남긴다

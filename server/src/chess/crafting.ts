@@ -79,8 +79,9 @@ export function buildFusions(materials: ReadonlyArray<{ id: string; rarity: Rari
 
 /** 진화 재료를 만드는 정해진 조합 (희귀도가 다른 짝이라 자동 조합표의 순서에 영향이 없다) */
 export const EVOLUTION_FUSIONS: readonly MaterialFusion[] = [
-  { a: "bit", b: "chaos-crystal", result: "xe-code" },
-  { a: "bit", b: "dark-essence", result: "ve-code" },
+  // 보통 재료(30% 확률)와 짝지어서 8라운드 안에 모을 수 있게 한다. (희귀 재료 짝은 측정에서 진화가 0회였다)
+  { a: "bit", b: "edgem", result: "xe-code" },
+  { a: "bit", b: "redocean", result: "ve-code" },
   { a: "clawstone", b: "titanium", result: "zesent" },
 ];
 
