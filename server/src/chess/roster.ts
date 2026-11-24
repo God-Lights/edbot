@@ -98,14 +98,14 @@ export const LINEAGE: readonly string[] = ["devoit", "ankio", "dedokion", "toka-
 
 /**
  * 데도키온의 진화 (게임용 수치. 설정의 값을 화면에 그대로 보여 주되, 8라운드 안에 끝나게 줄였다).
- * - 엔진 탑재율: E 코드를 끼고 전투에 나갈 때마다 +9.4%, 18.8%면 완료 (2전투)
+ * - 엔진 탑재율: E 코드를 끼고 전투에 한 번 나가면 18.8%로 완료 (처음엔 2전투였는데 8라운드 안에 진화가 드물어서 1전투로 줄였다)
  * - A-C 코어: 전투에 나갈 때마다 +25, 50이면 완료 (2전투)
  * - 고대조각 / 재상트: 재료 2개 (화면에는 1개 = 80, 160이면 완료)
  * 다 채우면 다음 라운드 시작에 E 코드와 재료 2개를 쓰고 진화한다.
  */
 export const EVOLUTION = {
   from: "dedokion",
-  enginePerCombat: 9.4,
+  enginePerCombat: 18.8,
   engineNeed: 18.8,
   corePerCombat: 25,
   coreNeed: 50,

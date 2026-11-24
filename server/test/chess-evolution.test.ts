@@ -121,14 +121,15 @@ describe("데도키온 -> 토가로가 / 드워곤", () => {
     expect(owned(g).find((u) => u.defId === "dedokion")!.evo).toEqual({ engine: 0, core: EVOLUTION.corePerCombat });
   });
 
-  it("X-E E 코드 + 2전투 + 고대의 파편 2개 -> 다음 라운드 시작에 토가로가", () => {
+  it("X-E E 코드 + 2전투(엔진은 1전투, A-C 코어는 2전투) + 고대의 파편 2개 -> 다음 라운드 시작에 토가로가", () => {
     const g = newGame();
     const unit = dedokionOnBoard(g);
     const p = g.players[0];
     p.weapons["e-code-xe"] = 1;
     expect(equip(g, 0, "e-code-xe", unit.uid)).toEqual({ ok: true });
     playRound(g);
-    expect(owned(g).find((u) => u.uid === unit.uid)!.evo).toEqual({ engine: 9.4, core: 25 });
+    // 엔진은 한 번에 다 차고, A-C 코어는 아직 절반
+    expect(owned(g).find((u) => u.uid === unit.uid)!.evo).toEqual({ engine: 18.8, core: 25 });
     // 재료가 모자라면 다 채워도 진화하지 않는다
     playRound(g);
     expect(owned(g).find((u) => u.uid === unit.uid)!.defId).toBe("dedokion");
