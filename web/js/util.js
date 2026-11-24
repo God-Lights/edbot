@@ -15,7 +15,10 @@ export const MOBIUS_SUDDEN_BEAT = 28;
 
 export const PIECE_COLOR = { king: "#f2c74d", queen: "#e661d9", rook: "#e08061", bishop: "#59ccbf", knight: "#73b3ff", pawn: "#b8b8c7" };
 export const PIECE_NAME = { king: "킹", queen: "퀸", rook: "룩", bishop: "비숍", knight: "나이트", pawn: "폰" };
-export const COST_COLOR = { 1: "#b8b8b8", 2: "#6bd98c", 3: "#6194ff", 4: "#f2c74d" };
+/** 가격별 색 (롤토체스처럼): 1 회색 · 2 초록 · 3 파랑 · 4 보라 · 5 금색 */
+export const COST_COLOR = { 1: "#9ea3b3", 2: "#2fbf6b", 3: "#338ff2", 4: "#b852f2", 5: "#f7ba38" };
+/** 능력을 쓰는 데 필요한 마나 (서버 roster.ts 의 BASE.energy) */
+export const ENERGY_MAX = { 1: 60, 2: 80, 3: 100, 4: 120 };
 export const RARITY_COLOR = { common: "#b8b8b8", uncommon: "#6bd98c", rare: "#6194ff", legendary: "#f2c74d" };
 export const RARITY_NAME = { common: "흔함", uncommon: "보통", rare: "희귀", legendary: "전설" };
 export const MINE = "#6194ff";
