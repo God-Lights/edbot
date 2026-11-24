@@ -3,7 +3,7 @@
 
 import { availableIds, currentTurnSeat } from "./game";
 import { deployCap } from "./chess/game";
-import { unitDef } from "./chess/roster";
+import { EVOLUTION, unitDef } from "./chess/roster";
 import { MARKET_PRICE, materialDef } from "./chess/weapons";
 import { combine, parseWeapon } from "./chess/crafting";
 import type { Role } from "./chess/types";
@@ -184,6 +184,29 @@ export function runChessBot(state: RoomState, botId: string, now: number, scale:
 
   // 0) 자원: 광물 시장에서 재료를 사고, 재료를 재련대에 넣는다. (자원 시스템이 있는 판, 쉬운 봇은 쓰지 않는다)
   const rarityRank = (id: string): number => ["common", "uncommon", "rare", "legendary"].indexOf(materialDef(id)?.rarity ?? "common");
+  // 데보이트 계보: 데도키온이 있으면 E 코드를 만들어 끼우고, 진화 재료(고대의 파편·재상트)는 재련하지 않고 남긴다. (쉬운 봇은 안 한다)
+  const dedokion = units().find((u) => u.defId === EVOLUTION.from);
+  const keep = new Set<string>();
+  if (chess.resources && level !== "easy" && dedokion) {
+    const fuse = (a: string, b: string) => {
+      if ((me.materials[a] ?? 0) > 0 && (me.materials[b] ?? 0) > 0) cmd({ t: "combine", a: { kind: "material", id: a }, b: { kind: "material", id: b } });
+    };
+    const hasCode = (code: string) => (me.weapons[code] ?? 0) > 0 || units().some((u) => u.weapon && parseWeapon(u.weapon)?.parts.includes(code));
+    // 아직 E 코드가 없으면 만든다: 비트 + 혼돈의 결정체 -> X-E, 비트 + 어둠의 정수 -> V-E
+    if (!hasCode("e-code-xe") && !hasCode("e-code-ve") && !(me.materials["xe-code"] || me.materials["ve-code"])) {
+      fuse("bit", "chaos-crystal");
+      fuse("bit", "dark-essence");
+    }
+    // V-E 쪽이면 재상트를 만든다 (클로우스톤 + 타이타늄)
+    if (hasCode("e-code-ve") || me.materials["ve-code"]) fuse("clawstone", "titanium");
+    for (const branch of EVOLUTION.branches) keep.add(branch.material);
+    // E 코드를 낀다
+    for (const branch of EVOLUTION.branches) {
+      if ((me.weapons[branch.code] ?? 0) > 0 && !(dedokion.weapon && parseWeapon(dedokion.weapon)?.parts.includes(branch.code))) {
+        cmd({ t: "equip", weaponId: branch.code, uid: dedokion.uid });
+      }
+    }
+  }
   if (chess.resources && level !== "easy") {
     if (!me.marketBought && chess.round >= 2) {
       const margin = level === "hard" ? 2 : 4;
@@ -193,7 +216,7 @@ export function runChessBot(state: RoomState, botId: string, now: number, scale:
         .sort((a, b) => b.rank - a.rank || a.slot - b.slot);
       if (options[0]) cmd({ t: "market", slot: options[0].slot });
     }
-    const owned = Object.entries(me.materials).filter(([, n]) => n > 0).map(([id]) => id).sort((a, b) => rarityRank(b) - rarityRank(a));
+    const owned = Object.entries(me.materials).filter(([id, n]) => n > 0 && !keep.has(id)).map(([id]) => id).sort((a, b) => rarityRank(b) - rarityRank(a));
     for (const id of owned) {
       while ((me.materials[id] ?? 0) > 0 && me.smelters.some((w) => w === null)) {
         if (!cmd({ t: "smelt", material: id })) break;
@@ -201,7 +224,7 @@ export function runChessBot(state: RoomState, botId: string, now: number, scale:
     }
     // 어려운 봇: 재련대에 못 넣고 남은 재료는 같은 희귀도끼리 합쳐서 한 단계 위 재료로 만들고, 재련대가 비면 그것을 재련한다.
     if (level === "hard") {
-      const leftovers = () => Object.entries(me.materials).filter(([, n]) => n > 0).map(([id]) => id).sort();
+      const leftovers = () => Object.entries(me.materials).filter(([id, n]) => n > 0 && !keep.has(id)).map(([id]) => id).sort();
       for (let guard = 0; guard < 4; guard++) {
         const ids = leftovers();
         let fused = false;
