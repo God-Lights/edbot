@@ -646,10 +646,15 @@ struct ChessPrepView: View {
     @ViewBuilder
     private func selectedOverlay(_ me: ChessSelfSnapshot) -> some View {
         if let uid = model.selectedUid, let unit = findUnit(me, uid: uid) {
-            selectedPanel(me, unit: unit)
-                .frame(width: 260)
-                .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.85)))
-                .padding(6)
+            // 판 높이를 넘으면(아이폰, 진화 막대가 있는 데도키온 등) 넘치지 않고 안에서 스크롤한다.
+            ViewThatFits(in: .vertical) {
+                selectedPanel(me, unit: unit)
+                ScrollView(.vertical, showsIndicators: true) { selectedPanel(me, unit: unit) }
+            }
+            .frame(width: compact ? 300 : 260)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.85)))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .padding(6)
         }
     }
 
