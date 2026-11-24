@@ -85,6 +85,9 @@ export const ROSTER: readonly UnitDef[] = [
   def("sovereign", "소버녀", "rook", "군단", 1, "탱커", "loyal-guard", "가장 다친 아군에게 보호막을 주고 적을 도발한다"),
   def("java", "자바", "queen", "야수", 4, "딜러", "inferno", "적이 모인 곳에 불길을 일으켜 피해와 화상을 준다"),
   def("pi", "파이", "bishop", "숲", 4, "딜러", "resonance", "적 최대 4명에게 꺾이며 튕기는 음파를 쏜다"),
+  // 아나스프: 유일하게 다른 캐릭터로 승급한다. 프린세스가 전투 중 상대 끝 줄에 닿으면 그 전투 동안 퀸이 된다.
+  { ...def("princess-anasp", "프린세스 아나스프", "pawn", "왕가", 2, "기동", "royal-ascent", "상대 끝 줄에 닿으면 퀸 아나스프로 승급한다 (전투가 끝날 때까지)", true), promotesTo: "queen-anasp" },
+  { ...def("queen-anasp", "퀸 아나스프", "queen", "왕가", 4, "딜러", "royal-decree", "주변 2칸의 적에게 큰 피해를 주고 아군 전체 공격력을 올린다"), evolveOnly: true },
   { ...def("dedokion", "데도키온", "knight", "근원", 3, "딜러", "gene-absorb", "적을 처치할 때마다 그 적 최대 체력의 10%만큼 최대 체력이 오르고 회복한다", true), evolveOnly: true },
 ];
 

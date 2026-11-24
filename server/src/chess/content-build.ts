@@ -29,7 +29,7 @@ const ROLES = Object.keys(ROLE) as Role[];
 const RARITIES: readonly Rarity[] = ["common", "uncommon", "rare", "legendary"];
 const NEXT_RARITY: Record<Rarity, Rarity | null> = { common: "uncommon", uncommon: "rare", rare: "legendary", legendary: null };
 /** 에너지로 쓰지 않는 패시브 능력 (공식 캐릭터와 같은 규칙) */
-const PASSIVE_ABILITIES: ReadonlySet<string> = new Set(["relic-shield", "spore", "hunger"]);
+const PASSIVE_ABILITIES: ReadonlySet<string> = new Set(["relic-shield", "spore", "hunger", "royal-ascent"]);
 const ID = /^[a-z][a-z0-9-]{0,30}$/;
 const PACK_ID = /^[a-z][a-z0-9-]{1,30}$/;
 const TOP_KEYS = new Set(["apiVersion", "id", "name", "version", "description", "units", "unitOverrides", "materials", "weapons", "fusions", "rules"]);

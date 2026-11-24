@@ -116,6 +116,15 @@ public struct ChessCombatUnit: Codable, Equatable, Sendable {
     public let maxHp: Double
     public let summon: Bool
     public let weapon: String?
+    /// 전투 중 다른 캐릭터로 승급했으면 그 캐릭터 (프린세스 아나스프 -> 퀸 아나스프). 프레임의 승급 표시부터 쓴다.
+    public var promotedTo: String? = nil
+    public var promotedMaxHp: Double? = nil
+
+    /// 이 프레임에서 보이는 캐릭터와 최대 체력
+    public func form(promoted: Bool) -> (defId: String, maxHp: Double) {
+        if promoted, let to = promotedTo { return (to, promotedMaxHp ?? maxHp) }
+        return (defId, maxHp)
+    }
 }
 
 /// 전투 중 일어난 일 하나: [박자, 종류, 행동한 기물 번호, 대상 번호(-1 없음), 능력 id]

@@ -1554,7 +1554,9 @@ struct ChessArena: View {
         let unit = combat.units[index]
         if let frame = combat.interpolated(position: position, index: index), frame.alive {
             let point = display(x: frame.x, y: frame.y)
-            let ratio: Double = unit.maxHp > 0 ? min(1, max(0, frame.hp / unit.maxHp)) : 0
+            // 다른 캐릭터로 승급한 기물(퀸 아나스프)은 승급한 프레임부터 그 모습과 최대 체력으로 그린다.
+            let form = unit.form(promoted: frame.promoted)
+            let ratio: Double = form.maxHp > 0 ? min(1, max(0, frame.hp / form.maxHp)) : 0
             let side: CGFloat = cell * 0.88
             // 이번 박자에 쓰러지는 기물은 서서히 사라진다.
             let k: Int = Int(position.rounded(.down))
@@ -1568,12 +1570,12 @@ struct ChessArena: View {
             let stacked: Bool = ghost && frontCells.contains(Int(frame.y.rounded()) * chessBoardSize + Int(frame.x.rounded()))
             let bob: CGFloat = ghost && !stacked ? CGFloat(sin(position * 3.2 + Double(index))) * cell * 0.04 : 0
             let open: Bool = ghost && frame.gauge >= chessWormholeBeats
-            let info: ChessUnitInfo? = model.chessUnit(unit.defId)
-            let shieldRatio: Double = unit.maxHp > 0 ? min(1 - ratio, frame.shield / unit.maxHp) : 0
+            let info: ChessUnitInfo? = model.chessUnit(form.defId)
+            let shieldRatio: Double = form.maxHp > 0 ? min(1 - ratio, frame.shield / form.maxHp) : 0
             let energyMax: Double? = ChessStyle.energyMax(cost: info?.cost ?? 1, passive: info?.passive ?? false)
             let energyRatio: Double? = energyMax.map { min(1, max(0, frame.energy / $0)) }
             ZStack(alignment: .bottom) {
-                ChessToken(defId: unit.defId, star: unit.star, tint: unit.seat == seat ? Theme.mine : Theme.theirs, armed: unit.weapon != nil, weaponId: unit.weapon)
+                ChessToken(defId: form.defId, star: unit.star, tint: unit.seat == seat ? Theme.mine : Theme.theirs, armed: unit.weapon != nil, weaponId: unit.weapon)
                     .brightness(flash * 0.6)
                     .opacity(ghost ? 0.5 : 1)
                     .overlay {

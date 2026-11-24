@@ -110,6 +110,13 @@ export const ABILITIES: Record<AbilityId, Cast> = {
       from = next;
     }
   },
+  // 프린세스 아나스프: 승급은 sim.ts 의 checkPromotion 이 한다 (패시브)
+  "royal-ascent": () => {},
+  // 퀸 아나스프(칙령): 주변 2칸의 적에게 공격력의 150% 피해, 아군 전체 공격력 +15% (4박자)
+  "royal-decree": (s, u) => {
+    for (const e of enemiesOf(s, u).filter((o) => chebyshev(u, o) <= 2)) abilityDamage(s, u, e, 1.5);
+    for (const ally of alliesOf(s, u, true)) addEffect(ally, { type: "atkUp", value: 0.15 * starPower(u), untilBeat: s.beat + 4 });
+  },
   // 아군 1명(공격력이 가장 높은)의 공격력 +20%, 5박자
   inspire: (s, u) => {
     const target = [...alliesOf(s, u, true)].sort((a, b) => b.atk - a.atk || comparePerspective(u)(a, b))[0];

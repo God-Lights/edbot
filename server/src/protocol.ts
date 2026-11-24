@@ -304,7 +304,8 @@ export interface ChessOpponentSnapshot {
 export interface ChessCombatSnapshot {
   /** 두 팀이 실제로 낸 배치(각자 시점) */
   boards: [Array<{ defId: string; star: 1 | 2; col: number; row: number }>, Array<{ defId: string; star: 1 | 2; col: number; row: number }>];
-  units: Array<{ defId: string; seat: Seat; star: 1 | 2; maxHp: number; summon: boolean; weapon: string | null }>;
+  /** promotedTo/promotedMaxHp: 전투 중 다른 캐릭터로 승급한 기물 (프레임의 승급 표시(2)부터 이 캐릭터로 그린다) */
+  units: Array<{ defId: string; seat: Seat; star: 1 | 2; maxHp: number; summon: boolean; weapon: string | null; promotedTo?: string; promotedMaxHp?: number }>;
   /** frames[k][i] = [x, y, hp, energy, shield, flags(1=생존, 2=승급)]. 아직 없는 소환수는 배열이 짧다. */
   frames: number[][][];
   /** [박자, 종류(attack|ability|death|promote|move|mine), 행동한 기물 번호, 대상 번호(-1 없음, mine이면 칸 번호), 능력 id(mine이면 재료 id)] */
