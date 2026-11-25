@@ -18,12 +18,21 @@ on:
       - "local-server/**"
       - ".github/workflows/local-server.yml"
   workflow_dispatch:
+  # 릴리스 워크플로(server-release.yml)가 버전을 넘겨 부른다. 같은 점검을 거친 결과물을 릴리스에 올린다.
+  workflow_call:
+    inputs:
+      version:
+        description: "릴리스 버전 (.deb 버전). 비우면 package.json 의 버전"
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
 
 concurrency:
-  group: local-server-${{ github.ref }}
+  # 다른 워크플로가 불렀을 때(github.workflow 가 부른 쪽 이름) 그 실행끼리만 겹치지 않게 한다
+  group: local-server-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -83,8 +92,10 @@ jobs:
           sha256sum dist/* | tee dist/SHA256SUMS.txt
       - name: 우분투 .deb 만들고 설치해서 런처 점검
         working-directory: local-server
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          sh linux/build-deb.sh
+          sh linux/build-deb.sh $VERSION
           sudo dpkg -i dist/commander-server_*_amd64.deb
           mkdir -p ~/.config/commander-server
           printf 'PORT=8796\nNAME="우분투 점검"\n' > ~/.config/commander-server/config
@@ -213,7 +224,14 @@ jobs:
           bun build.ts --edition expert
           mv dist/commander-server dist/commander-server-macos
           mv dist/commander-server-expert dist/commander-server-expert-macos
-          file dist/commander-server-macos
+          # 인텔 맥용 (이 러너는 애플 실리콘이라 실행 점검은 못 하고, 형식만 확인한다)
+          bun build.ts --target bun-darwin-x64
+          bun build.ts --edition expert --target bun-darwin-x64
+          mv dist/commander-server-darwin-x64 dist/commander-server-macos-intel
+          mv dist/commander-server-expert-darwin-x64 dist/commander-server-expert-macos-intel
+          codesign --force --sign - dist/commander-server-macos-intel dist/commander-server-expert-macos-intel
+          file dist/commander-server-macos dist/commander-server-macos-intel
+          file dist/commander-server-macos-intel | grep -q x86_64
           ls -lh dist
       - name: 실행파일 하나만 있는 폴더에서 실행하고 점검
         run: |
@@ -256,4 +274,6 @@ jobs:
           path: |
             local-server/dist/commander-server-macos
             local-server/dist/commander-server-expert-macos
+            local-server/dist/commander-server-macos-intel
+            local-server/dist/commander-server-expert-macos-intel
           retention-days: 14

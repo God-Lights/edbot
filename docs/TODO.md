@@ -26,7 +26,7 @@ iOS 화면은 이 환경에서 실행할 수 없으므로, 먼저 CI에서 시�
 - [ ] 접속해서 봇과 한 판, 두 사람이 한 판, 껐다 켜도 전적이 남는지
 - [ ] 같은 기기 화면 분할(서버 + 게임, `http://localhost:8787`)
 - [ ] 문제가 있으면: 웹뷰 안 엔진 시작, 로컬 네트워크 권한부터 의심
-- [ ] (나중) 릴리스·SideStore 소스에 서버 앱 추가
+- [x] 릴리스·SideStore 소스에 서버 앱 추가: Actions "Server release" (태그 `server-vX.Y.Z`), SideStore 소스의 두 번째 앱 "COMMANDER 서버"
 
 ## 3. 게임
 - [ ] 무한 모드 2v2 팀전 (전투 유닛에 `team` 필드만 준비됨)
@@ -85,8 +85,12 @@ iOS 화면은 이 환경에서 실행할 수 없으므로, 먼저 CI에서 시�
 ## 4. 서버·배포
 - [x] 맥용 로컬 서버: CI `macos` 작업에서 바닐라·엑스퍼트를 만들어 실행 점검(웹·API·봇 대전·두 사람 대전·데이터 폴더·잠금·재시작 뒤 전적·팩 적용), 결과물 `commander-server-macos`
 - [ ] 개발 서버 도메인 (env.dev, 지금은 workers.dev 주소)
+- [x] 문의(채팅): 설치 안내의 "문의하기" 탭, 관리자 페이지 `/support-admin.html` (Durable Object SupportDesk)
+- [ ] 문의 관리자 키: GitHub Secrets 에 `SUPPORT_ADMIN_KEY` 넣기 (넣으면 다음 배포 때 Cloudflare 시크릿으로 올라간다)
+- [ ] (나중) 새 문의가 오면 알림 (지금은 관리자 페이지를 열어 둬야 10초마다 보인다)
 - [x] 설치 안내 페이지 `/install.html` (브라우저, iPad·iPhone SideStore·Sideloadly, 안드로이드 준비 중, 내 서버 열기, 문제 해결). 로비와 서버 첫 화면에 링크
-- [ ] 로컬 서버 실행파일 공개 다운로드 (지금은 Actions 결과물뿐이라 설치 안내에 "운영하는 사람에게 받기"로 적어 둠)
+- [x] 로컬 서버 실행파일 공개 다운로드: Actions **Server release** → Run workflow 에서 버전을 적으면 점검(윈도우·맥·우분투) 뒤 릴리스 `server-vX.Y.Z`에 윈도우·맥(애플 실리콘·인텔)·리눅스·.deb·iPad 서버 앱을 올린다
+- [ ] 첫 서버 릴리스 실행 (server-v0.1.0)
 
 ## 끝난 것 (최근)
 - [x] JSON 저장소, `/api/server`와 서버별 로그인 방식

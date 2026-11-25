@@ -4,4 +4,6 @@ interface Env {
   STORE?: import("./ranking/store").RankingStore;
   /** "true"면 GL 계정이 없는 플레이어도 이름으로 전적을 남긴다. (로컬 서버용) */
   RECORD_ANONYMOUS?: string;
+  /** 문의(채팅)에 답하는 관리자 키. 운영은 시크릿, 로컬 서버는 --support-key. 없으면 답하기가 꺼진다. */
+  SUPPORT_ADMIN_KEY?: string;
 }

@@ -25,7 +25,7 @@ const embedded = (await import("./generated/embedded").catch(() => null)) as
   | null;
 
 // 서버 코드는 설치 뒤에 불러온다. (Response 등 전역을 바꾼 다음에 평가되게)
-const { default: worker, Room, AuthStore, Matchmaker, LiveRegistry } = await import("../../server/src/index");
+const { default: worker, Room, AuthStore, Matchmaker, LiveRegistry, SupportDesk } = await import("../../server/src/index");
 
 // ---- 설정 ----
 
@@ -143,6 +143,8 @@ const env: Record<string, unknown> = {
   EDITION: edition === "expert" ? "expert" : "vanilla",
   SERVER_VERSION: packageInfo.version,
   RECORD_ANONYMOUS: "true", // GL 계정이 없으니 이름으로 전적을 남긴다. (봇과 한 판은 남기지 않는다)
+  // 문의 답하기(관리자 페이지 support-admin.html)용 키: --support-key 또는 COMMANDER_SUPPORT_KEY. 없으면 답하기만 꺼진다.
+  SUPPORT_ADMIN_KEY: option("support-key", ""),
 };
 const envOf = () => env;
 const namespaces = {
@@ -150,6 +152,7 @@ const namespaces = {
   AUTH: new ObjectNamespace("AuthStore", AuthStore as never, envOf, dataDir),
   MATCH: new ObjectNamespace("Matchmaker", Matchmaker as never, envOf, dataDir),
   LIVE: new ObjectNamespace("LiveRegistry", LiveRegistry as never, envOf, dataDir),
+  SUPPORT: new ObjectNamespace("SupportDesk", SupportDesk as never, envOf, dataDir),
 };
 Object.assign(env, namespaces);
 const woken = Object.values(namespaces).reduce((sum, ns) => sum + ns.wakeAll(), 0);

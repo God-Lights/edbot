@@ -63,6 +63,21 @@ describe("SideStore 소스", () => {
     expect(JSON.parse(JSON.stringify(source))).toEqual(source); // JSON으로 직렬화 가능
   });
 
+  it("서버 앱(server-v*, CommanderServer.ipa)이 있으면 두 번째 앱으로 싣는다", () => {
+    const serverRelease = release("server-v0.1.0", "2026-11-25T00:00:00Z", { assets: [asset("CommanderServer.ipa", 555), asset("commander-server.exe", 9)] });
+    const source = buildSource([serverRelease, release("ios-v0.5.8", "2026-11-24T00:00:00Z")], "https://s.test/sidestore.json") as { apps: Array<Record<string, unknown>> };
+    expect(source.apps.map((a) => a.bundleIdentifier)).toEqual(["com.officialgl.commander", "com.officialgl.commander.server"]);
+    const server = source.apps[1]!;
+    expect(server.version).toBe("0.1.0");
+    expect(server.downloadURL).toContain("CommanderServer.ipa");
+    expect(server.size).toBe(555);
+    // 게임 앱 버전 목록에는 서버 릴리스가 섞이지 않는다
+    expect((source.apps[0]!.versions as Array<{ version: string }>).map((v) => v.version)).toEqual(["0.5.8"]);
+    // ipa 가 없는 서버 릴리스(데스크톱 실행파일만)는 싣지 않는다
+    const noIpa = buildSource([release("server-v0.2.0", "2026-11-26T00:00:00Z", { assets: [asset("commander-server.exe")] })], "https://s.test/s.json") as { apps: unknown[] };
+    expect(noIpa.apps).toEqual([]);
+  });
+
   it("릴리스가 하나도 없으면 앱 없이 소스만 만들고, 아이콘 주소는 비지 않는다", () => {
     const source = buildSource([], "https://s.test/sidestore.json") as { apps: unknown[]; iconURL: string };
     expect(source.apps).toEqual([]);
