@@ -77,3 +77,14 @@ jobs:
       - run: npm run deploy
       # 전적과 랭킹 테이블. 이미 적용된 마이그레이션은 건너뛴다. (API 토큰에 "D1 편집" 권한이 필요하다)
       - run: npm run db:migrate
+      # 문의(채팅) 답하기용 관리자 키. GitHub 저장소 Secrets 에 SUPPORT_ADMIN_KEY 가 있을 때만 Cloudflare 시크릿으로 올린다.
+      # 없으면 사용자는 문의를 남길 수 있지만 /support-admin.html 에서 답할 수 없다.
+      - name: 문의 관리자 키
+        env:
+          SUPPORT_ADMIN_KEY: ${{ secrets.SUPPORT_ADMIN_KEY }}
+        run: |
+          if [ -n "$SUPPORT_ADMIN_KEY" ]; then
+            printf '%s' "$SUPPORT_ADMIN_KEY" | npx wrangler secret put SUPPORT_ADMIN_KEY
+          else
+            echo "::warning::GitHub Secrets 에 SUPPORT_ADMIN_KEY 가 없어 문의 답하기(관리자 페이지)가 꺼져 있다."
+          fi

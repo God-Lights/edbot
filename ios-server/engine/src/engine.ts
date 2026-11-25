@@ -18,7 +18,7 @@ import type { ServerSocket } from "../../../local-server/src/runtime/websocket";
 import { loadPlugins } from "../../../local-server/src/plugins";
 import { MemFs } from "./memfs";
 import type { FsOp } from "./memfs";
-import worker, { Room, AuthStore, Matchmaker, LiveRegistry } from "../../../server/src/index";
+import worker, { Room, AuthStore, Matchmaker, LiveRegistry, SupportDesk } from "../../../server/src/index";
 
 export interface Host {
   post(message: unknown): void;
@@ -99,6 +99,7 @@ export function start(options: StartOptions) {
     AUTH: new ObjectNamespace("AuthStore", AuthStore as never, envOf, ".", fs),
     MATCH: new ObjectNamespace("Matchmaker", Matchmaker as never, envOf, ".", fs),
     LIVE: new ObjectNamespace("LiveRegistry", LiveRegistry as never, envOf, ".", fs),
+    SUPPORT: new ObjectNamespace("SupportDesk", SupportDesk as never, envOf, ".", fs),
   };
   Object.assign(env, namespaces);
   const woken = Object.values(namespaces).reduce((sum, ns) => sum + ns.wakeAll(), 0);

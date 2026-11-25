@@ -293,3 +293,12 @@ npm run balance                  # 기본 2000판
 npx tsx scripts/chess-balance.ts 5000 14 6 1   # 판수, 예산(골드), 기물 수, 시드
 ```
 같은 예산의 무작위 팀을 자리를 바꿔 싸우게 하고 캐릭터와 시너지 승률, 돌발 사망 비율, seat 쏠림을 표로 출력한다.
+
+## 문의(채팅)
+설치 안내 페이지(`/install.html#ask`)에서 사용자가 문의를 남기면 Durable Object `SupportDesk`(이름 `global`)에 대화별로 저장된다.
+관리자는 `/support-admin.html` 에서 관리자 키로 들어가 목록을 보고 답한다. 사용자는 같은 페이지에서 답을 본다(6초마다 확인).
+
+- 관리자 키: 시크릿 `SUPPORT_ADMIN_KEY`. GitHub 저장소 Secrets 에 같은 이름으로 넣으면 배포 워크플로가 Cloudflare 에 올린다.
+  직접 넣으려면 `npx wrangler secret put SUPPORT_ADMIN_KEY`. 로컬 서버는 `--support-key <키>` 또는 `COMMANDER_SUPPORT_KEY`.
+- 제한: 글 1000자, 한 사람(IP)이 한 시간에 새 대화 5개, 한 대화에서 1분에 6개, 한 대화 200개.
+- 대화 id 는 추측할 수 없는 난수이고 사용자의 브라우저에만 저장된다(대화 주소 복사로 다른 기기에서 이어 보기).

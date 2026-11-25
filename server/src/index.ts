@@ -1,3 +1,5 @@
+import { handleSupport } from "./support";
+import { SupportDesk } from "./support-desk";
 import { roster } from "./chess/roster";
 import { MARKET_PRICE, materials, weapons as chessWeapons } from "./chess/weapons";
 import { HYBRID_POWER, STAR_POWER, fusions } from "./chess/crafting";
@@ -21,7 +23,7 @@ import { LiveRegistry } from "./registry";
 import { GUEST_HEADER, parseGuest, wsAccess } from "./guest";
 import { CODE_ALPHABET, CODE_LENGTH, generateRoomCode } from "./codes";
 
-export { AuthStore, LiveRegistry, Matchmaker, Room };
+export { AuthStore, LiveRegistry, Matchmaker, Room, SupportDesk };
 
 
 
@@ -290,6 +292,10 @@ export default {
         return json({ error: "ranking_unavailable" }, 503);
       }
     }
+
+    // /api/support/* -> 문의(채팅). 설치 안내 페이지의 문의 탭과 관리자 페이지(support-admin.html)가 쓴다.
+    const support = await handleSupport(request, env, url);
+    if (support) return support;
 
     // GET /sidestore.json -> SideStore(AltStore 호환) 소스. SideStore에서 "소스 추가"에 이 주소를 넣는다.
     if (request.method === "GET" && url.pathname === "/sidestore.json") {

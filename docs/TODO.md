@@ -85,6 +85,9 @@ iOS 화면은 이 환경에서 실행할 수 없으므로, 먼저 CI에서 시�
 ## 4. 서버·배포
 - [x] 맥용 로컬 서버: CI `macos` 작업에서 바닐라·엑스퍼트를 만들어 실행 점검(웹·API·봇 대전·두 사람 대전·데이터 폴더·잠금·재시작 뒤 전적·팩 적용), 결과물 `commander-server-macos`
 - [ ] 개발 서버 도메인 (env.dev, 지금은 workers.dev 주소)
+- [x] 문의(채팅): 설치 안내의 "문의하기" 탭, 관리자 페이지 `/support-admin.html` (Durable Object SupportDesk)
+- [ ] 문의 관리자 키: GitHub Secrets 에 `SUPPORT_ADMIN_KEY` 넣기 (넣으면 다음 배포 때 Cloudflare 시크릿으로 올라간다)
+- [ ] (나중) 새 문의가 오면 알림 (지금은 관리자 페이지를 열어 둬야 10초마다 보인다)
 - [x] 설치 안내 페이지 `/install.html` (브라우저, iPad·iPhone SideStore·Sideloadly, 안드로이드 준비 중, 내 서버 열기, 문제 해결). 로비와 서버 첫 화면에 링크
 - [x] 로컬 서버 실행파일 공개 다운로드: Actions **Server release** → Run workflow 에서 버전을 적으면 점검(윈도우·맥·우분투) 뒤 릴리스 `server-vX.Y.Z`에 윈도우·맥(애플 실리콘·인텔)·리눅스·.deb·iPad 서버 앱을 올린다
 - [ ] 첫 서버 릴리스 실행 (server-v0.1.0)

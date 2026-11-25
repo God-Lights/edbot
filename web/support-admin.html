@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0c26">
+<meta name="robots" content="noindex">
+<title>COMMANDER 문의 관리</title>
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<style>
+  :root {
+    --bg: #08071f; --panel-top: rgba(23,33,64,.92); --panel-bot: rgba(14,20,43,.92);
+    --gold: #c8aa6e; --gold-hi: #f0d9a0; --silver: #d1d1d6; --dim: #9a9ab0; --line: rgba(200,170,110,.35);
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { background: var(--bg); }
+  body { margin: 0; min-height: 100vh; color: var(--silver); background: linear-gradient(#0e0c26, var(--bg) 600px) no-repeat, var(--bg);
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 1.15rem; color: var(--gold-hi); }
+  header .grow { flex: 1; }
+  input, textarea, button { font: inherit; }
+  .input { color: var(--silver); background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.15); border-radius: 8px; padding: 7px 10px; }
+  .btn { min-height: 36px; padding: 6px 14px; border-radius: 8px; font-weight: 700; cursor: pointer; background: linear-gradient(var(--gold-hi), var(--gold)); color: #1a1205; border: 1px solid rgba(255,255,255,.3); }
+  .btn.sec { background: rgba(255,255,255,.06); color: var(--silver); border-color: var(--line); }
+  .wrap { display: grid; grid-template-columns: 320px 1fr; height: calc(100vh - 61px); }
+  .list { border-right: 1px solid var(--line); overflow-y: auto; }
+  .item { display: block; width: 100%; text-align: left; padding: 10px 14px; border: 0; border-bottom: 1px solid rgba(255,255,255,.06); background: none; color: inherit; cursor: pointer; }
+  .item:hover, .item.on { background: rgba(200,170,110,.12); }
+  .item b { color: var(--silver); }
+  .item small { display: block; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badge { float: right; min-width: 20px; padding: 0 6px; border-radius: 10px; background: #ff5a5a; color: #fff; font-size: .75rem; text-align: center; }
+  .closed { opacity: .5; }
+  .view { display: flex; flex-direction: column; min-height: 0; }
+  .view-head { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,.08); }
+  .view-head .grow { flex: 1; }
+  .log { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .bubble { max-width: 72%; padding: 8px 12px; border-radius: 14px; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+  .bubble time { display: block; font-size: .7rem; opacity: .6; margin-top: 3px; }
+  .bubble.user { align-self: flex-start; background: linear-gradient(var(--panel-top), var(--panel-bot)); border: 1px solid var(--line); }
+  .bubble.staff { align-self: flex-end; background: linear-gradient(var(--gold-hi), var(--gold)); color: #1a1205; }
+  form.reply { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid rgba(255,255,255,.08); }
+  form.reply textarea { flex: 1; resize: none; }
+  .empty { margin: auto; color: var(--dim); }
+  .login { max-width: 420px; margin: 12vh auto; display: grid; gap: 10px; padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: linear-gradient(var(--panel-top), var(--panel-bot)); }
+  .login p { margin: 0; color: var(--dim); font-size: .9rem; }
+  .err { color: #ff8a7a; font-size: .9rem; min-height: 1.2em; }
+  @media (max-width: 720px) {
+    .wrap { grid-template-columns: 1fr; height: auto; }
+    .list { max-height: 34vh; border-right: 0; border-bottom: 1px solid var(--line); }
+    .view { min-height: 60vh; }
+  }
+</style>
+</head>
+<body>
+<header><h1>문의 관리</h1><span class="grow"></span><span id="summary" style="color:var(--dim);font-size:.9rem"></span>
+  <button class="btn sec" id="logout" hidden>키 지우기</button></header>
+
+<div class="login" id="login">
+  <b>관리자 키</b>
+  <p>서버의 SUPPORT_ADMIN_KEY 값을 넣으세요. 이 브라우저에만 저장돼요.</p>
+  <input class="input" id="key" type="password" autocomplete="current-password" placeholder="관리자 키">
+  <button class="btn" id="enter">들어가기</button>
+  <div class="err" id="login-err"></div>
+</div>
+
+<div class="wrap" id="app" hidden>
+  <div class="list" id="list"></div>
+  <div class="view" id="view"><div class="empty">왼쪽에서 문의를 고르세요</div></div>
+</div>
+
+<script>
+  var KEY = "commander.supportAdminKey";
+  var key = (function () { try { return localStorage.getItem(KEY) || ""; } catch (e) { return ""; } })();
+  var current = null;
+  var threads = [];
+
+  function api(path, body) {
+    return fetch(path, {
+      method: body ? "POST" : "GET",
+      headers: Object.assign({ authorization: "Bearer " + key }, body ? { "content-type": "application/json" } : {}),
+      body: body ? JSON.stringify(body) : undefined,
+      cache: "no-store",
+    }).then(function (r) { return r.json().then(function (d) { if (!r.ok) throw Object.assign(new Error(d.message || r.status), { status: r.status }); return d; }); });
+  }
+  function fmt(at) { return new Date(at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+  function showLogin(message) {
+    document.getElementById("login").hidden = false;
+    document.getElementById("app").hidden = true;
+    document.getElementById("logout").hidden = true;
+    document.getElementById("login-err").textContent = message || "";
+  }
+  function refreshList() {
+    return api("/api/support/admin/threads").then(function (d) {
+      document.getElementById("login").hidden = true;
+      document.getElementById("app").hidden = false;
+      document.getElementById("logout").hidden = false;
+      threads = d.threads;
+      var unread = threads.reduce(function (n, t) { return n + t.staffUnread; }, 0);
+      document.getElementById("summary").textContent = "문의 " + threads.length + "개 · 안 읽음 " + unread;
+      document.title = (unread ? "(" + unread + ") " : "") + "COMMANDER 문의 관리";
+      var list = document.getElementById("list");
+      list.innerHTML = "";
+      if (!threads.length) list.appendChild(el("div", "empty", "아직 문의가 없어요"));
+      threads.forEach(function (t) {
+        var b = el("button", "item" + (t.id === current ? " on" : "") + (t.closed ? " closed" : ""));
+        if (t.staffUnread) b.appendChild(el("span", "badge", String(t.staffUnread)));
+        b.appendChild(el("b", null, t.name + (t.closed ? " (끝남)" : "")));
+        b.appendChild(el("small", null, (t.last ? (t.last.from === "staff" ? "↳ " : "") + t.last.text : "") ));
+        b.appendChild(el("small", null, fmt(t.updatedAt) + " · " + t.count + "개"));
+        b.addEventListener("click", function () { open(t.id); });
+        list.appendChild(b);
+      });
+    }).catch(function (e) { if (e.status === 401 || e.status === 403) showLogin(e.message); });
+  }
+  function open(id) {
+    current = id;
+    api("/api/support/admin/thread?id=" + id).then(function (t) {
+      var view = document.getElementById("view");
+      view.innerHTML = "";
+      var head = el("div", "view-head");
+      head.appendChild(el("b", null, t.name));
+      head.appendChild(el("span", null, "시작 " + fmt(t.createdAt)));
+      head.appendChild(el("span", "grow"));
+      var toggle = el("button", "btn sec", t.closed ? "다시 열기" : "끝내기");
+      toggle.addEventListener("click", function () { api("/api/support/admin/close", { id: id, closed: !t.closed }).then(function () { open(id); refreshList(); }); });
+      head.appendChild(toggle);
+      view.appendChild(head);
+      var log = el("div", "log");
+      t.messages.forEach(function (m) {
+        var b = el("div", "bubble " + m.from, m.text);
+        b.appendChild(el("time", null, (m.from === "staff" ? "운영 · " : "") + fmt(m.at)));
+        log.appendChild(b);
+      });
+      view.appendChild(log);
+      var form = el("form", "reply");
+      var ta = el("textarea", "input"); ta.rows = 2; ta.placeholder = "답장 (Enter 보내기, Shift+Enter 줄바꿈)";
+      var send = el("button", "btn", "보내기"); send.type = "submit";
+      form.appendChild(ta); form.appendChild(send);
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        if (!ta.value.trim()) return;
+        send.disabled = true;
+        api("/api/support/admin/reply", { id: id, text: ta.value }).then(function () { open(id); refreshList(); })
+          .catch(function (err) { alert(err.message); send.disabled = false; });
+      });
+      ta.addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); form.requestSubmit(); } });
+      view.appendChild(form);
+      log.scrollTop = log.scrollHeight;
+      ta.focus();
+      refreshList();
+    });
+  }
+
+  document.getElementById("enter").addEventListener("click", function () {
+    key = document.getElementById("key").value.trim();
+    try { localStorage.setItem(KEY, key); } catch (e) {}
+    refreshList();
+  });
+  document.getElementById("key").addEventListener("keydown", function (e) { if (e.key === "Enter") document.getElementById("enter").click(); });
+  document.getElementById("logout").addEventListener("click", function () {
+    try { localStorage.removeItem(KEY); } catch (e) {}
+    key = ""; current = null; showLogin();
+  });
+  if (key) refreshList(); else showLogin();
+  // 새 문의를 10초마다 확인한다 (열어 둔 대화는 사용자가 쓰는 중일 수 있어 목록만)
+  setInterval(function () { if (key && !document.hidden) refreshList(); }, 10000);
+</script>
+</body>
+</html>
