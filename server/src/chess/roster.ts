@@ -64,7 +64,8 @@ export const ROSTER: readonly UnitDef[] = [
   def("skritch", "스크리치", "pawn", "이계", 1, "딜러", "hunger", "처치할 때마다 공격력이 오른다", true),
   def("felis", "펠리스", "bishop", "야수", 1, "서포터", "inspire", "아군 1명의 공격력을 5초간 +20% 올린다"),
   def("lappus", "라푸스", "bishop", "숲", 2, "서포터", "heal", "가장 다친 아군을 회복한다"),
-  def("for-the-more", "포더모어", "bishop", "군단", 2, "서포터", "rally", "아군 전체의 공격력을 5초간 +20% 올린다"),
+  // 포더모어: 제노사우로스 Gen M (초전설). 상점에서 빠지고 ★2 제노사우로스의 유전 선택으로만 얻는다.
+  { ...def("for-the-more", "포더모어", "bishop", "군단", 4, "서포터", "gene-chorus", "아군 전체를 최대 체력의 12%만큼 회복하고 공격력을 25% 올린다"), evolveOnly: true },
   def("raufaino", "라우페이노", "rook", "군단", 2, "탱커", "shield-wall", "자신과 인접 아군에게 보호막을 준다"),
   def("obelion", "오벨리온", "rook", "고대", 2, "탱커", "stone-skin", "4초간 받는 피해 -50%, 주변 적을 도발한다"),
   def("marshal-berg", "마샬 베르그", "king", "군단", 2, "지휘", "formation", "같은 줄 아군의 공격력을 6초간 +25% 올린다"),
@@ -88,17 +89,40 @@ export const ROSTER: readonly UnitDef[] = [
   // 아나스프: 유일하게 다른 캐릭터로 승급한다. 프린세스가 전투 중 상대 끝 줄에 닿으면 그 전투 동안 퀸이 된다.
   { ...def("princess-anasp", "프린세스 아나스프", "pawn", "왕가", 2, "기동", "royal-ascent", "상대 끝 줄에 닿으면 퀸 아나스프로 승급한다 (전투가 끝날 때까지)", true), promotesTo: "queen-anasp" },
   { ...def("queen-anasp", "퀸 아나스프", "queen", "왕가", 4, "딜러", "royal-decree", "주변 2칸의 적에게 큰 피해를 주고 아군 전체 공격력을 올린다"), evolveOnly: true },
+  // 제노사우로스 Gen Y / Gen Z (전설): ★2 제노사우로스의 유전 선택으로만 얻는다.
+  { ...def("lepid", "레피드", "knight", "이계", 3, "암살", "scale-rush", "체력이 가장 낮은 적에게 돌진해 큰 피해를 주고 보호막을 얻는다"), evolveOnly: true },
+  { ...def("lusandia", "루산디아", "rook", "이계", 3, "탱커", "carapace", "적을 도발하고 받는 피해를 줄이며 붙은 적에게 피해를 준다"), evolveOnly: true },
   { ...def("dedokion", "데도키온", "knight", "근원", 3, "딜러", "gene-absorb", "적을 처치할 때마다 그 적 최대 체력의 10%만큼 최대 체력이 오르고 회복한다", true), evolveOnly: true },
 ];
 
-/** 같은 캐릭터 3장을 합치면 ★2 대신 다른 캐릭터(★1)가 된다: 데보이트 3장 -> 데도키온 */
-export const MERGE_EVOLVE: Readonly<Record<string, string>> = { devoit: "dedokion" };
+/**
+ * 같은 캐릭터 3장을 합치면 ★2 대신 다른 캐릭터(★1)가 된다. (설정 v2부터 없음: 데보이트 3장도 보통 ★2)
+ * 데도키온은 ★2 제노사우로스의 유전 선택(GENES)으로 얻는다.
+ */
+export const MERGE_EVOLVE: Readonly<Record<string, string>> = {};
+
+/**
+ * 제노사우로스 유전 갈래 (설계 33장): ★2 제노사우로스를 준비 단계에서 고른 갈래의 ★1로 바꾼다.
+ * 전설(Gen Y·Z)은 언제든, 초전설(Gen X·M)은 minRound 라운드부터.
+ */
+export const GENES = {
+  from: "xenosaurs",
+  options: [
+    { to: "lepid", gen: "Y", grade: "전설", minRound: 1 },
+    { to: "lusandia", gen: "Z", grade: "전설", minRound: 1 },
+    { to: "dedokion", gen: "X", grade: "초전설", minRound: 4 },
+    { to: "for-the-more", gen: "M", grade: "초전설", minRound: 4 },
+  ],
+} as const;
 
 /** 진화로 얻은 캐릭터의 뿌리와 ★1 한 장이 뿌리 몇 장인가 (팔 때 공용 풀에 돌려줄 수) */
 export const EVOLVED_FROM: Readonly<Record<string, { root: string; copies: number }>> = {
-  dedokion: { root: "devoit", copies: 3 },
-  "toka-loga": { root: "devoit", copies: 3 },
-  dwargon: { root: "devoit", copies: 3 },
+  dedokion: { root: "xenosaurs", copies: 3 },
+  "toka-loga": { root: "xenosaurs", copies: 3 },
+  dwargon: { root: "xenosaurs", copies: 3 },
+  lepid: { root: "xenosaurs", copies: 3 },
+  lusandia: { root: "xenosaurs", copies: 3 },
+  "for-the-more": { root: "xenosaurs", copies: 3 },
 };
 
 /** 데보이트 계보 (계보 시너지 "근원") */

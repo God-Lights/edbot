@@ -267,6 +267,19 @@ function evolutionHtml(me, unit) {
     <div class="sub">다 차면 다음 라운드 시작에 진화해요. (X-E 엔진 → 토가로가, V-E 엔진 → 드워곤)</div></div>`;
 }
 
+/** ★2 제노사우로스의 유전 갈래 고르기 (전설은 언제든, 초전설은 4라운드부터) */
+function geneHtml(unit) {
+  const genes = S.catalog?.genes;
+  if (!genes || unit.defId !== genes.from || unit.star !== 2) return "";
+  const round = S.room?.chess?.round ?? 1;
+  const btn = (o) => {
+    const locked = round < o.minRound;
+    return `<button class="mini gene${locked ? " locked" : ""}" data-act="gene" data-to="${esc(o.to)}"${locked ? " disabled" : ""}>
+      <b>${esc(unitInfo(o.to)?.nameKo ?? o.to)}</b><small>Gen ${esc(o.gen)} · ${esc(o.grade)}${locked ? ` · ${o.minRound}라운드부터` : ""}</small></button>`;
+  };
+  return `<div class="genes panel"><div class="sub">유전 갈래를 골라 진화해요</div><div class="gene-grid">${genes.options.map(btn).join("")}</div></div>`;
+}
+
 export function findUnit(me, uid) {
   return me.board.find((u) => u.uid === uid) ?? me.bench.find((u) => u && u.uid === uid) ?? null;
 }
@@ -283,6 +296,7 @@ function selectedHtml(me) {
     ${info ? `<div>${ic("heart")} ${Math.round(info.hp * f)} &nbsp; ${ic("sword")} ${Math.round(info.atk * f)}</div><div class="sub">${esc(info.abilityText)}</div>` : ""}
     ${w ? `<div class="wline">${ic("shield")} <b>${esc(w.nameKo)}</b> <button class="mini" data-act="unequip-sel">무기 빼기</button></div>` : ""}
     ${evolutionHtml(me, unit)}
+    ${geneHtml(unit)}
     <div class="btnrow">${onBoard ? `<button class="mini" data-act="bench-sel">대기석으로</button>` : ""}
     <button class="mini" data-act="sell-sel">판매 +${sellValue(info?.cost ?? 1, unit.star)}</button></div></div>`;
 }

@@ -300,6 +300,7 @@ export class Room extends DurableObject<Env> {
       case "combine":
       case "deploy":
       case "bench":
+      case "gene":
       case "done":
         await this.finishAction(ws, playerChess(this.state, playerId, msg, now, scale));
         return;

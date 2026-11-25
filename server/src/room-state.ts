@@ -26,7 +26,7 @@ import type { BattleState } from "./battle/core";
 import { activeSynergyIds } from "./synergy";
 import {
   boardPlacements, bothDone, buy, buyMaterial, combineItems, concedeGame, equip, smelt, unequip, createChessGame, deploy, finalRoster, finishRound, prepSeconds, reroll,
-  runRoundCombat, sell, setDone, startRound, toBench, COMBAT_LINGER_SECONDS,
+  runRoundCombat, sell, setDone, startRound, toBench, chooseGene, COMBAT_LINGER_SECONDS,
 } from "./chess/game";
 import type { ChessGame, ChessResult } from "./chess/game";
 import { toChessSnapshot } from "./chess/snapshot";
@@ -897,6 +897,9 @@ const CHESS_MESSAGES: Record<string, string> = {
   no_free_smelter: "빈 재련대가 없다.",
   no_weapon: "그 무기가 없다.",
   invalid_recipe: "그 둘은 합칠 수 없다.",
+  not_gene_ready: "★2 제노사우로스만 유전 갈래를 고를 수 있다.",
+  invalid_gene: "그런 유전 갈래는 없다.",
+  gene_locked: "초전설 갈래(데도키온·포더모어)는 4라운드부터 고를 수 있다.",
 };
 
 export type ChessCommand =
@@ -910,6 +913,7 @@ export type ChessCommand =
   | { t: "combine"; a: ItemRef; b: ItemRef }
   | { t: "deploy"; uid: string; col: number; row: number }
   | { t: "bench"; uid: string }
+  | { t: "gene"; uid: string; to: string }
   | { t: "done" };
 
 /** 체스판 자동 전투의 준비 단계 행동: 사기, 팔기, 새로고침, 놓기, 내리기, 준비 끝. */
@@ -940,6 +944,7 @@ export function playerChess(
     case "combine": result = combineItems(chess, seat, command.a, command.b); break;
     case "deploy": result = deploy(chess, seat, command.uid, command.col, command.row); break;
     case "bench": result = toBench(chess, seat, command.uid); break;
+    case "gene": result = chooseGene(chess, seat, command.uid, command.to); break;
     case "done":
       setDone(chess, seat, true);
       result = { ok: true };

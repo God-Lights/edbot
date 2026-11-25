@@ -134,6 +134,7 @@ public actor RoomConnection {
     public func sendEquip(_ weaponId: String, uid: String) async -> Bool { await send(MessageCodec.equip(weaponId, uid: uid)) }
     public func sendCombine(_ a: ChessItem, _ b: ChessItem) async -> Bool { await send(MessageCodec.combine(a, b)) }
     public func sendUnequip(_ uid: String) async -> Bool { await send(MessageCodec.unequip(uid)) }
+    public func sendGene(_ uid: String, to: String) async -> Bool { await send(MessageCodec.gene(uid, to: to)) }
     public func sendDone() async -> Bool { await send(MessageCodec.done()) }
     public func sendSurrender() async -> Bool { await send(MessageCodec.surrender()) }
     public func sendLock() async -> Bool { await send(MessageCodec.lock()) }

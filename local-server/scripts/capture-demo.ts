@@ -81,6 +81,8 @@ result.prep = timed(result.prep, false, 25_000);
     me.bench[3] = { ...sample, uid: "demo0", defId: byCost(3), weapon: null };
     // 데보이트 계보: E 코드(X-E)를 낀 데도키온이 2전투 중 1전투를 치른 상태 (진행 막대 확인용, -demoSelect demo-dedokion)
     me.bench[4] = { uid: "demo-dedokion", defId: "dedokion", star: 1, weapon: "e-code-xe", evo: { engine: 9.4, core: 25 } };
+    // ★2 제노사우로스: 유전 갈래 고르기 (-demoSelect demo-xeno)
+    me.bench[5] = { uid: "demo-xeno", defId: "xenosaurs", star: 2, weapon: null };
   }
   // 판 위에 데보이트와 안키오: 계보 시너지 "근원" 2명이 켜진다
   if (me.board[0]) me.board[0] = { ...me.board[0], defId: "devoit", weapon: null };

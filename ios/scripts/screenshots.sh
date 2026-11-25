@@ -30,11 +30,12 @@ for kind in iPad iPhone; do
   xcrun simctl boot "$udid" 2>/dev/null || true
   xcrun simctl bootstatus "$udid" -b >/dev/null
   xcrun simctl install "$udid" "$app"
-  # prep-evo: 준비 화면에서 데도키온을 고른 상태 (진화 진행 막대)
-  for screen in lobby prep prep-evo combat; do
+  # prep-evo: 준비 화면에서 데도키온을 고른 상태 (진화 진행 막대), prep-gene: ★2 제노사우로스 (유전 갈래)
+  for screen in lobby prep prep-evo prep-gene combat; do
     xcrun simctl terminate "$udid" com.officialgl.commander 2>/dev/null || true
     case "$screen" in
       prep-evo) xcrun simctl launch "$udid" com.officialgl.commander -demo prep -demoSelect demo-dedokion >/dev/null ;;
+      prep-gene) xcrun simctl launch "$udid" com.officialgl.commander -demo prep -demoSelect demo-xeno >/dev/null ;;
       lobby) xcrun simctl launch "$udid" com.officialgl.commander >/dev/null ;;
       *) xcrun simctl launch "$udid" com.officialgl.commander -demo "$screen" >/dev/null ;;
     esac

@@ -127,7 +127,29 @@ export const ABILITIES: Record<AbilityId, Cast> = {
     const target = [...alliesOf(s, u, true)].sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp || comparePerspective(u)(a, b))[0];
     if (target) healUnit(s, u, target, target.maxHp * 0.35);
   },
-  // 아군 전체 공격력 +20%, 5박자
+  // 레피드(Gen Y): 체력이 가장 낮은 적에게 돌진해 공격력의 170% 피해, 자신 최대 체력 15% 보호막(3박자)
+  "scale-rush": (s, u) => {
+    const target = lowestHp(u, enemiesOf(s, u));
+    if (!target) return;
+    const spot = freeAdjacent(s, target.x, target.y, u.seat, u.face);
+    if (spot) jumpTo(s, u, spot.x, spot.y);
+    abilityDamage(s, u, target, 1.7);
+    shieldUnit(s, u, u, u.maxHp * 0.15, 3);
+  },
+  // 루산디아(Gen Z): 3박자 도발, 받는 피해 -40%, 붙은 적 모두에게 공격력의 80% 피해
+  carapace: (s, u) => {
+    addEffect(u, { type: "taunt", value: 1, untilBeat: s.beat + 3 });
+    addEffect(u, { type: "dmgTaken", value: 0.6, untilBeat: s.beat + 3 });
+    for (const e of enemiesOf(s, u).filter((o) => chebyshev(u, o) <= 1)) abilityDamage(s, u, e, 0.8);
+  },
+  // 포더모어(Gen M): 아군 전체 최대 체력의 12% 회복, 공격력 +25%(5박자)
+  "gene-chorus": (s, u) => {
+    for (const ally of alliesOf(s, u, true)) {
+      healUnit(s, u, ally, ally.maxHp * 0.12 * starPower(u));
+      addEffect(ally, { type: "atkUp", value: 0.25 * starPower(u), untilBeat: s.beat + 5 });
+    }
+  },
+  // 아군 전체 공격력 +20%, 5박자 (예전 포더모어. 콘텐츠 팩용으로 남겨 둔다)
   rally: (s, u) => {
     for (const ally of alliesOf(s, u, true)) addEffect(ally, { type: "atkUp", value: 0.2 * starPower(u), untilBeat: s.beat + 5 });
   },

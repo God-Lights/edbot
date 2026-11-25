@@ -118,6 +118,8 @@ public enum MessageCodec {
     }
     /// 기물(uid)의 무기를 뺀다.
     public static func unequip(_ uid: String) -> String { "{\"t\":\"unequip\",\"uid\":\(quoted(uid))}" }
+    /// ★2 제노사우로스(uid)를 유전 갈래 캐릭터(to)로 바꾼다.
+    public static func gene(_ uid: String, to: String) -> String { "{\"t\":\"gene\",\"uid\":\(quoted(uid)),\"to\":\(quoted(to))}" }
     /// 준비 끝. 둘 다 끝내면 바로 전투가 시작된다.
     public static func done() -> String { "{\"t\":\"done\"}" }
     /// 항복. 언제든 할 수 있고 상대가 바로 이긴다.

@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0c26">
+<title>COMMANDER 설치 안내</title>
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<style>
+  :root {
+    --bg-top: #0e0c26; --bg-bottom: #08071f;
+    --panel-top: rgba(23,33,64,.88); --panel-bot: rgba(14,20,43,.88);
+    --gold: #c8aa6e; --gold-hi: #f0d9a0; --silver: #d1d1d6; --dim: #9a9ab0;
+    --line: rgba(200,170,110,.35); --ok: #6bd98c; --warn: #ff9f5a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  html { background: var(--bg-bottom); }
+  body {
+    min-height: 100vh; color: var(--silver); line-height: 1.6;
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+    background: radial-gradient(ellipse at 50% -10%, rgba(176,64,190,.18), transparent 60%) no-repeat, linear-gradient(var(--bg-top), var(--bg-bottom) 900px) no-repeat, var(--bg-bottom);
+    -webkit-text-size-adjust: 100%;
+  }
+  a { color: var(--gold-hi); }
+  .wrap { max-width: 860px; margin: 0 auto; padding: max(16px, env(safe-area-inset-top)) 16px 48px; }
+  header { display: flex; align-items: center; gap: 14px; padding: 12px 0 8px; }
+  header img { width: 64px; height: auto; }
+  header h1 { margin: 0; font-size: 1.5rem; color: var(--gold-hi); letter-spacing: .02em; }
+  header p { margin: 0; color: var(--dim); font-size: .92rem; }
+  .back { margin-left: auto; white-space: nowrap; font-size: .9rem; }
+  .nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 14px 0 22px; }
+  .nav a {
+    display: block; text-decoration: none; color: var(--silver); padding: 10px 12px; border-radius: 10px;
+    background: linear-gradient(var(--panel-top), var(--panel-bot)); border: 1px solid var(--line);
+  }
+  .nav a b { display: block; color: var(--gold-hi); font-size: .98rem; }
+  .nav a small { color: var(--dim); font-size: .78rem; }
+  section {
+    background: linear-gradient(var(--panel-top), var(--panel-bot)); border: 1px solid var(--line);
+    border-radius: 14px; padding: 16px 18px; margin: 0 0 16px; scroll-margin-top: 12px;
+  }
+  h2 { margin: 0 0 4px; font-size: 1.2rem; color: var(--gold-hi); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  h3 { margin: 18px 0 6px; font-size: 1rem; color: var(--silver); }
+  .tag { font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; border: 1px solid currentColor; }
+  .tag.ok { color: var(--ok); } .tag.warn { color: var(--warn); } .tag.dim { color: var(--dim); }
+  .lead { margin: 0 0 8px; color: var(--dim); }
+  ol, ul { margin: 6px 0; padding-left: 1.3em; }
+  li { margin: 4px 0; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 42px; padding: 8px 16px;
+    border-radius: 9px; font-weight: 700; text-decoration: none; cursor: pointer; font-size: .95rem; font-family: inherit;
+    background: linear-gradient(var(--gold-hi), var(--gold)); color: #1a1205; border: 1px solid rgba(255,255,255,.35);
+  }
+  .btn.sec { background: rgba(255,255,255,.06); color: var(--silver); border-color: var(--line); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+  code, .url {
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .86em; background: rgba(0,0,0,.35);
+    border: 1px solid rgba(255,255,255,.1); border-radius: 6px; padding: 1px 6px; word-break: break-all;
+  }
+  .url { display: block; padding: 8px 10px; margin: 6px 0; }
+  .release { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 12px 14px; border-radius: 10px; background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.08); margin: 10px 0 4px; }
+  .release img { width: 52px; height: 52px; border-radius: 12px; }
+  .release .meta { flex: 1; min-width: 160px; }
+  .release .meta b { color: var(--gold-hi); }
+  .release .meta small { display: block; color: var(--dim); }
+  .steps-nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 4px; }
+  .steps-nav a { font-size: .82rem; text-decoration: none; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--line); color: var(--silver); background: rgba(0,0,0,.2); }
+  .step { border-top: 1px solid rgba(255,255,255,.08); padding: 14px 0 6px; margin-top: 12px; scroll-margin-top: 12px; }
+  .step h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 1.08rem; color: var(--gold-hi); }
+  .num { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(var(--gold-hi), var(--gold)); color: #1a1205; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: .9rem; flex: none; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  .step.two { grid-template-columns: 1fr 1fr; }
+  .step .two + .two { margin-top: 10px; }
+  figure { margin: 0; }
+  figure img { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid rgba(255,255,255,.12); background: #000; }
+  figcaption { font-size: .82rem; color: var(--dim); margin-top: 5px; text-align: center; }
+  figure.wide { margin: 14px auto 0; max-width: 640px; }
+  .shots { display: grid; grid-template-columns: 1fr; gap: 16px; margin: 8px auto; max-width: 720px; }
+  .shots figcaption { color: var(--silver); font-size: .9rem; }
+  figure a { display: block; cursor: zoom-in; }
+  ul.dl { margin-bottom: 8px; }
+  details.alt { margin-top: 14px; border: 1px solid rgba(255,255,255,.1); border-radius: 10px; padding: 8px 12px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .cols > div { background: rgba(0,0,0,.2); border: 1px solid rgba(255,255,255,.07); border-radius: 10px; padding: 4px 14px 10px; }
+  .note { font-size: .88rem; color: var(--dim); border-left: 3px solid var(--gold); padding: 2px 0 2px 10px; margin: 10px 0 0; }
+  details { border-top: 1px solid rgba(255,255,255,.08); padding: 8px 0; }
+  details:first-of-type { border-top: 0; }
+  summary { cursor: pointer; font-weight: 600; color: var(--silver); }
+  details p, details ul { margin: 6px 0 2px; color: var(--dim); }
+  footer { text-align: center; color: var(--dim); font-size: .82rem; margin-top: 18px; }
+  @media (max-width: 640px) {
+    .nav { grid-template-columns: 1fr 1fr; }
+    .cols { grid-template-columns: 1fr; }
+    .two, .step.two { grid-template-columns: 1fr; }
+    header img { width: 48px; }
+    header h1 { font-size: 1.25rem; }
+    section { padding: 14px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="assets/logo.png" alt="">
+    <div><h1>COMMANDER 설치 안내</h1><p>체스판 자동 전투 · 2인 실시간 대전</p></div>
+    <a class="back" href="/">← 게임으로</a>
+  </header>
+
+  <nav class="nav">
+    <a href="#web"><b>브라우저</b><small>설치 없이 바로</small></a>
+    <a href="#ios"><b>iPad · iPhone</b><small>앱 설치</small></a>
+    <a href="#android"><b>안드로이드</b><small>준비 중</small></a>
+    <a href="#server"><b>내 서버 열기</b><small>같은 와이파이에서</small></a>
+  </nav>
+
+  <section id="web">
+    <h2>브라우저로 바로 하기 <span class="tag ok">가장 쉬움</span></h2>
+    <p class="lead">설치할 것이 없어요. PC, 맥, 아이패드, 안드로이드 모두 됩니다.</p>
+    <ol>
+      <li>Chrome, Safari, Edge 같은 최신 브라우저에서 아래 주소를 엽니다.</li>
+      <li>GL 계정으로 로그인하거나, 이름만 적고 시작해요. (게스트 방은 학번과 이름으로 들어가요)</li>
+    </ol>
+    <div class="row"><a class="btn" href="https://edgame-api.officialgl.com/">게임 열기</a><code>https://edgame-api.officialgl.com</code></div>
+    <p class="note">폰·태블릿에서는 브라우저의 <b>홈 화면에 추가</b>를 쓰면 앱처럼 아이콘에서 바로 열 수 있어요. (Safari: 공유 → 홈 화면에 추가, Chrome: ⋮ → 홈 화면에 추가) 게임은 가로 화면에서 가장 잘 보여요.</p>
+  </section>
+
+  <section id="ios">
+    <h2>iPad · iPhone 앱 <span class="tag ok">iPadOS·iOS 17 이상</span></h2>
+    <p class="lead">앱 스토어 앱이 아니라서 <b>내 Apple 계정으로 서명해서</b> 설치해요. <b>SideStore</b>를 한 번 설치해 두면 그다음부터는 iPad에서 바로 설치·업데이트할 수 있어요.</p>
+
+    <div class="release" id="release">
+      <img src="https://raw.githubusercontent.com/God-Lights/edbot/main/ios/EdbotApp/Assets.xcassets/AppIcon.appiconset/icon-1024.png" alt="">
+      <div class="meta"><b id="rel-title">최신 버전 확인 중…</b><small id="rel-sub">GitHub 릴리스</small></div>
+      <a class="btn sec" id="rel-ipa" href="https://github.com/God-Lights/edbot/releases">.ipa 받기</a>
+    </div>
+
+    <div class="steps-nav">
+      <a href="#ss-ready">1. 준비</a><a href="#ss-vpn">2. VPN 앱</a><a href="#ss-pc">3. 컴퓨터에서 설치</a><a href="#ss-ipad">4. iPad에서 마무리</a><a href="#ss-source">5. COMMANDER 소스 추가</a><a href="#ss-refresh">6. 7일마다</a>
+    </div>
+
+    <div class="step" id="ss-ready">
+      <h3><span class="num">1</span>준비물</h3>
+      <ul>
+        <li>잠금 암호가 설정된 iPad·iPhone (COMMANDER는 iPadOS·iOS 17 이상)</li>
+        <li>컴퓨터 한 대: 윈도우(64비트), 맥, 리눅스, 크롬북 중 하나. <b>처음 설치할 때만</b> 필요해요.</li>
+        <li>Apple 계정 (기기에 로그인된 계정이 아니어도 돼요)</li>
+        <li>USB 케이블, 그리고 와이파이 (모바일 데이터로는 안 돼요)</li>
+      </ul>
+    </div>
+
+    <div class="step two" id="ss-vpn">
+      <div>
+        <h3><span class="num">2</span>iPad에 VPN 앱 설치</h3>
+        <p>SideStore는 기기 안의 VPN으로 설치·새로고침을 해요.</p>
+        <ol>
+          <li>App Store에서 <a href="https://apps.apple.com/app/localdevvpn/id6755608044" target="_blank" rel="noopener"><b>LocalDevVPN</b></a>을 설치해요.</li>
+          <li>앱을 열고 <b>Connect</b>를 눌러요.</li>
+          <li>"VPN 구성 추가"를 물으면 <b>허용</b>을 누르고 암호를 넣어요.</li>
+        </ol>
+        <p class="note">앱을 설치·업데이트·새로고침할 때는 항상 이 VPN이 켜져 있어야 해요.</p>
+      </div>
+      <figure><img src="assets/install/step-vpn.jpg" alt="LocalDevVPN의 Connect 버튼" loading="lazy"><figcaption>LocalDevVPN에서 Connect</figcaption></figure>
+    </div>
+
+    <div class="step two" id="ss-pc">
+      <div>
+        <h3><span class="num">3</span>컴퓨터에서 SideStore 설치 (iloader)</h3>
+        <p>컴퓨터에 <a href="https://iloader.app" target="_blank" rel="noopener"><b>iloader</b></a>를 설치해요.</p>
+        <ul class="dl">
+          <li><b>맥</b>: <a href="https://github.com/nab138/iloader/releases/latest/download/iloader-darwin-universal.dmg">iloader (.dmg)</a></li>
+          <li><b>윈도우</b>: 먼저 <a href="https://www.apple.com/itunes/download/win64" target="_blank" rel="noopener">Apple 홈페이지의 iTunes</a>를 설치하고, <a href="https://github.com/nab138/iloader/releases/latest/download/iloader-windows-x64.msi">iloader (.msi)</a></li>
+          <li><b>리눅스</b>: <code>usbmuxd</code>를 설치하고 <a href="https://github.com/nab138/iloader/releases/latest/download/iloader-linux-amd64.deb">.deb</a> · <a href="https://github.com/nab138/iloader/releases/latest/download/iloader-linux-x86_64.rpm">.rpm</a> · <a href="https://github.com/nab138/iloader/releases/latest/download/iloader-linux-amd64.AppImage">AppImage</a></li>
+        </ul>
+        <ol>
+          <li>iPad를 USB 케이블로 연결해요. iPad에서 "이 컴퓨터를 신뢰하겠습니까?"가 나오면 <b>신뢰</b> → 암호.</li>
+          <li>iloader를 열고 <b>Apple 계정으로 로그인</b>해요. (대소문자를 구분해요)</li>
+          <li>목록에서 <b>내 iPad</b>를 골라요.</li>
+          <li><b>Install SideStore (Stable)</b>을 눌러요.</li>
+        </ol>
+      </div>
+      <figure><img src="assets/install/step-iloader.jpg" alt="iloader에서 로그인, 기기 선택, Install SideStore (Stable)" loading="lazy"><figcaption>로그인 → 기기 고르기 → Install SideStore (Stable)</figcaption></figure>
+    </div>
+
+    <div class="step" id="ss-ipad">
+      <h3><span class="num">4</span>iPad에서 마무리</h3>
+      <div class="two">
+        <div>
+          <ol>
+            <li><b>설정 → 일반 → VPN 및 기기 관리</b>로 가요.</li>
+            <li>"개발자 앱"에서 내 Apple 계정을 누르고 <b>"(계정)을(를) 신뢰함"</b> → <b>신뢰</b>. (iPadOS 18 이상은 <b>허용 및 재시동</b>이 나오면 누르고 암호를 넣어요)</li>
+          </ol>
+        </div>
+        <figure><img src="assets/install/step-trust.jpg" alt="VPN 및 기기 관리에서 개발자 신뢰" loading="lazy"><figcaption>개발자 앱 신뢰</figcaption></figure>
+      </div>
+      <div class="two">
+        <div>
+          <ol start="3">
+            <li><b>설정 → 개인정보 보호 및 보안</b> 맨 아래의 <b>개발자 모드</b>를 켜요. 기기가 다시 켜지면 <b>켜기</b>를 한 번 더 누르고 암호를 넣어요.</li>
+          </ol>
+        </div>
+        <figure><img src="assets/install/step-devmode.jpg" alt="개인정보 보호 및 보안의 개발자 모드" loading="lazy"><figcaption>개발자 모드 켜기</figcaption></figure>
+      </div>
+      <div class="two">
+        <div>
+          <ol start="4">
+            <li><b>LocalDevVPN</b>을 열고 <b>Connect</b>.</li>
+            <li><b>SideStore</b>를 열고 iloader에서 쓴 <b>같은 Apple 계정</b>으로 로그인해요.</li>
+            <li><b>My Apps</b> 탭에서 SideStore 오른쪽의 <b>7 DAYS</b>를 눌러 새로고침해요.</li>
+            <li>서명 인증서를 새로 만들지 물으면 <b>Yes</b> 또는 <b>Refresh Now</b>.</li>
+          </ol>
+          <p class="note">잘 되면 SideStore가 잠깐 홈 화면으로 나갔다가(알림이 와요) 몇 초 뒤 다시 열 수 있어요.</p>
+        </div>
+        <figure><img src="assets/install/step-myapps.jpg" alt="SideStore My Apps의 7 DAYS" loading="lazy"><figcaption>My Apps → 7 DAYS 눌러 새로고침</figcaption></figure>
+      </div>
+      <figure class="wide"><img src="assets/install/sidestore-news.jpg" alt="설치가 끝난 SideStore의 첫 화면" loading="lazy"><figcaption>설치가 끝나면 SideStore가 이렇게 열려요</figcaption></figure>
+    </div>
+
+    <div class="step" id="ss-source">
+      <h3><span class="num">5</span>COMMANDER 소스 추가하고 설치</h3>
+      <p><b>이 iPad에서</b> 버튼 하나로 추가할 수 있어요. (SideStore가 설치되어 있어야 해요)</p>
+      <div class="row"><a class="btn" id="add-source" href="#">SideStore에 소스 추가</a><button class="btn sec" id="copy-source" type="button">주소 복사</button></div>
+      <span class="url" id="source-url"></span>
+      <p>버튼이 안 되면 주소를 복사해서 직접 넣어요:</p>
+      <div class="shots">
+        <figure><img src="assets/install/source-1-plus.jpg" alt="Sources 탭과 + 버튼" loading="lazy"><figcaption><b>①</b> <b>Sources</b> 탭 → <b>②</b> 왼쪽 위 <b>+</b></figcaption></figure>
+        <figure><img src="assets/install/source-2-url.jpg" alt="주소를 넣으면 COMMANDER가 보이고 체크 버튼" loading="lazy"><figcaption><b>③</b> 주소 붙여 넣기 → <b>④</b> COMMANDER가 보이면 → <b>⑤</b> 오른쪽 위 <b>✓</b></figcaption></figure>
+        <figure><img src="assets/install/source-3-added.jpg" alt="Sources 목록에 COMMANDER" loading="lazy"><figcaption><b>⑥</b> 목록에 COMMANDER가 생겨요</figcaption></figure>
+      </div>
+      <ol start="7">
+        <li><b>Browse</b> 탭(또는 목록의 COMMANDER)에서 <b>COMMANDER</b>를 찾아 설치 버튼을 눌러요. LocalDevVPN이 켜져 있어야 해요.</li>
+        <li>새 버전이 나오면 SideStore의 <b>My Apps</b>에 업데이트가 떠요.</li>
+      </ol>
+    </div>
+
+    <div class="step" id="ss-refresh">
+      <h3><span class="num">6</span>7일마다 새로고침</h3>
+      <ul>
+        <li>무료 Apple 계정으로 서명한 앱은 <b>7일</b>이 지나면 열리지 않아요. 그 전에 LocalDevVPN을 켜고 SideStore <b>My Apps</b>에서 남은 날짜(예: <b>3 DAYS</b>)를 누르면 다시 7일이 돼요.</li>
+        <li>무료 계정은 SideStore를 포함해 <b>앱 3개까지</b> 설치돼요.</li>
+        <li>전적은 서버에 있어서 다시 설치해도 그대로예요.</li>
+        <li>iPad를 업데이트하거나 초기화하면 페어링 파일이 만료될 수 있어요. 컴퓨터의 iloader에서 <b>Delete Stored Pairing</b> → 기기를 눌러 iPad에서 <b>신뢰</b> → <b>Manage Pairing File</b> → SideStore 옆 <b>Place</b>.</li>
+      </ul>
+    </div>
+
+    <details class="alt">
+      <summary>SideStore 없이 컴퓨터로만 설치하기 (Sideloadly)</summary>
+      <ol>
+        <li>위의 <b>.ipa 받기</b>로 <code>Commander.ipa</code>를 컴퓨터에 받아요.</li>
+        <li><a href="https://sideloadly.io" target="_blank" rel="noopener">Sideloadly</a>를 설치하고 iPad를 케이블로 연결해요.</li>
+        <li>ipa 파일을 끌어다 놓고, Apple 계정을 적고 <b>Start</b>.</li>
+        <li>iPad에서 4단계의 <b>개발자 앱 신뢰</b>와 <b>개발자 모드</b>를 해요.</li>
+        <li>7일마다 컴퓨터에서 같은 방법으로 다시 설치해요.</li>
+      </ol>
+    </details>
+
+    <h3>COMMANDER를 처음 열면</h3>
+    <ul>
+      <li>서버 주소는 공식 서버가 기본이에요. <b>로그인하기</b>를 누르면 브라우저가 열려요. 로그인하고 <b>로그인 확인</b>을 누른 뒤 앱으로 돌아오면 돼요.</li>
+      <li>친구가 연 로컬 서버는 서버 화면의 <b>QR</b>을 카메라로 찍거나, 같은 와이파이면 서버 입력칸 아래 목록에서 골라요.</li>
+    </ul>
+    <p class="note">그림 중 아이패드 설정·iloader·VPN 화면은 이해를 돕기 위한 예시 그림이라 실제 화면과 조금 다를 수 있어요. 자세한 내용은 <a href="https://docs.sidestore.io/docs/installation/prerequisites" target="_blank" rel="noopener">SideStore 공식 설치 안내</a>를 참고하세요.</p>
+  </section>
+
+  <section id="android">
+    <h2>안드로이드 <span class="tag warn">준비 중</span></h2>
+    <p class="lead">안드로이드 앱(8.0 이상)은 준비 중이에요. 그 전까지는 Chrome에서 <a href="#web">브라우저로</a> 하고, <b>홈 화면에 추가</b>해 두면 편해요.</p>
+  </section>
+
+  <section id="server">
+    <h2>내 서버 열기 <span class="tag dim">선택</span></h2>
+    <p class="lead">인터넷이 없거나 우리끼리만 할 때, PC 한 대를 서버로 켜고 같은 와이파이에서 접속해요. 전적은 그 PC에 남아요.</p>
+    <p class="note">실행파일은 아직 공개 다운로드가 없어요. 운영하는 사람에게 받아 주세요.</p>
+    <div class="cols">
+      <div>
+        <h3>윈도우</h3>
+        <ol>
+          <li><code>commander-server.exe</code>를 원하는 폴더에 두고 실행해요. 데이터는 옆의 <code>commander-data</code> 폴더에 쌓여요.</li>
+          <li>"Windows의 PC 보호" 창이 뜨면 <b>추가 정보 → 실행</b>.</li>
+          <li>방화벽이 물으면 <b>허용</b> (폰이 서버를 찾으려면 필요해요).</li>
+        </ol>
+      </div>
+      <div>
+        <h3>맥</h3>
+        <ol>
+          <li>터미널에서 처음 한 번 잠금을 풀어요:<br><code>xattr -d com.apple.quarantine ./commander-server-macos</code></li>
+          <li><code>./commander-server-macos</code>로 실행해요.</li>
+        </ol>
+        <h3>우분투</h3>
+        <ol>
+          <li><code>sudo apt install ./commander-server_*.deb</code></li>
+          <li>앱 메뉴의 <b>COMMANDER 서버</b>를 눌러요. 접속 화면(QR)이 열려요.</li>
+        </ol>
+      </div>
+    </div>
+    <h3>접속하기</h3>
+    <ul>
+      <li>서버를 켜면 화면에 <code>http://IP주소:8787</code>과 QR이 나와요. 같은 화면은 서버 PC의 <code>http://localhost:8787/connect</code>에도 있어요.</li>
+      <li>브라우저: 그 주소를 그대로 열어요. 앱: QR을 찍거나 같은 와이파이 목록에서 골라요.</li>
+      <li>로컬 서버는 로그인 없이 이름만 써요. 이름이 같으면 같은 사람으로 전적이 이어져요.</li>
+    </ul>
+  </section>
+
+  <section id="help">
+    <h2>문제가 있을 때</h2>
+    <details><summary>앱을 열면 바로 꺼져요</summary><p>무료 Apple ID 서명이 7일이 지나 만료됐어요. SideStore에서 Refresh 하거나 Sideloadly로 다시 설치하세요. 개발자 모드가 꺼져 있어도 열리지 않아요.</p></details>
+    <details><summary>"신뢰하지 않는 개발자"라고 나와요</summary><p>설정 → 일반 → VPN 및 기기 관리에서 내 Apple ID를 신뢰로 바꿔 주세요.</p></details>
+    <details><summary>SideStore에 소스가 추가되지 않아요</summary><p>"주소 복사"로 주소를 복사한 뒤 SideStore의 Sources 탭 → 왼쪽 위 ＋ 에 직접 붙여 넣어 보세요. (<a href="#ss-source">그림 보기</a>) SideStore가 설치되지 않은 기기에서 "SideStore에 소스 추가" 버튼을 누르면 아무 일도 일어나지 않거나 오류가 나요.</p></details>
+    <details><summary>SideStore에서 설치·새로고침이 안 돼요</summary><p>LocalDevVPN이 연결되어 있는지 먼저 확인하세요. iPad를 업데이트했다면 페어링 파일이 만료됐을 수 있어요: <a href="#ss-refresh">6단계</a>의 방법으로 iloader에서 페어링 파일을 다시 넣어 주세요. 그래도 안 되면 <a href="https://docs.sidestore.io/docs/troubleshooting/common-issues" target="_blank" rel="noopener">SideStore 문제 해결</a>을 보세요.</p></details>
+    <details><summary>같은 와이파이인데 서버가 목록에 안 보여요</summary>
+      <ul>
+        <li>폰과 서버 PC가 정말 같은 와이파이인지 확인해요. (게스트 와이파이는 기기끼리 막혀 있기도 해요)</li>
+        <li>서버 PC의 방화벽에서 8787(TCP)과 5353(UDP)을 열어요. 목록에 없어도 주소를 직접 적거나 QR을 찍으면 돼요.</li>
+        <li>iPad 앱은 처음에 <b>로컬 네트워크</b> 권한을 물어요. 거절했다면 설정 → COMMANDER에서 켜 주세요.</li>
+      </ul>
+    </details>
+    <details><summary>화면이 깨져 보여요</summary><p>브라우저를 최신으로 업데이트해 주세요. 아주 오래된 브라우저에서는 일부 색과 배치가 맞지 않을 수 있어요.</p></details>
+  </section>
+
+  <footer>COMMANDER · <a href="https://github.com/God-Lights/edbot/releases" target="_blank" rel="noopener">모든 릴리스</a></footer>
+</div>
+<script>
+  // SideStore 소스는 공식 서버 주소를 쓴다 (어느 서버에서 이 페이지를 열어도 업데이트가 같은 곳에서 온다)
+  var SOURCE = "https://edgame-api.officialgl.com/sidestore.json";
+  document.getElementById("source-url").textContent = SOURCE;
+  document.getElementById("add-source").href = "sidestore://source?url=" + encodeURIComponent(SOURCE);
+  document.getElementById("copy-source").addEventListener("click", function () {
+    var button = this;
+    var done = function () { button.textContent = "복사했어요"; setTimeout(function () { button.textContent = "주소 복사"; }, 1800); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(SOURCE).then(done, function () { prompt("주소를 복사하세요", SOURCE); });
+    else prompt("주소를 복사하세요", SOURCE);
+  });
+
+  // 그림을 누르면 원본 크기로 연다
+  document.querySelectorAll("figure img").forEach(function (img) {
+    var link = document.createElement("a");
+    link.href = img.getAttribute("src");
+    link.target = "_blank";
+    link.rel = "noopener";
+    img.parentNode.insertBefore(link, img);
+    link.appendChild(img);
+  });
+
+  // 최신 iOS 버전: 이 서버의 /sidestore.json 에서 읽는다 (실패하면 릴리스 목록 링크 그대로)
+  fetch("/sidestore.json", { cache: "no-cache" })
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+    .then(function (data) {
+      var app = data && data.apps && data.apps[0];
+      var v = app && app.versions && app.versions[0];
+      if (!v) return;
+      var mb = v.size ? " · " + (v.size / 1048576).toFixed(1) + " MB" : "";
+      var date = v.date ? new Date(v.date).toLocaleDateString("ko-KR") : "";
+      document.getElementById("rel-title").textContent = "COMMANDER " + v.version;
+      document.getElementById("rel-sub").textContent = (date ? date + " 출시" : "") + mb + " · iOS " + (v.minOSVersion || "17.0") + " 이상";
+      document.getElementById("rel-ipa").href = v.downloadURL;
+    })
+    .catch(function () {
+      document.getElementById("rel-title").textContent = "COMMANDER (최신 버전)";
+      document.getElementById("rel-sub").textContent = "릴리스 목록에서 가장 위의 Commander.ipa 를 받으세요";
+    });
+</script>
+</body>
+</html>

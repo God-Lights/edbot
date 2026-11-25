@@ -26,7 +26,8 @@ function installLinks(origin: string): string {
   const source = `${origin}/sidestore.json`;
   return `<p style="margin-top:36px;font-size:14px">iPad에 설치하려면 SideStore에서 소스를 추가하세요.<br>
 <a href="sidestore://source?url=${encodeURIComponent(source)}">SideStore에 소스 추가</a><br>
-<small>${escapeHtml(source)}</small></p>`;
+<small>${escapeHtml(source)}</small><br>
+<a href="/install.html">설치 안내 전체 보기</a></p>`;
 }
 
 /** 첫 화면. 자동으로 넘기지 않고, 버튼을 눌러야 로그인 화면으로 간다. */

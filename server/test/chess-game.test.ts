@@ -146,9 +146,11 @@ describe("사기, 팔기, 새로고침", () => {
     const g = newGame();
     const p = g.players[0];
     give(g, 0, "relic", 2); // 대기석 2칸
+    const shopUnits = ROSTER.filter((d) => !d.evolveOnly && d.id !== "relic");
     for (let i = 2; i < BENCH_SIZE; i++) {
-      p.bench[i] = { uid: `f${i}`, defId: ROSTER[(i + 5) % 20]!.id, star: 1 };
-      g.pool[ROSTER[(i + 5) % 20]!.id] = (g.pool[ROSTER[(i + 5) % 20]!.id] ?? 0) - 1;
+      const id = shopUnits[(i + 5) % shopUnits.length]!.id;
+      p.bench[i] = { uid: `f${i}`, defId: id, star: 1 };
+      g.pool[id] = (g.pool[id] ?? 0) - 1;
     }
     give(g, 0, "relic", 1);
     expect(p.bench.filter((u) => u?.defId === "relic" && u.star === 2)).toHaveLength(1);
