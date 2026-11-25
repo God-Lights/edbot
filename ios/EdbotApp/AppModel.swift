@@ -124,6 +124,26 @@ final class AppModel {
         if authToken != nil { Task { await restoreLogin() } }
         refreshServerInfo()
         loadDemoIfRequested()
+        checkForUpdate()
+    }
+
+    // MARK: 새 버전 안내
+
+    /// 이 앱의 버전 (Info.plist). 개발용 빌드는 0.0.0
+    let appVersion: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+    /// SideStore 소스에 지금보다 새 버전이 있으면 로비에 띄운다
+    private(set) var appUpdate: AppUpdate?
+    /// "나중에"를 누르면 이번 실행 동안은 다시 띄우지 않는다
+    var updateDismissed = false
+
+    func checkForUpdate() {
+        guard UserDefaults.standard.string(forKey: "demo") == nil else { return } // CI 스크린샷에는 띄우지 않는다
+        let bundleId: String = Bundle.main.bundleIdentifier ?? "com.officialgl.commander"
+        let current: String = appVersion
+        Task {
+            guard let result = try? await URLSession.shared.data(from: AppUpdate.sourceURL) else { return }
+            appUpdate = AppUpdate.check(sourceJSON: result.0, bundleId: bundleId, current: current)
+        }
     }
 
     /// 화면 확인용(CI 스크린샷): 실행 인자 `-demo prep` 또는 `-demo combat` 이면 앱에 담긴 고정 데이터로 방 화면을 띄운다.

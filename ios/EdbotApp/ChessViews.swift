@@ -289,7 +289,8 @@ struct ChessPrepView: View {
                     HStack(alignment: .top, spacing: 10) {
                         VStack(spacing: compact ? 3 : 6) {
                             HStack(alignment: .top, spacing: 6) {
-                                traitColumn(me, width: traitW)
+                                // 왼쪽: 위는 시너지, 아래는 아이템(무기) 칸 — 롤토체스처럼 판 옆에 아이템이 늘 보인다
+                                leftColumn(me, width: traitW, height: cell * 5 + (compact ? 3 : 6))
                                 VStack(spacing: compact ? 3 : 6) {
                                     boardView(me, cell: cell)
                                         .overlay(alignment: .bottomLeading) { selectedOverlay(me) }
@@ -640,7 +641,23 @@ struct ChessPrepView: View {
     /// 고른 기물의 정보: 판 위에 작게 떠 있다. 바깥을 누르면 닫는다.
     @ViewBuilder
     private func selectedOverlay(_ me: ChessSelfSnapshot) -> some View {
-        if let uid = model.selectedUid, let unit = findUnit(me, uid: uid) {
+        if let weaponId = model.selectedWeaponId {
+            // 고른 무기: 이름과 효과, 끼우는 방법
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(weaponName(weaponId)).font(.subheadline.bold())
+                    Spacer(minLength: 0)
+                    Button { model.selectedWeaponId = nil } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                        .buttonStyle(.plain)
+                }
+                if let text = model.chessWeapon(weaponId)?.text { Text(text).font(.caption).foregroundStyle(Theme.warn) }
+                Text("낄 기물을 누르세요 (끌어다 놓아도 돼요)").font(.caption2).foregroundStyle(.secondary)
+            }
+            .padding(10)
+            .frame(width: compact ? 240 : 260, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.85)))
+            .padding(6)
+        } else if let uid = model.selectedUid, let unit = findUnit(me, uid: uid) {
             // 판 높이를 넘으면(아이폰, 진화 막대가 있는 데도키온 등) 넘치지 않고 안에서 스크롤한다.
             ViewThatFits(in: .vertical) {
                 selectedPanel(me, unit: unit)
@@ -676,7 +693,6 @@ struct ChessPrepView: View {
 
     private func resourcePanel(_ me: ChessSelfSnapshot) -> some View {
         let materialIds: [String] = me.materials.filter { $0.value > 0 }.map { $0.key }.sorted()
-        let weaponIds: [String] = me.weapons.filter { $0.value > 0 }.map { $0.key }.sorted()
         let freeSmelter: Bool = me.smelters.contains { $0 == nil }
         return VStack(alignment: .leading, spacing: compact ? 4 : 8) {
             if !compact { Text("자원").font(.subheadline.bold()) }
@@ -691,7 +707,7 @@ struct ChessPrepView: View {
                     marketRow(me, index: index)
                 }
             }
-            if !materialIds.isEmpty || !weaponIds.isEmpty {
+            if !materialIds.isEmpty || me.weapons.values.contains(where: { $0 > 0 }) {
                 combineBar
             }
             if !materialIds.isEmpty {
@@ -740,33 +756,7 @@ struct ChessPrepView: View {
             if !compact, !me.smelters.allSatisfy({ $0 == nil }) {
                 Text("재련 중인 무기는 다음 라운드 시작에 완성돼요.").font(.system(size: 9)).foregroundStyle(.secondary)
             }
-            if !weaponIds.isEmpty {
-                if !compact { Text("무기 · 기물 위로 끌어 놓으면 껴요 (다른 아이템 위로 끌면 조합)").font(.caption).foregroundStyle(.secondary) }
-                chipFlow {
-                    ForEach(weaponIds, id: \.self) { id in
-                        let rarity: String = model.chessWeapon(id)?.rarity ?? "common"
-                        let item = ChessItem(.weapon, id)
-                        let selected: Bool = model.selectedWeaponId == id || model.combineFirst == item
-                        Button {
-                            if model.combineMode { model.combineTap(item) } else { model.selectedWeaponId = model.selectedWeaponId == id ? nil : id }
-                        } label: {
-                            Text("\(weaponName(id)) ×\(me.weapons[id] ?? 0)")
-                                .font(.caption.bold())
-                                .padding(.horizontal, 8).padding(.vertical, 5)
-                                .background(Capsule().fill(ChessStyle.rarityColor(rarity).opacity(selected ? 0.55 : 0.25)))
-                                .overlay(Capsule().strokeBorder(selected ? Color.white : ChessStyle.rarityColor(rarity).opacity(0.7), lineWidth: selected ? 2 : 1))
-                        }
-                        .buttonStyle(.plain)
-                        .draggable("weapon:\(id)")
-                        .dropDestination(for: String.self) { items, _ in combineDrop(items, onto: item) }
-                        .transition(.scale(scale: 0.5).combined(with: .opacity))
-                    }
-                }
-                .animation(.spring(response: 0.35, dampingFraction: 0.7), value: weaponIds)
-                if let id = model.selectedWeaponId, let info = model.chessWeapon(id) {
-                    Text(info.text).font(.caption2).foregroundStyle(Theme.warn)
-                }
-            }
+            // 무기는 판 왼쪽 아래의 아이템 칸에 있다 (leftColumn)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .panel(padding: compact ? 6 : 10)
@@ -904,6 +894,105 @@ struct ChessPrepView: View {
     private func synergySteps(_ piece: Piece) -> [Int] {
         let needs: [Int] = Array(Set(model.chessSynergies.filter { $0.piece == piece }.map(\.need))).sorted()
         return needs.isEmpty ? (piece == .pawn ? [2, 4] : [2, 3]) : needs
+    }
+
+    /// 판 왼쪽 열: 위는 시너지(남는 높이만큼), 아래는 아이템 칸. 높이는 판 + 대기석과 같다.
+    private func leftColumn(_ me: ChessSelfSnapshot, width: CGFloat, height: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: compact ? 4 : 8) {
+            traitColumn(me, width: width)
+                .frame(maxHeight: .infinity, alignment: .top)
+                .clipped()
+            itemBench(me, width: width, maxHeight: height * (compact ? 0.62 : 0.55))
+        }
+        .frame(width: width, height: height, alignment: .top)
+    }
+
+    /// 아이템 칸 (롤토체스처럼): 가진 무기를 네모 칸으로. 누르고 기물을 누르거나, 기물 위로 끌어 놓으면 낀다.
+    /// 다른 무기 위로 끌면 조합, 무기를 낀 기물을 여기로 끌어 놓으면 뺀다.
+    @ViewBuilder
+    private func itemBench(_ me: ChessSelfSnapshot, width: CGFloat, maxHeight: CGFloat) -> some View {
+        let weaponIds: [String] = me.weapons.filter { $0.value > 0 }.map { $0.key }.sorted()
+        let hasResources: Bool = !chess.market.isEmpty || !chess.tiles.isEmpty || !me.materials.isEmpty || !weaponIds.isEmpty
+        if hasResources {
+            let spacing: CGFloat = 4
+            let side: CGFloat = floor((width - spacing) / 2)
+            let grid = LazyVGrid(columns: [GridItem(.fixed(side), spacing: spacing), GridItem(.fixed(side), spacing: spacing)], alignment: .leading, spacing: spacing) {
+                ForEach(weaponIds, id: \.self) { id in
+                    itemSlot(me, id: id, side: side)
+                }
+                // 빈 칸: 아이템이 어디에 생기는지 보이게 (최소 2칸)
+                ForEach(0..<max(0, 2 - weaponIds.count), id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.18), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                        .frame(width: side, height: side)
+                }
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text("아이템").font(.system(size: 10, weight: .bold)).foregroundStyle(.secondary)
+                ViewThatFits(in: .vertical) {
+                    grid
+                    ScrollView(.vertical, showsIndicators: false) { grid }
+                }
+            }
+            .frame(maxHeight: maxHeight, alignment: .bottom)
+            .animation(.spring(response: 0.35, dampingFraction: 0.7), value: weaponIds)
+            // 무기를 낀 기물을 여기로 끌어다 놓으면 뺀다
+            .dropDestination(for: String.self) { items, _ in
+                guard let raw = items.first, case let .unit(uid)? = DragItem(raw), !me.done else { return false }
+                guard let unit = findUnit(me, uid: uid), unit.weapon != nil else { return false }
+                model.chessUnequip(uid)
+                return true
+            }
+        }
+    }
+
+    private func itemSlot(_ me: ChessSelfSnapshot, id: String, side: CGFloat) -> some View {
+        let info: ChessWeaponInfo? = model.chessWeapon(id)
+        let color: Color = ChessStyle.rarityColor(info?.rarity ?? "common")
+        let item = ChessItem(.weapon, id)
+        let selected: Bool = model.selectedWeaponId == id || model.combineFirst == item
+        let fused: Bool = id.contains("+") || id.contains("*")
+        let count: Int = me.weapons[id] ?? 0
+        let shape = RoundedRectangle(cornerRadius: side * 0.18, style: .continuous)
+        return Button {
+            if model.combineMode {
+                model.combineTap(item)
+            } else {
+                model.selectedUid = nil
+                model.selectedWeaponId = model.selectedWeaponId == id ? nil : id
+            }
+        } label: {
+            ZStack {
+                shape.fill(LinearGradient(colors: [color.opacity(0.55), color.opacity(0.15)], startPoint: .top, endPoint: .bottom))
+                shape.strokeBorder(selected ? Color.white : color, lineWidth: selected ? 3 : 1.5)
+                VStack(spacing: 1) {
+                    Image(systemName: fused ? "sparkles" : "bolt.shield.fill")
+                        .font(.system(size: side * 0.32))
+                        .foregroundStyle(Theme.goldHi)
+                    Text(weaponName(id))
+                        .font(.system(size: max(7, side * 0.15), weight: .bold))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .minimumScaleFactor(0.6)
+                        .padding(.horizontal, 2)
+                }
+                if count > 1 {
+                    Text("×\(count)")
+                        .font(.system(size: max(8, side * 0.16), weight: .heavy).monospacedDigit())
+                        .padding(.horizontal, 4)
+                        .background(Capsule().fill(Color.black.opacity(0.7)))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .padding(2)
+                }
+            }
+            .frame(width: side, height: side)
+            .shadow(color: selected ? color.opacity(0.8) : .clear, radius: selected ? 6 : 0)
+        }
+        .buttonStyle(.plain)
+        .disabled(me.done)
+        .draggable("weapon:\(id)")
+        .dropDestination(for: String.self) { items, _ in combineDrop(items, onto: item) }
+        .transition(.scale(scale: 0.5).combined(with: .opacity))
     }
 
     /// 왼쪽 시너지 목록 (롤토체스처럼): 판 위의 기물 종류마다 육각 아이콘, 이름, 단계. 켜진 것은 금색이고 위로 온다.

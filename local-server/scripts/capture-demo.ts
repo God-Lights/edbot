@@ -88,6 +88,8 @@ result.prep = timed(result.prep, false, 25_000);
   if (me.board[0]) me.board[0] = { ...me.board[0], defId: "devoit", weapon: null };
   if (me.board[1]) me.board[1] = { ...me.board[1], defId: "ankio", weapon: null };
   me.materials = { ...me.materials, "ancient-shard": 1 };
+  // 판 왼쪽 아래 아이템 칸 확인용: 무기 몇 개 (보통·★·융합)
+  (me as unknown as { weapons: Record<string, number> }).weapons = { "bit-dagger": 1, "titanium-shield": 2, "bit-dagger+edmium-blade": 1, "edgem-orb*": 1 };
 }
 result.combat = timed(result.combat, true, 30_000);
 for (const [name, room] of [["prep", result.prep], ["combat", result.combat]] as const) {

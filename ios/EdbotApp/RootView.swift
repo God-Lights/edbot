@@ -37,6 +37,7 @@ struct LobbyView: View {
     var body: some View {
         @Bindable var model = model
         VStack(spacing: compact ? 4 : 8) {
+            updateBand
             serverBand
             lobbyColumns
         }
@@ -48,6 +49,34 @@ struct LobbyView: View {
         }
         // 서버 주소를 바꾸면 그 서버의 로그인 상태와 정보로 바뀐다.
         .onChange(of: model.serverText) { _, _ in model.serverChanged() }
+    }
+
+    /// 새 버전이 나왔으면 맨 위에 보이는 띠. 업데이트는 SideStore 로 바로 설치하고, SideStore 가 없으면 설치 안내를 연다.
+    @ViewBuilder private var updateBand: some View {
+        if let update = model.appUpdate, !model.updateDismissed {
+            HStack(spacing: 10) {
+                Image(systemName: "arrow.down.app.fill").font(.title3).foregroundStyle(Theme.goldHi)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("새 버전 \(update.version)이 나왔어요").font(.subheadline.bold())
+                    Text("지금 \(model.appVersion) · 업데이트하면 새 캐릭터와 기능을 쓸 수 있어요")
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.7)
+                }
+                Spacer(minLength: 8)
+                Button("나중에") { model.updateDismissed = true }.buttonStyle(SecondaryButtonStyle())
+                Button("업데이트") {
+                    let guide = URL(string: "https://edgame-api.officialgl.com/install.html#ios")!
+                    if let link = update.sideStoreInstallURL {
+                        openURL(link) { accepted in if !accepted { openURL(guide) } }
+                    } else {
+                        openURL(guide)
+                    }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            }
+            .padding(.horizontal, 12).padding(.vertical, compact ? 4 : 8)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.gold.opacity(0.16)))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.gold.opacity(0.55), lineWidth: 1))
+        }
     }
 
     /// 운영이 아닌 서버(개발·로컬)에 붙어 있을 때 맨 위에 보이는 안내 띠
