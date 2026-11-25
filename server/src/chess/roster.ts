@@ -80,6 +80,14 @@ export const ROSTER: readonly UnitDef[] = [
   def("ankio", "안키오", "knight", "이계", 4, "암살", "flank", "적 후열로 순간이동해 큰 피해를 준다"),
   // 데보이트 계보: 데보이트(모든 생명의 근원) -> 데도키온(유전의 전사) -> 토가로가 / 드워곤
   def("devoit", "데보이트", "pawn", "근원", 1, "서포터", "origin", "처음 쓰러지는 아군 1명을 체력 30%로 되살린다 (전투마다 한 번)", true),
+  // 설정 v2 (설계 31장): 신덱스·소버녀(일반), 자바·파이(초전설)
+  def("syndex", "신덱스", "bishop", "이계", 1, "제어", "array-strike", "적이 가장 많은 가로줄의 적 모두에게 피해를 준다"),
+  def("sovereign", "소버녀", "rook", "군단", 1, "탱커", "loyal-guard", "가장 다친 아군에게 보호막을 주고 적을 도발한다"),
+  def("java", "자바", "queen", "야수", 4, "딜러", "inferno", "적이 모인 곳에 불길을 일으켜 피해와 화상을 준다"),
+  def("pi", "파이", "bishop", "숲", 4, "딜러", "resonance", "적 최대 4명에게 꺾이며 튕기는 음파를 쏜다"),
+  // 아나스프: 유일하게 다른 캐릭터로 승급한다. 프린세스가 전투 중 상대 끝 줄에 닿으면 그 전투 동안 퀸이 된다.
+  { ...def("princess-anasp", "프린세스 아나스프", "pawn", "왕가", 2, "기동", "royal-ascent", "상대 끝 줄에 닿으면 퀸 아나스프로 승급한다 (전투가 끝날 때까지)", true), promotesTo: "queen-anasp" },
+  { ...def("queen-anasp", "퀸 아나스프", "queen", "왕가", 4, "딜러", "royal-decree", "주변 2칸의 적에게 큰 피해를 주고 아군 전체 공격력을 올린다"), evolveOnly: true },
   { ...def("dedokion", "데도키온", "knight", "근원", 3, "딜러", "gene-absorb", "적을 처치할 때마다 그 적 최대 체력의 10%만큼 최대 체력이 오르고 회복한다", true), evolveOnly: true },
 ];
 

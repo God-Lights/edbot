@@ -246,8 +246,37 @@ function pawnTurn(state: CombatState, unit: CombatUnit): void {
   }
 }
 
-function checkPromotion(state: CombatState, unit: CombatUnit): void {
-  if (state.mobius || unit.piece !== "pawn" || unit.summon) return; // 무한 모드의 폰은 승급하지 않는다
+/**
+ * 다른 캐릭터로 승급 (프린세스 아나스프 -> 퀸 아나스프): 체력 비율과 무기·효과는 그대로 두고, 능력치는 새 캐릭터의 비율만큼 바꾼다.
+ * 에너지는 0부터 새로 찬다. 전투가 끝나면 판 위의 기물은 다시 프린세스다(전투 안에서만).
+ */
+function promoteToCharacter(state: CombatState, unit: CombatUnit, to: string): void {
+  const from = unitDef(unit.defId);
+  const next = unitDef(to);
+  if (!from || !next) return;
+  unit.baseDefId = unit.defId;
+  const hpScale = next.hp / from.hp;
+  unit.maxHp *= hpScale;
+  unit.hp = Math.min(unit.maxHp, unit.hp * hpScale);
+  unit.atk *= next.atk / from.atk;
+  unit.defId = next.id;
+  unit.piece = next.piece;
+  unit.promoted = true;
+  unit.energyMax = next.passive ? null : ENERGY_MAX[next.cost];
+  unit.energy = 0;
+  pushEvent(state, { type: "promote", unitId: unit.id, text: next.id });
+}
+
+export function checkPromotion(state: CombatState, unit: CombatUnit): void {
+  if (unit.summon) return;
+  // 아나스프: 무한 모드에서도 승급하는 유일한 기물이다. 무한 모드에서는 걷는 방향의 끝 줄에 닿으면 바뀐다.
+  const promotesTo = unitDef(unit.defId)?.promotesTo;
+  if (promotesTo) {
+    const edge = state.mobius ? (unit.dir < 0 ? 0 : BOARD_SIZE - 1) : unit.seat === 0 ? 0 : BOARD_SIZE - 1;
+    if (!unit.promoted && unit.piece === "pawn" && unit.y === edge) promoteToCharacter(state, unit, promotesTo);
+    return;
+  }
+  if (state.mobius || unit.piece !== "pawn") return; // 무한 모드의 폰은 승급하지 않는다
   const lastRow = unit.seat === 0 ? 0 : BOARD_SIZE - 1;
   if (unit.y === lastRow) {
     unit.piece = "queen";
@@ -529,6 +558,9 @@ export interface RecordedUnit {
   maxHp: number;
   summon: boolean;
   weapon: string | null;
+  /** 전투 중 다른 캐릭터로 승급했으면 그 캐릭터와 승급 뒤 최대 체력 (프레임의 승급 표시(2)부터 쓴다) */
+  promotedTo?: string;
+  promotedMaxHp?: number;
 }
 
 /** [x, y, hp, energy, shield, flags] 박자 k의 상태. flags: 1=살아 있음, 2=승급, 4=밑면(유령), 8 이상=속성 게이지 g(flags>>3, 최대 31). 아직 생기지 않은 소환수는 없다(배열이 짧다). */
@@ -574,7 +606,13 @@ export function recordCombat(boards: [Placement[], Placement[]], tiles: Resource
   }
   return {
     result: { winner: state.winner, survivors: state.survivors, beats: state.beat, suddenDeath: state.beat >= state.suddenBeat },
-    units: state.units.map((u) => ({ defId: u.defId, seat: u.seat, star: u.star, maxHp: Math.round(u.maxHp), summon: u.summon, weapon: u.weapon })),
+    units: state.units.map((u) => {
+      const base = { seat: u.seat, star: u.star, summon: u.summon, weapon: u.weapon };
+      if (!u.baseDefId) return { defId: u.defId, maxHp: Math.round(u.maxHp), ...base };
+      // 승급한 기물: 원래 캐릭터와 승급 전 최대 체력, 그리고 승급 뒤 캐릭터·최대 체력
+      const ratio = (unitDef(u.baseDefId)?.hp ?? 1) / (unitDef(u.defId)?.hp ?? 1);
+      return { defId: u.baseDefId, maxHp: Math.round(u.maxHp * ratio), ...base, promotedTo: u.defId, promotedMaxHp: Math.round(u.maxHp) };
+    }),
     frames,
     events,
     tiles: tiles.map((t) => ({ ...t })),

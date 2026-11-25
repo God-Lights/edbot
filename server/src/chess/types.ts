@@ -16,7 +16,9 @@ export type AbilityId =
   | "inspire" | "heal" | "rally" | "shield-wall" | "stone-skin"
   | "formation" | "invest" | "bloom" | "bind" | "leap-bite"
   | "dimension-leap" | "pact" | "thunder" | "dragon-breath" | "flank"
-  | "origin" | "gene-absorb";
+  | "origin" | "gene-absorb"
+  | "array-strike" | "loyal-guard" | "inferno" | "resonance"
+  | "royal-ascent" | "royal-decree";
 
 export interface UnitDef {
   id: string;
@@ -33,8 +35,10 @@ export interface UnitDef {
   /** true면 에너지로 발동하지 않는 패시브(쓰러질 때, 처치할 때 같은 조건으로 발동) */
   passive: boolean;
   abilityText: string;
-  /** 상점에 나오지 않고 진화로만 얻는다 (데도키온, 토가로가, 드워곤) */
+  /** 상점에 나오지 않고 진화로만 얻는다 (데도키온, 토가로가, 드워곤, 퀸 아나스프) */
   evolveOnly?: boolean;
+  /** 전투 중 상대 끝 줄에 닿으면 이 캐릭터로 바뀐다 (프린세스 아나스프 -> 퀸 아나스프, 유일한 승급 캐릭터) */
+  promotesTo?: string;
 }
 
 /** 내 쪽 시점의 배치: col 0~7(왼쪽부터), row 0~3(0이 가운데에 가장 가까운 앞줄) */
@@ -100,6 +104,8 @@ export interface CombatUnit {
   /** 지금의 기물 모양. 폰이 승급하면 queen이 된다. */
   piece: Piece;
   promoted: boolean;
+  /** 전투 중 다른 캐릭터로 승급했으면 원래 캐릭터 id (프린세스 아나스프) */
+  baseDefId?: string;
   shield: number;
   shieldUntilBeat: number;
   summon: boolean;

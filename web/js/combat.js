@@ -14,7 +14,7 @@ export function interpolated(combat, position, index) {
   const a = combat.frames[k]?.[index];
   if (!a) return null; // 아직 나타나지 않은 소환수
   // flags: 1 생존, 2 승급, 4 밑면(유령), 8 이상 = 웜홀 게이지 g
-  const unit = (v) => ({ x: v[0], y: v[1], hp: v[2], energy: v[3], shield: v[4], alive: (v[5] & 1) !== 0, face: (v[5] >> 2) & 1, g: v[5] >> 3, fade: 1 });
+  const unit = (v) => ({ x: v[0], y: v[1], hp: v[2], energy: v[3], shield: v[4], alive: (v[5] & 1) !== 0, promoted: (v[5] & 2) !== 0, face: (v[5] >> 2) & 1, g: v[5] >> 3, fade: 1 });
   const A = unit(a);
   const b = k < last ? combat.frames[k + 1]?.[index] : null;
   if (!b) return A;
@@ -27,7 +27,7 @@ export function interpolated(combat, position, index) {
   }
   const mix = (p, q) => p + (q - p) * t;
   const to = t < 0.5 ? A : B;
-  return { x: mix(A.x, B.x), y: mix(A.y, B.y), hp: mix(A.hp, B.hp), energy: mix(A.energy, B.energy), shield: mix(A.shield, B.shield), alive: true, face: to.face, g: to.g, fade: 1 };
+  return { x: mix(A.x, B.x), y: mix(A.y, B.y), hp: mix(A.hp, B.hp), energy: mix(A.energy, B.energy), shield: mix(A.shield, B.shield), alive: true, promoted: to.promoted, face: to.face, g: to.g, fade: 1 };
 }
 
 export function minedTiles(combat, beat) {
@@ -52,7 +52,7 @@ export function arenaHtml(combat, seat) {
   const units = combat.units
     .map((u, i) => `<div class="au" data-i="${i}" style="display:none">${token(u.defId, u.star, { tint: u.seat === seat ? MINE : THEIRS, armed: !!u.weapon })}
       <i class="whring"></i><i class="gbadge">${ic("ghost")}</i>
-      <div class="ubar ${u.seat === seat ? "mine" : "theirs"}"><div class="hpb"><b></b><i class="shield"></i></div>${unitInfo(u.defId)?.passive ? "" : '<div class="mpb"><b></b></div>'}</div></div>`)
+      <div class="ubar ${u.seat === seat ? "mine" : "theirs"}"><div class="hpb"><b></b><i class="shield"></i></div>${unitInfo(u.defId)?.passive && !(u.promotedTo && !unitInfo(u.promotedTo)?.passive) ? "" : '<div class="mpb"><b></b></div>'}</div></div>`)
     .join("");
   const tiles = combat.tiles
     .map((t, i) => `<text class="atile" data-t="${i}" fill="${RARITY_COLOR[materialInfo(t.material)?.rarity ?? "common"]}" style="--rc:${RARITY_COLOR[materialInfo(t.material)?.rarity ?? "common"]}" text-anchor="middle" dominant-baseline="central" font-size="0.55">◆</text>`)
@@ -176,7 +176,7 @@ export function playArena(combat, seat, getPos) {
       else if (e[1] === "surface" && a) { ring(x, y, "#59ccbf"); floatText(x, y, `${ic("arrow-up")} 웜홀`, "wormhole"); sfx.play("surface"); }
       else if (e[1] === "clone" && a) floatText(x, y, "분신!", "promo");
       else if (e[1] === "stone" && a) floatText(x, y, `${ic("mountain")} 석화`, "stone");
-      else if (e[1] === "promote" && a) { floatText(x, y, `${ic("crown")} 승급!`, "promo"); sfx.play("promote"); }
+      else if (e[1] === "promote" && a) { floatText(x, y, `${ic("crown")} ${e[4] ? `${esc(unitInfo(e[4])?.nameKo ?? "")}!` : "승급!"}`, "promo"); sfx.play("promote"); }
       else if (e[1] === "mine") {
         const tile = combat.tiles[e[3]];
         if (tile) {
@@ -221,14 +221,24 @@ export function playArena(combat, seat, getPos) {
       const dying = next && (next[5] & 1) === 0;
       el.style.opacity = String((dying ? Math.max(0, 1 - (pos - k)) : 1) * (f.fade ?? 1));
       el.firstElementChild.style.scale = dying ? String(0.55 + 0.45 * Math.max(0, 1 - (pos - k))) : "1";
+      // 다른 캐릭터로 승급(프린세스 아나스프 -> 퀸 아나스프): 승급 표시가 켜진 프레임부터 말과 최대 체력을 바꾼다
+      const promo = !!(u.promotedTo && f.promoted);
+      const defNow = promo ? u.promotedTo : u.defId;
+      const maxHp = promo ? (u.promotedMaxHp ?? u.maxHp) : u.maxHp;
+      if (u.promotedTo && el.dataset.promo !== String(promo)) {
+        el.dataset.promo = String(promo);
+        el.firstElementChild.outerHTML = token(defNow, u.star, { tint: u.seat === seat ? MINE : THEIRS, armed: !!u.weapon });
+        const mpb = el.querySelector(".mpb");
+        if (mpb) mpb.style.display = unitInfo(defNow)?.passive ? "none" : "";
+      }
       // 말 위의 막대: 체력(편 색) + 보호막(흰색, 체력 뒤에 이어서) + 마나(파랑)
-      const hpRatio = u.maxHp > 0 ? Math.min(1, Math.max(0, f.hp / u.maxHp)) : 0;
+      const hpRatio = maxHp > 0 ? Math.min(1, Math.max(0, f.hp / maxHp)) : 0;
       el.querySelector(".hpb b").style.width = `${hpRatio * 100}%`;
       const shield = el.querySelector(".hpb .shield");
       shield.style.left = `${hpRatio * 100}%`;
-      shield.style.width = `${u.maxHp > 0 ? Math.min(1 - hpRatio, f.shield / u.maxHp) * 100 : 0}%`;
+      shield.style.width = `${maxHp > 0 ? Math.min(1 - hpRatio, f.shield / maxHp) * 100 : 0}%`;
       const mp = el.querySelector(".mpb b");
-      if (mp) mp.style.width = `${Math.min(100, Math.max(0, (f.energy / (ENERGY_MAX[unitInfo(u.defId)?.cost ?? 1] ?? 60)) * 100))}%`;
+      if (mp) mp.style.width = `${Math.min(100, Math.max(0, (f.energy / (ENERGY_MAX[unitInfo(defNow)?.cost ?? 1] ?? 60)) * 100))}%`;
     });
     combat.tiles.forEach((t, i) => {
       const [x, y] = flip(t.x, t.y);

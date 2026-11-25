@@ -8,6 +8,8 @@
   ios/EdbotApp/Assets.xcassets/Logo.imageset/logo@1x,2x,3x.png    (투명 배경, 가장자리 여백 없이 다듬음)
   ios/EdbotApp/Assets.xcassets/LaunchLogo.imageset/...            (시작 화면용)
   client/Assets/Resources/CommanderLogo.png                       (Unity 로비용)
+  android/app/src/main/res/drawable-nodpi/ic_launcher_{bg,fg}.png (안드로이드 적응형 아이콘)
+  android/app/src/main/res/drawable-nodpi/logo.png                (안드로이드 서버 고르기 화면)
 """
 import json
 from pathlib import Path
@@ -110,6 +112,12 @@ def main() -> None:
     # Unity 로비용 (너비 1024 이하)
     unity = logo.resize((1024, round(logo.height * 1024 / logo.width)), Image.LANCZOS)
     save(unity, ROOT / "client/Assets/Resources/CommanderLogo.png")
+
+    # 안드로이드: 적응형 아이콘(108dp = 432px, 가운데 66dp 안에 로고), 화면 로고
+    android = ROOT / "android/app/src/main/res/drawable-nodpi"
+    save(gradient_background(432), android / "ic_launcher_bg.png")
+    save(fit_square(logo, 432, 0.22), android / "ic_launcher_fg.png")
+    save(logo.resize((720, round(logo.height * 720 / logo.width)), Image.LANCZOS), android / "logo.png")
 
     # 미리보기(저장소에는 넣지 않는다)
     print("logo size", logo.size)

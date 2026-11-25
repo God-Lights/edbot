@@ -73,6 +73,50 @@ export const ABILITIES: Record<AbilityId, Cast> = {
   // 데보이트·데도키온도 패시브다 (되살리기는 sim.ts 의 resolveDeaths, 유전 흡수는 onKill)
   origin: () => {},
   "gene-absorb": () => {},
+  // 신덱스(나열의 마법사): 적이 가장 많은 가로줄(같은 y)의 적 모두에게 공격력의 110% 피해
+  "array-strike": (s, u) => {
+    const foes = enemiesOf(s, u);
+    const rowCount = (y: number) => foes.filter((e) => e.y === y).length;
+    const target = [...foes].sort((a, b) => rowCount(b.y) - rowCount(a.y) || chebyshev(u, a) - chebyshev(u, b) || comparePerspective(u)(a, b))[0];
+    if (!target) return;
+    for (const e of foes.filter((o) => o.y === target.y)) abilityDamage(s, u, e, 1.1);
+  },
+  // 소버녀(충성의 군사): 체력 비율이 가장 낮은 아군에게 자신 최대 체력 25% 보호막(4박자), 자신은 3박자 도발
+  "loyal-guard": (s, u) => {
+    const ward = [...alliesOf(s, u, false)].sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp || comparePerspective(u)(a, b))[0] ?? u;
+    shieldUnit(s, u, ward, u.maxHp * 0.25, 4);
+    addEffect(u, { type: "taunt", value: 1, untilBeat: s.beat + 3 });
+  },
+  // 자바(불의 달인): 적이 가장 많이 모인 칸을 중심으로 3x3의 적에게 공격력의 90% 피해, 3박자 동안 박자마다 공격력의 30% 화상
+  inferno: (s, u) => {
+    const foes = enemiesOf(s, u);
+    const crowd = (e: CombatUnit) => foes.filter((o) => chebyshev(e, o) <= 1).length;
+    const center = [...foes].sort((a, b) => crowd(b) - crowd(a) || comparePerspective(u)(a, b))[0];
+    if (!center) return;
+    for (const e of foes.filter((o) => chebyshev(center, o) <= 1)) {
+      abilityDamage(s, u, e, 0.9);
+      addEffect(e, { type: "dot", value: u.atk * 0.3 * starPower(u), untilBeat: s.beat + 3 });
+    }
+  },
+  // 파이(굴곡의 소리): 가장 가까운 적부터, 직전 대상에서 가장 가까운 다른 적으로 꺾이며 최대 4명에게 140% / 110% / 80% / 50%
+  resonance: (s, u) => {
+    const hit = new Set<string>();
+    let from: CombatUnit = u;
+    for (const mult of [1.4, 1.1, 0.8, 0.5]) {
+      const next = nearest(from, enemiesOf(s, u).filter((e) => !hit.has(e.id)));
+      if (!next) break;
+      hit.add(next.id);
+      abilityDamage(s, u, next, mult);
+      from = next;
+    }
+  },
+  // 프린세스 아나스프: 승급은 sim.ts 의 checkPromotion 이 한다 (패시브)
+  "royal-ascent": () => {},
+  // 퀸 아나스프(칙령): 주변 2칸의 적에게 공격력의 150% 피해, 아군 전체 공격력 +15% (4박자)
+  "royal-decree": (s, u) => {
+    for (const e of enemiesOf(s, u).filter((o) => chebyshev(u, o) <= 2)) abilityDamage(s, u, e, 1.5);
+    for (const ally of alliesOf(s, u, true)) addEffect(ally, { type: "atkUp", value: 0.15 * starPower(u), untilBeat: s.beat + 4 });
+  },
   // 아군 1명(공격력이 가장 높은)의 공격력 +20%, 5박자
   inspire: (s, u) => {
     const target = [...alliesOf(s, u, true)].sort((a, b) => b.atk - a.atk || comparePerspective(u)(a, b))[0];

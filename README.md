@@ -9,6 +9,7 @@
 | [`server/`](server/README.md) | 온라인 대전 서버 (방 코드, WebSocket, 단계 타이머) |
 | [`web/`](web/README.md) | **웹 클라이언트** (체스판 자동 전투). 서버가 같은 주소에서 내보낸다. iPad 앱과 같은 서버를 쓰므로 서로 대전할 수 있다 |
 | `ios/` | iPad 앱 (SwiftUI) |
+| [`android/`](android/README.md) | 안드로이드 앱 (8.0 이상). 서버 고르기·와이파이 찾기·QR 은 네이티브, 게임 화면은 서버의 웹 화면 |
 | [`client/`](client/README.md) | 옛 Unity 클라이언트 (레인 타워 게임, 더 이상 쓰지 않음) |
 
 서버는 `main`에 합치면 GitHub Actions가 Cloudflare에 배포합니다. 설정 방법은 [server/README.md](server/README.md#배포-github-actions)를 보세요.

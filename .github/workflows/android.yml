@@ -1,0 +1,179 @@
+name: Android
+
+# 안드로이드 앱(android/): 안드로이드 8.0(API 26) 이상.
+# - android/ 를 바꾸는 PR: 단위 시험, APK 빌드, 에뮬레이터(안드로이드 8.0, 14)에서 화면 찍기
+# - Actions 탭 > Android > Run workflow 에서 버전(예: 0.1.0)을 적고 실행하거나 태그 android-vX.Y.Z 를 올리면 릴리스에 APK 를 올린다
+# 서명: 저장소 비밀값 ANDROID_KEYSTORE_B64(.jks 를 base64), ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD 가 있으면 그 키로,
+#       없으면 CI 의 디버그 키로 서명한다(이 경우 새 버전을 깔 때 이전 앱을 지워야 할 수 있다).
+on:
+  pull_request:
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  push:
+    tags: ["android-v*"]
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "릴리스로 올릴 버전 (예: 0.1.0). 비우면 릴리스 없이 빌드만 한다."
+        required: false
+        default: ""
+
+permissions:
+  contents: write # 릴리스에 올리려고
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: 시험과 APK 빌드
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: 버전 정하기
+        id: version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.release_version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release=""
+          if [[ "${GITHUB_REF}" == refs/tags/android-v* ]]; then
+            release="${GITHUB_REF_NAME#android-v}"
+          elif [[ -n "${INPUT_VERSION}" ]]; then
+            release="${INPUT_VERSION#v}"
+            if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+              echo "::error::릴리스는 main 브랜치에서만 만들 수 있다. (현재: ${GITHUB_REF_NAME})"; exit 1
+            fi
+            if gh release view "android-v${release}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+              echo "::error::이미 있는 릴리스다: android-v${release}"; exit 1
+            fi
+          fi
+          if [[ -n "$release" && ! "$release" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::버전은 0.1.0 같은 형식이어야 한다. (입력: ${release})"; exit 1
+          fi
+          name="${release:-0.0.0}"
+          IFS=. read -r a b c <<< "$name"
+          echo "release=${release}" >> "$GITHUB_OUTPUT"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          # versionCode: 0.1.2 -> 102 (개발용 빌드는 1)
+          if [[ -n "$release" ]]; then code=$(( 10#$a * 10000 + 10#$b * 100 + 10#$c )); else code=1; fi
+          echo "code=$(( code > 0 ? code : 1 ))" >> "$GITHUB_OUTPUT"
+
+      - name: 서명 키 (비밀값이 있을 때만)
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [[ -n "$KEYSTORE_B64" ]]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "저장소의 서명 키로 서명한다"
+          else
+            echo "서명 키 비밀값이 없어 디버그 키로 서명한다"
+          fi
+
+      - name: 단위 시험, APK 빌드, 린트
+        working-directory: android
+        env:
+          ANDROID_VERSION_NAME: ${{ steps.version.outputs.name }}
+          ANDROID_VERSION_CODE: ${{ steps.version.outputs.code }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew --no-daemon testDebugUnitTest assembleDebug assembleRelease lintDebug
+          cp app/build/outputs/apk/release/app-release.apk "build-Commander-${{ steps.version.outputs.name }}.apk"
+          ls -lh app/build/outputs/apk/*/ build-*.apk
+          # minSdk 26 (안드로이드 8.0) 확인
+          aapt=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          "$aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -E "^package|[sS]dkVersion"
+          "$aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -Eq "^(minSdkVersion|sdkVersion):'26'" || { echo "minSdk 가 26 이 아니다"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-lint
+          path: android/app/build/reports/lint-results-debug.html
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: commander-android-apk
+          path: android/build-Commander-*.apk
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: 릴리스에 올리기
+        if: steps.version.outputs.release != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.release }}
+        run: |
+          mv "android/build-Commander-${VERSION}.apk" "android/Commander-${VERSION}.apk"
+          gh release create "android-v${VERSION}" "android/Commander-${VERSION}.apk" \
+            --repo "${GITHUB_REPOSITORY}" --target "${GITHUB_SHA}" \
+            --title "COMMANDER Android ${VERSION}" \
+            --notes "안드로이드 8.0 이상. APK 를 받아 설치하세요(출처를 알 수 없는 앱 허용). 게임 화면은 Android System WebView 111 이상이 필요합니다."
+
+  screenshots:
+    name: 에뮬레이터 화면 (안드로이드 ${{ matrix.label }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 26
+            label: "8.0"
+          - api: 34
+            label: "14"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-debug-apk
+          path: android/app/build/outputs/apk/debug
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: 로컬 서버 의존 패키지
+        working-directory: local-server
+        run: bun install --frozen-lockfile
+      - name: KVM 켜기
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: 에뮬레이터에서 찍기
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: android/scripts/screenshots.sh ${{ matrix.api }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-screenshots-api${{ matrix.api }}
+          path: android/build/screenshots/
+          if-no-files-found: warn
+          retention-days: 14
