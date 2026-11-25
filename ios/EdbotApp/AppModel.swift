@@ -29,6 +29,8 @@ final class AppModel {
     private(set) var isCreatingRoom = false
     private(set) var clock = ServerClock()
     var message: String?
+    /// 게임 안에서 잠깐 보여 주는 알림(진화, 행동 오류 등)의 번호. 몇 초 뒤 같은 알림이면 지운다.
+    private var flashToken = 0
 
     // 밴·드래프트·배치 화면
     private(set) var roster: [CharacterInfo] = []
@@ -403,7 +405,7 @@ final class AppModel {
         guard let connection else { return }
         play(.equip)
         let from = chessGenes.flatMap { chessUnit($0.from)?.nameKo } ?? "제노사우로스"
-        message = "\(from)이(가) \(chessUnit(to)?.nameKo ?? to)(으)로 진화했어요!"
+        flash("\(from)이(가) \(chessUnit(to)?.nameKo ?? to)(으)로 진화했어요!")
         Task { await connection.sendGene(uid, to: to) }
     }
 
@@ -797,6 +799,7 @@ final class AppModel {
         interpolator.reset()
         showWorkshop = false
         selectedWeaponId = nil
+        message = nil // 게임 안의 알림이 로비에 남지 않게
         if let connection { Task { await connection.stop() } }
     }
 
@@ -879,24 +882,39 @@ final class AppModel {
         Task { await connection.sendReady(ready) }
     }
 
+    /// 게임 안에서 잠깐 보여 주는 알림: 4초 뒤에(그사이 다른 알림이 오지 않았으면) 지운다.
+    private func flash(_ text: String) {
+        message = text
+        flashToken &+= 1
+        let token = flashToken
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            guard let self, self.flashToken == token, self.message == text else { return }
+            self.message = nil
+        }
+    }
+
     private func handle(_ event: NetEvent) {
         switch event {
         case let .connected(playerId, room, reconnected):
             myPlayerId = playerId
             observe(room)
             status = .connected
-            message = reconnected ? "다시 연결되었어요." : nil
+            if reconnected { flash("다시 연결되었어요.") } else { message = nil }
         case let .state(room):
             observe(room)
         case let .error(code, text):
-            message = Labels.error(code) ?? text
+            // 방 안에서는 잠깐 보였다 사라지고, 방에 들어가기 전(입장 실패 등)에는 로비에 남는다.
+            if isInRoom { flash(Labels.error(code) ?? text) } else { message = Labels.error(code) ?? text }
         case let .reconnecting(attempt):
             status = .reconnecting
             message = "연결이 끊겨서 다시 접속하는 중... (\(attempt))"
         case let .disconnected(reason):
-            if reason != "stopped" {
-                message = Labels.disconnect(reason) ?? message
-            }
+            // 방 안에 있었으면 끊긴 이유만 로비에 남긴다(게임 안의 알림은 지운다).
+            // 방에 들어가기 전에 끊겼으면(입장 실패) 그 오류 문구를 그대로 둔다.
+            let wasInRoom: Bool = room != nil
+            let reasonText: String? = reason != "stopped" ? Labels.disconnect(reason) : nil
+            message = reasonText ?? (wasInRoom ? nil : message)
             room = nil
             myPlayerId = nil
             status = .idle
@@ -973,7 +991,7 @@ final class AppModel {
         playChangeSounds(from: previous, to: room)
         // 라운드가 바뀔 때 진화한 기물이 있으면 알린다 (데도키온 -> 토가로가 / 드워곤)
         if previous?.chess?.round != room.chess?.round, let evolved = room.chess?.me?.evolved, !evolved.isEmpty {
-            message = evolved.map { "\(chessUnit($0.from)?.nameKo ?? $0.from)이(가) \(chessUnit($0.to)?.nameKo ?? $0.to)(으)로 진화했어요!" }.joined(separator: " ")
+            flash(evolved.map { "\(chessUnit($0.from)?.nameKo ?? $0.from)이(가) \(chessUnit($0.to)?.nameKo ?? $0.to)(으)로 진화했어요!" }.joined(separator: " "))
         }
         Sfx.shared.setScene(Self.musicScene(for: room))
         self.room = room
