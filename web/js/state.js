@@ -190,6 +190,10 @@ export const act = {
   combine: (a, b) => send({ t: "combine", a, b }),
   equip: (weaponId, uid) => { S.selWeapon = null; send({ t: "equip", weaponId, uid }); },
   unequip: (uid) => send({ t: "unequip", uid }),
+  gene: (uid, to) => {
+    send({ t: "gene", uid, to });
+    toast(`${unitInfo(S.catalog?.genes?.from)?.nameKo ?? "제노사우로스"}이(가) ${unitInfo(to)?.nameKo ?? to}(으)로 진화했어요!`);
+  },
 };
 
 const BOT_ROW = { 탱커: 0, 지휘: 1, 암살: 1, 기동: 1, 제어: 2, 딜러: 2, 서포터: 3 };

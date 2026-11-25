@@ -80,6 +80,7 @@ final class ChessTests: XCTestCase {
         XCTAssertEqual(MessageCodec.smelt("bit"), #"{"t":"smelt","material":"bit"}"#)
         XCTAssertEqual(MessageCodec.equip("bit-dagger", uid: "i3"), #"{"t":"equip","weaponId":"bit-dagger","uid":"i3"}"#)
         XCTAssertEqual(MessageCodec.unequip("i3"), #"{"t":"unequip","uid":"i3"}"#)
+        XCTAssertEqual(MessageCodec.gene("i3", to: "lepid"), #"{"t":"gene","uid":"i3","to":"lepid"}"#)
     }
 
     func testBuildsChessMessages() {

@@ -18,7 +18,8 @@ export type AbilityId =
   | "dimension-leap" | "pact" | "thunder" | "dragon-breath" | "flank"
   | "origin" | "gene-absorb"
   | "array-strike" | "loyal-guard" | "inferno" | "resonance"
-  | "royal-ascent" | "royal-decree";
+  | "royal-ascent" | "royal-decree"
+  | "scale-rush" | "carapace" | "gene-chorus";
 
 export interface UnitDef {
   id: string;

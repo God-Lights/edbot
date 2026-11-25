@@ -1032,6 +1032,34 @@ struct ChessPrepView: View {
         }
     }
 
+    /// ★2 제노사우로스의 유전 갈래 고르기 (전설은 언제든, 초전설은 정해진 라운드부터)
+    @ViewBuilder
+    private func genePanel(unit: ChessUnitView) -> some View {
+        if let rule = model.chessGenes, unit.defId == rule.from, unit.star == 2 {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("유전 갈래를 골라 진화해요").font(.caption.bold()).foregroundStyle(Color(red: 0.97, green: 0.78, blue: 0.30))
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 5), GridItem(.flexible(), spacing: 5)], spacing: 5) {
+                    ForEach(rule.options, id: \.to) { option in
+                        let locked: Bool = chess.round < option.minRound
+                        Button {
+                            model.chessChooseGene(unit.uid, to: option.to)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(model.chessUnit(option.to)?.nameKo ?? option.to).font(.caption.bold()).lineLimit(1).minimumScaleFactor(0.7)
+                                Text(locked ? "Gen \(option.gen) · \(option.minRound)라운드부터" : "Gen \(option.gen) · \(option.grade)")
+                                    .font(.system(size: 9, weight: .medium)).foregroundStyle(Theme.gold).lineLimit(1).minimumScaleFactor(0.7)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(SecondaryButtonStyle())
+                        .disabled(locked)
+                        .opacity(locked ? 0.5 : 1)
+                    }
+                }
+            }
+        }
+    }
+
     private func formatPercent(_ value: Double) -> String {
         value == value.rounded() ? String(Int(value)) : String(format: "%.1f", value)
     }
@@ -1178,6 +1206,7 @@ struct ChessPrepView: View {
                 if !compact { Text(info.abilityText).font(.caption).foregroundStyle(.secondary).lineLimit(4) }
             }
             if compact { evolutionPanel(me, unit: unit) }
+            if compact { genePanel(unit: unit) }
             if let weaponId = unit.weapon {
                 HStack {
                     Image(systemName: "bolt.shield.fill").foregroundStyle(Theme.warn)
@@ -1190,6 +1219,7 @@ struct ChessPrepView: View {
                 }
             }
             if !compact { evolutionPanel(me, unit: unit) }
+            if !compact { genePanel(unit: unit) }
             HStack(spacing: 8) {
                 if onBoard {
                     Button("대기석으로") { model.chessBench(unit.uid) }.buttonStyle(SecondaryButtonStyle())

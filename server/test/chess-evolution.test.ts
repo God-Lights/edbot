@@ -1,6 +1,6 @@
-// 데보이트 계보: 데보이트 3장 -> 데도키온, 데도키온 + E 코드 + 재료 -> 토가로가 / 드워곤, 계보 시너지 "근원".
+// 데보이트 계보: ★2 제노사우로스 -> 데도키온(유전 선택), 데도키온 + E 코드 + 재료 -> 토가로가 / 드워곤, 계보 시너지 "근원".
 import { describe, expect, it } from "vitest";
-import { buy, combineItems, createChessGame, equip, finishRound, runRoundCombat, sell, startRound } from "../src/chess/game";
+import { buy, chooseGene, combineItems, createChessGame, equip, finishRound, runRoundCombat, sell, startRound } from "../src/chess/game";
 import type { ChessGame, OwnedUnit } from "../src/chess/game";
 import { EVOLUTION, ROSTER, unitDef } from "../src/chess/roster";
 import { createCombat, recordCombat } from "../src/chess/sim";
@@ -34,7 +34,12 @@ const owned = (g: ChessGame): OwnedUnit[] => [...g.players[0].board, ...g.player
 
 /** 데도키온 하나를 판에 올려 둔다 */
 function dedokionOnBoard(g: ChessGame): OwnedUnit {
-  give(g, "devoit", 3);
+  give(g, "xenosaurs", 3);
+  const xeno = owned(g).find((u) => u.defId === "xenosaurs" && u.star === 2)!;
+  const round = g.round;
+  g.round = Math.max(round, 4); // 초전설 갈래는 4라운드부터
+  expect(chooseGene(g, 0, xeno.uid, "dedokion")).toEqual({ ok: true });
+  g.round = round;
   const unit = owned(g).find((u) => u.defId === "dedokion")!;
   const p = g.players[0];
   p.bench = p.bench.map((u) => (u?.uid === unit.uid ? null : u));
@@ -69,24 +74,24 @@ describe("상점 풀", () => {
   });
 });
 
-describe("데보이트 -> 데도키온", () => {
-  it("데보이트 3장이 모이면 ★2 대신 데도키온 ★1이 된다", () => {
+describe("데보이트 · 제노사우로스 -> 데도키온", () => {
+  it("데보이트 3장은 보통 ★2 데보이트가 된다 (설정 v2)", () => {
     const g = newGame();
     give(g, "devoit", 3);
     const units = owned(g);
-    expect(units.filter((u) => u.defId === "devoit")).toHaveLength(0);
-    expect(units.filter((u) => u.defId === "dedokion").map((u) => u.star)).toEqual([1]);
+    expect(units.filter((u) => u.defId === "devoit").map((u) => u.star)).toEqual([2]);
+    expect(units.some((u) => u.defId === "dedokion")).toBe(false);
   });
 
-  it("데도키온을 팔면 데보이트 3장이 풀로 돌아간다", () => {
+  it("데도키온을 팔면 제노사우로스 3장이 풀로 돌아간다", () => {
     const g = newGame();
-    const before = g.pool["devoit"]!;
-    give(g, "devoit", 3);
+    const before = g.pool["xenosaurs"]!;
+    dedokionOnBoard(g);
     const unit = owned(g).find((u) => u.defId === "dedokion")!;
     g.players[0].gold = 0;
     expect(sell(g, 0, unit.uid)).toEqual({ ok: true });
     expect(g.players[0].gold).toBe(3);
-    expect(g.pool["devoit"]).toBe(before);
+    expect(g.pool["xenosaurs"]).toBe(before);
     expect(g.pool["dedokion"]).toBeUndefined();
   });
 });

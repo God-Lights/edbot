@@ -437,3 +437,10 @@ body {
 /* 대기석 폭을 판(칸 사이 간격 없음)과 맞추고, 자원 칸 이름은 한 줄로 */
 .bench { gap: 0; width: fit-content; } .bench .slot { margin: 1px; }
 .tile small { white-space: nowrap; max-width: 96%; overflow: hidden; text-overflow: clip; font-size: 15cqw; line-height: 1.1; }
+
+/* 제노사우로스 유전 갈래 */
+.genes { padding: 6px 8px; margin-top: 6px; display: grid; gap: 5px; }
+.gene-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.mini.gene { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-height: 2.4rem; padding: 4px 8px; white-space: normal; text-align: left; }
+.mini.gene small { font-size: .72em; color: var(--gold, #c8aa6e); font-weight: 500; }
+.mini.gene.locked { opacity: .45; cursor: not-allowed; }

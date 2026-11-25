@@ -98,6 +98,8 @@ final class AppModel {
     /// 계보 시너지(근원)와 데도키온 진화 규칙
     private(set) var chessTraits: [ChessTraitInfo] = []
     private(set) var chessEvolution: ChessEvolutionRule?
+    /// 제노사우로스 유전 갈래
+    private(set) var chessGenes: ChessGeneRule?
     /// 탭으로 조합하는 방식이 켜져 있다 (아이템 둘을 차례로 누른다)
     private(set) var combineMode = false
     /// 조합 방식에서 먼저 누른 아이템
@@ -138,6 +140,7 @@ final class AppModel {
             chessFusions = catalog.fusions ?? []
             chessTraits = catalog.traits ?? []
             chessEvolution = catalog.evolution
+            chessGenes = catalog.genes
         }
         guard let url = Bundle.main.url(forResource: "demo-\(kind)", withExtension: "json"),
               let text = try? String(contentsOf: url, encoding: .utf8),
@@ -315,7 +318,7 @@ final class AppModel {
 
     /// 서버가 바뀌면 그 서버의 말·재료·무기 목록(팩 포함)이 다르다. 비워 두면 다음에 다시 읽는다.
     private func clearChessCatalog() {
-        chessUnits = []; chessSynergies = []; chessMaterials = []; chessWeapons = []; chessFusions = []; chessTraits = []; chessEvolution = nil
+        chessUnits = []; chessSynergies = []; chessMaterials = []; chessWeapons = []; chessFusions = []; chessTraits = []; chessEvolution = nil; chessGenes = nil
     }
 
     private func loadChess(from url: URL) {
@@ -329,6 +332,7 @@ final class AppModel {
                 chessFusions = catalog.fusions ?? []
                 chessTraits = catalog.traits ?? []
                 chessEvolution = catalog.evolution
+                chessGenes = catalog.genes
             }
         }
     }
@@ -372,6 +376,15 @@ final class AppModel {
     func chessUnequip(_ uid: String) {
         guard let connection else { return }
         Task { await connection.sendUnequip(uid) }
+    }
+
+    /// ★2 제노사우로스를 유전 갈래 캐릭터로 바꾼다
+    func chessChooseGene(_ uid: String, to: String) {
+        guard let connection else { return }
+        play(.equip)
+        let from = chessGenes.flatMap { chessUnit($0.from)?.nameKo } ?? "제노사우로스"
+        message = "\(from)이(가) \(chessUnit(to)?.nameKo ?? to)(으)로 진화했어요!"
+        Task { await connection.sendGene(uid, to: to) }
     }
 
     func chessReroll() {

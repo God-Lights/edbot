@@ -3,7 +3,7 @@
 
 import { availableIds, currentTurnSeat } from "./game";
 import { deployCap } from "./chess/game";
-import { EVOLUTION, unitDef } from "./chess/roster";
+import { EVOLUTION, GENES, unitDef } from "./chess/roster";
 import { MARKET_PRICE, materialDef } from "./chess/weapons";
 import { combine, parseWeapon } from "./chess/crafting";
 import type { Role } from "./chess/types";
@@ -182,17 +182,28 @@ export function runChessBot(state: RoomState, botId: string, now: number, scale:
   const cap = deployCap(chess.round);
   const units = () => [...me.board, ...me.bench.filter((u): u is NonNullable<typeof u> => u !== null)];
 
+  // 유전 선택: ★2 제노사우로스를 갈래 캐릭터로 바꾼다.
+  // 어려운 봇은 4라운드까지 기다려 초전설(자원 판이면 데도키온 → 토가로가·드워곤, 아니면 포더모어), 나머지는 바로 전설(탱커가 없으면 루산디아, 있으면 레피드).
+  const lineagePlan = level === "hard" && chess.resources;
+  for (const u of units().filter((x) => x.defId === GENES.from && x.star === 2)) {
+    const lateRound = GENES.options.find((o) => o.to === "dedokion")?.minRound ?? 4;
+    if (level === "hard" && chess.round < lateRound) continue;
+    const hasTank = units().some((x) => x.uid !== u.uid && unitDef(x.defId)?.role === "탱커");
+    const to = level === "hard" ? (lineagePlan ? "dedokion" : "for-the-more") : hasTank ? "lepid" : "lusandia";
+    cmd({ t: "gene", uid: u.uid, to });
+  }
+
   // 0) 자원: 광물 시장에서 재료를 사고, 재료를 재련대에 넣는다. (자원 시스템이 있는 판, 쉬운 봇은 쓰지 않는다)
   const rarityRank = (id: string): number => ["common", "uncommon", "rare", "legendary"].indexOf(materialDef(id)?.rarity ?? "common");
   // 데보이트 계보: 데도키온이 있으면 E 코드를 만들어 끼우고, 진화 재료(고대의 파편·재상트)는 재련하지 않고 남긴다. (쉬운 봇은 안 한다)
   const dedokion = units().find((u) => u.defId === EVOLUTION.from);
   const keep = new Set<string>();
-  // 데보이트를 모으는 중이면 미리 E 코드 재료와 진화 재료를 모아 둔다 (데도키온이 된 뒤에 모으면 8라운드 안에 진화하지 못한다)
-  if (chess.resources && level !== "easy" && !dedokion && units().some((u) => u.defId === "devoit")) {
+  // 제노사우로스를 모으는 중이면(어려운 봇) 미리 E 코드 재료와 진화 재료를 모아 둔다 (데도키온이 된 뒤에 모으면 8라운드 안에 진화하지 못한다)
+  if (lineagePlan && !dedokion && units().some((u) => u.defId === GENES.from)) {
     for (const id of ["bit", "edgem", "ancient-shard"]) keep.add(id);
   }
   if (chess.resources && level !== "easy" && !dedokion && keep.size) {
-    // 데보이트 단계에서도 짝이 맞으면 E 코드(X-E)를 미리 만들어 둔다
+    // 제노사우로스 단계에서도 짝이 맞으면 E 코드(X-E)를 미리 만들어 둔다
     if ((me.materials.bit ?? 0) > 0 && (me.materials.edgem ?? 0) > 0) cmd({ t: "combine", a: { kind: "material", id: "bit" }, b: { kind: "material", id: "edgem" } });
   }
   if (chess.resources && level !== "easy" && dedokion) {
@@ -362,10 +373,10 @@ export function runChessBot(state: RoomState, botId: string, now: number, scale:
         if (!cmd({ t: "combine", a: { kind: "weapon", id: singles[0]! }, b: { kind: "weapon", id: singles[1]! } })) break;
       }
     }
-    // E 코드는 데도키온에게만 낀다 (데보이트를 모으는 중이면 보관해 둔다)
-    const lineagePlan = units().some((u) => u.defId === "devoit" || u.defId === EVOLUTION.from);
+    // E 코드는 데도키온에게만 낀다 (제노사우로스를 모으는 중이면 보관해 둔다)
+    const saveCodes = (lineagePlan && units().some((u) => u.defId === GENES.from)) || units().some((u) => u.defId === EVOLUTION.from);
     for (const [weaponId, count] of Object.entries(me.weapons)) {
-      if (lineagePlan && EVOLUTION.branches.some((b) => b.code === weaponId)) continue;
+      if (saveCodes && EVOLUTION.branches.some((b) => b.code === weaponId)) continue;
       for (let i = 0; i < count; i++) {
         const target = me.board.filter((u) => !u.weapon).sort((a, b) => unitValue(b.defId, b.star) - unitValue(a.defId, a.star))[0];
         if (!target || !cmd({ t: "equip", weaponId, uid: target.uid })) break;

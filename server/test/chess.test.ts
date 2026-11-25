@@ -208,16 +208,16 @@ describe("전투 진행", () => {
 });
 
 describe("캐릭터 20명", () => {
-  it("28명(데보이트 계보 2명, 설정 v2의 4명, 아나스프 2명 추가)이고 id와 이름이 겹치지 않으며 가격 분포가 설계와 같다", () => {
-    expect(ROSTER).toHaveLength(28);
-    expect(new Set(ROSTER.map((d) => d.id)).size).toBe(28);
-    expect(new Set(ROSTER.map((d) => d.nameKo)).size).toBe(28);
+  it("30명(데보이트 계보 2명, 설정 v2의 4명, 아나스프 2명, 제노사우로스 갈래 2명 추가)이고 id와 이름이 겹치지 않으며 가격 분포가 설계와 같다", () => {
+    expect(ROSTER).toHaveLength(30);
+    expect(new Set(ROSTER.map((d) => d.id)).size).toBe(30);
+    expect(new Set(ROSTER.map((d) => d.nameKo)).size).toBe(30);
     const count = (cost: number) => ROSTER.filter((d) => d.cost === cost).length;
-    expect([count(1), count(2), count(3), count(4)]).toEqual([9, 6, 6, 7]);
+    expect([count(1), count(2), count(3), count(4)]).toEqual([9, 5, 8, 8]);
     const pieces = (p: Piece) => ROSTER.filter((d) => d.piece === p).length;
-    expect([pieces("king"), pieces("queen"), pieces("rook"), pieces("bishop"), pieces("knight"), pieces("pawn")]).toEqual([3, 5, 4, 5, 4, 7]);
-    // 상점에 나오는 캐릭터는 진화·승급 전용 4명을 뺀 24명
-    expect(ROSTER.filter((d) => d.evolveOnly).map((d) => d.id).sort()).toEqual(["dedokion", "dwargon", "queen-anasp", "toka-loga"]);
+    expect([pieces("king"), pieces("queen"), pieces("rook"), pieces("bishop"), pieces("knight"), pieces("pawn")]).toEqual([3, 5, 5, 5, 5, 7]);
+    // 상점에 나오는 캐릭터는 진화·승급 전용 7명을 뺀 23명
+    expect(ROSTER.filter((d) => d.evolveOnly).map((d) => d.id).sort()).toEqual(["dedokion", "dwargon", "for-the-more", "lepid", "lusandia", "queen-anasp", "toka-loga"]);
   });
 
   it("가격이 비쌀수록 평균 능력치가 높다", () => {
@@ -294,7 +294,7 @@ describe("밸런스 측정 도구", () => {
     expect(a.matches).toBe(240);
     expect(a.seat0WinRate).toBeGreaterThan(0.4);
     expect(a.seat0WinRate).toBeLessThan(0.6);
-    expect(a.units).toHaveLength(28);
+    expect(a.units).toHaveLength(30);
   });
   it("팀은 예산과 기물 수를 넘지 않고 겹치지 않게 배치된다", () => {
     const rng = makeRng(1);

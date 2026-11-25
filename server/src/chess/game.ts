@@ -2,7 +2,7 @@
 // 설계: docs/DESIGN-autochess.md 3, 4, 6장.
 
 import { activeContent, currentRuleset, rules } from "./content";
-import { EVOLUTION, EVOLVED_FROM, MERGE_EVOLVE, roster, unitDef } from "./roster";
+import { EVOLUTION, EVOLVED_FROM, GENES, MERGE_EVOLVE, roster, unitDef } from "./roster";
 import { recordCombat } from "./sim";
 import type { CombatRecording } from "./sim";
 import type { Placement, ResourceTile, Seat } from "./types";
@@ -140,7 +140,10 @@ export type ChessFailureCode =
   | "no_material"
   | "no_free_smelter"
   | "no_weapon"
-  | "invalid_recipe";
+  | "invalid_recipe"
+  | "not_gene_ready"
+  | "invalid_gene"
+  | "gene_locked";
 
 export type ChessResult = { ok: true } | { ok: false; code: ChessFailureCode };
 const fail = (code: ChessFailureCode): ChessResult => ({ ok: false, code });
@@ -165,7 +168,7 @@ function emptyPlayer(seat: Seat): ChessPlayer {
 /** 입문용 풀: 1~2골드 캐릭터 11명만. 처음 하는 사람이 배울 것을 줄인다. (폰 4, 비숍 3, 룩 2, 킹 1... 시너지는 폰·비숍·룩만 켜진다) */
 export const LITE_IDS: readonly string[] = [
   "nut-wolf", "xenosaurs", "relic", "mossling", "skritch", "felis",
-  "lappus", "for-the-more", "raufaino", "obelion", "marshal-berg",
+  "lappus", "syndex", "raufaino", "obelion", "marshal-berg", // 포더모어가 진화 전용이 되어 신덱스(비숍)로 바꿈
 ];
 
 /** 지금 적용된 입문 모드 캐릭터 목록(공식 + 팩이 lite로 표시한 캐릭터) */
@@ -355,7 +358,7 @@ function mergeIfPossible(game: ChessGame, player: ChessPlayer, defId: string, ex
   const three = all.slice(0, 3);
   const anchor = three[0]!;
   const anchorBoard = onBoard.find((u) => u.uid === anchor.uid);
-  // 데보이트 3장은 ★2 대신 데도키온 ★1이 된다.
+  // MERGE_EVOLVE 에 있는 캐릭터는 ★2 대신 다른 캐릭터 ★1이 된다. (지금은 없음)
   const evolvesTo = MERGE_EVOLVE[defId];
   const upgraded: OwnedUnit = evolvesTo ? { uid: `i${game.nextUid++}`, defId: evolvesTo, star: 1 } : { uid: `i${game.nextUid++}`, defId, star: 2 };
   // 무기는 하나를 ★2가 이어받고, 나머지는 보관함으로 돌아온다.
@@ -374,6 +377,28 @@ function mergeIfPossible(game: ChessGame, player: ChessPlayer, defId: string, ex
   }
   // 진화한 캐릭터도 3장이 모이면 ★2가 된다.
   if (evolvesTo) mergeIfPossible(game, player, evolvesTo);
+}
+
+// ---- 제노사우로스의 유전 선택 ----
+
+/**
+ * ★2 제노사우로스를 고른 갈래(레피드·루산디아·데도키온·포더모어)의 ★1로 바꾼다. 준비 단계에서 언제든.
+ * 무기와 자리는 그대로. 같은 갈래가 3장 모이면 그 캐릭터의 ★2가 된다.
+ */
+export function chooseGene(game: ChessGame, seat: Seat, uid: string, to: string): ChessResult {
+  const player = game.players[seat];
+  const found = findUnit(player, uid);
+  if (!found) return fail("unit_not_found");
+  const unit = found.unit;
+  if (unit.defId !== GENES.from || unit.star !== 2) return fail("not_gene_ready");
+  const option = GENES.options.find((o) => o.to === to);
+  if (!option || !unitDef(option.to)) return fail("invalid_gene");
+  if (game.round < option.minRound) return fail("gene_locked");
+  unit.defId = option.to;
+  unit.star = 1;
+  delete unit.evo;
+  mergeIfPossible(game, player, option.to);
+  return { ok: true };
 }
 
 // ---- 데도키온의 진화 ----
@@ -449,7 +474,7 @@ export function sell(game: ChessGame, seat: Seat, uid: string): ChessResult {
   const def = unitDef(found.unit.defId)!;
   const copies = found.unit.star === 1 ? 1 : 3;
   player.gold += def.cost * copies;
-  // 진화한 캐릭터는 뿌리(데보이트)로 공용 풀에 돌아간다.
+  // 진화한 캐릭터는 뿌리(제노사우로스)로 공용 풀에 돌아간다.
   const evolved = EVOLVED_FROM[def.id];
   if (evolved) game.pool[evolved.root] = (game.pool[evolved.root] ?? 0) + evolved.copies * copies;
   else game.pool[def.id] = (game.pool[def.id] ?? 0) + copies;

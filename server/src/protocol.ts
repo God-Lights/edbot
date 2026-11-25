@@ -81,7 +81,10 @@ export type ErrorCode =
   | "spectate_unavailable"
   | "unauthorized"
   | "room_closed"
-  | "invalid_recipe";
+  | "invalid_recipe"
+  | "not_gene_ready"
+  | "invalid_gene"
+  | "gene_locked";
 
 export interface PublicPlayer {
   id: string;
@@ -436,6 +439,8 @@ export type ClientMessage =
   | { t: "equip"; weaponId: string; uid: string }
   /** 기물(uid)의 무기를 뺀다. */
   | { t: "unequip"; uid: string }
+  /** ★2 제노사우로스(uid)를 유전 갈래(to: lepid·lusandia·dedokion·for-the-more)로 바꾼다. */
+  | { t: "gene"; uid: string; to: string }
   /** 준비를 끝냈다. 둘 다 끝내면 바로 전투가 시작된다. */
   | { t: "done" }
   /** 전투 중 항복한다. 상대가 바로 이긴다. 데스매치에서도 할 수 있다. */
@@ -581,6 +586,11 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
     }
     case "done":
       return { t: "done" };
+    case "gene": {
+      const uid = characterId(msg.uid);
+      const to = characterId(msg.to);
+      return uid && to ? { t: "gene", uid, to } : null;
+    }
     case "deploy": {
       const uid = characterId(msg.uid);
       const { col, row } = msg;

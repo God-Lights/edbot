@@ -568,6 +568,7 @@ document.addEventListener("click", (event) => {
     case "sell-sel": if (S.selUid) act.sell(S.selUid); break;
     case "bench-sel": if (S.selUid) act.bench(S.selUid); break;
     case "unequip-sel": if (S.selUid) act.unequip(S.selUid); break;
+    case "gene": if (S.selUid && d.to) act.gene(S.selUid, d.to); break;
     case "market": act.market(num(d.slot)); break;
     case "smelt": act.smelt(d.id); break;
     case "pick-weapon": update({ selWeapon: S.selWeapon === d.id ? null : d.id }); break;

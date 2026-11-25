@@ -2,7 +2,7 @@ import { roster } from "./chess/roster";
 import { MARKET_PRICE, materials, weapons as chessWeapons } from "./chess/weapons";
 import { HYBRID_POWER, STAR_POWER, fusions } from "./chess/crafting";
 import { ALL_SYNERGIES, LINEAGE_TRAITS } from "./chess/synergy";
-import { EVOLUTION } from "./chess/roster";
+import { EVOLUTION, GENES } from "./chess/roster";
 import { CHARACTERS } from "./characters";
 import { AuthStore } from "./auth-store";
 import { USER_HEADER, authMode, authRequired, authStore, bearerToken, identify, loginRedirectUrl } from "./auth";
@@ -308,6 +308,7 @@ export default {
         traits: LINEAGE_TRAITS.map(({ id, nameKo, need, tier, text, members }) => ({ id, nameKo, need, tier, text, members })),
         // 데도키온의 진화 규칙 (진행 막대를 그리는 데 쓴다)
         evolution: EVOLUTION,
+        genes: GENES,
         materials: materials().map((m) => ({ ...m, price: MARKET_PRICE[m.rarity] })),
         weapons: chessWeapons(),
         // 조합: 재료 조합표(재료 둘 -> 한 단계 위 재료)와 무기 조합의 효과 배율

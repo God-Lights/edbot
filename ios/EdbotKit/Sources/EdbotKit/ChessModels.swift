@@ -63,6 +63,18 @@ public struct ChessEvolutionRule: Codable, Equatable, Sendable {
     public let branches: [Branch]
 }
 
+/// 제노사우로스 유전 갈래: ★2 제노사우로스를 준비 단계에서 고른 갈래의 캐릭터로 바꾼다.
+public struct ChessGeneRule: Codable, Equatable, Sendable {
+    public struct Option: Codable, Equatable, Sendable {
+        public let to: String
+        public let gen: String
+        public let grade: String
+        public let minRound: Int
+    }
+    public let from: String
+    public let options: [Option]
+}
+
 public struct ChessSelfSnapshot: Codable, Equatable, Sendable {
     public let hp: Int
     public let gold: Int
@@ -332,6 +344,8 @@ public struct ChessCatalog: Codable, Equatable, Sendable {
     /// 계보 시너지와 진화 규칙. 오래된 서버면 nil.
     public var traits: [ChessTraitInfo]? = nil
     public var evolution: ChessEvolutionRule? = nil
+    /// 제노사우로스 유전 갈래. 오래된 서버면 nil.
+    public var genes: ChessGeneRule? = nil
 }
 
 // MARK: 게스트 로그인과 관전 목록
