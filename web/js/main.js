@@ -84,6 +84,7 @@ function lobbyView() {
           <button class="modecard" data-act="join-code" data-code="ADMX" title="봇, 앞면·밑면과 이음매가 있는 무한 모드"><span class="mi">${ic("infinity")}</span><span><b>무한 대전</b><small>봇과 · 뫼비우스 규칙</small></span></button>
         </div>
         <div class="panel two tight"><button class="btn sec" data-act="ranking">${ic("trophy")} 랭킹</button><button class="btn sec" data-act="guide" data-tab="flow">${ic("book")} 가이드</button></div>
+        <a class="btn sec wide" href="install.html">${ic("link")} 앱 설치 안내</a>
       </div>
     </div></div>`;
 }
