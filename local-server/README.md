@@ -13,6 +13,12 @@ bun test                                      # 저장소 시험
 ```
 같은 와이파이의 기기에서는 시작할 때 보여 주는 `http://<IP>:8787` 로 접속한다. 로그인은 이름만 쓴다(`REQUIRE_AUTH=false`).
 
+## 릴리스 (공개 다운로드)
+Actions 탭 **Server release** → Run workflow 에서 버전(예: `0.1.0`)을 적거나 태그 `server-v0.1.0`을 올린다.
+`local-server.yml`(윈도우·맥·우분투 실행 점검)과 `ios-server-app.yml`(iPad 서버 앱)을 그대로 불러서 통과하면
+릴리스 `server-vX.Y.Z`에 `commander-server-windows.exe`, `-macos-apple-silicon`, `-macos-intel`, `-linux-x64`, `.deb`(각각 expert 포함), `CommanderServer.ipa`, `SHA256SUMS.txt`를 올리고,
+SideStore 소스(`/sidestore.json`)에 iPad 서버 앱을 싣는다. 설치 안내: `/install.html#server`.
+
 ## 실행파일 만들기
 ```bash
 bun build.ts                              # 지금 컴퓨터용

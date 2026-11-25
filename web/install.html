@@ -270,12 +270,13 @@
   <section id="server">
     <h2>내 서버 열기 <span class="tag dim">선택</span></h2>
     <p class="lead">인터넷이 없거나 우리끼리만 할 때, PC 한 대를 서버로 켜고 같은 와이파이에서 접속해요. 전적은 그 PC에 남아요.</p>
-    <p class="note">실행파일은 아직 공개 다운로드가 없어요. 운영하는 사람에게 받아 주세요.</p>
+    <div class="row"><a class="btn" href="https://github.com/God-Lights/edbot/releases?q=server-v&amp;expanded=true" target="_blank" rel="noopener">서버 받기 (GitHub 릴리스)</a></div>
+    <p class="lead">가장 위의 <b>COMMANDER 서버</b> 릴리스에서 내 컴퓨터에 맞는 파일을 받아요. 윈도우는 <code>commander-server-windows.exe</code>, 맥은 <code>commander-server-macos-apple-silicon</code>(M1 이후) 또는 <code>-macos-intel</code>, 우분투는 <code>.deb</code>. 이름에 <code>expert</code>가 붙은 파일은 콘텐츠 팩을 읽는 엑스퍼트 서버예요.</p>
     <div class="cols">
       <div>
         <h3>윈도우</h3>
         <ol>
-          <li><code>commander-server.exe</code>를 원하는 폴더에 두고 실행해요. 데이터는 옆의 <code>commander-data</code> 폴더에 쌓여요.</li>
+          <li><code>commander-server-windows.exe</code>를 원하는 폴더에 두고 실행해요. 데이터는 옆의 <code>commander-data</code> 폴더에 쌓여요.</li>
           <li>"Windows의 PC 보호" 창이 뜨면 <b>추가 정보 → 실행</b>.</li>
           <li>방화벽이 물으면 <b>허용</b> (폰이 서버를 찾으려면 필요해요).</li>
         </ol>
@@ -283,8 +284,8 @@
       <div>
         <h3>맥</h3>
         <ol>
-          <li>터미널에서 처음 한 번 잠금을 풀어요:<br><code>xattr -d com.apple.quarantine ./commander-server-macos</code></li>
-          <li><code>./commander-server-macos</code>로 실행해요.</li>
+          <li>터미널에서 받은 폴더로 가서 처음 한 번 잠금을 풀고 실행 권한을 줘요:<br><code>xattr -d com.apple.quarantine ./commander-server-macos-apple-silicon</code><br><code>chmod +x ./commander-server-macos-apple-silicon</code></li>
+          <li><code>./commander-server-macos-apple-silicon</code>로 실행해요. (인텔 맥은 <code>-macos-intel</code>)</li>
         </ol>
         <h3>우분투</h3>
         <ol>
@@ -293,6 +294,8 @@
         </ol>
       </div>
     </div>
+    <h3>iPad를 서버로 <span class="tag warn">시험판</span></h3>
+    <p>SideStore에 COMMANDER 소스를 추가했다면(<a href="#ss-source">5단계</a>) 소스 목록에 <b>COMMANDER 서버</b> 앱도 있어요. 설치하고 <b>서버 켜기</b>를 누른 뒤 로컬 네트워크 권한을 허용하면, 같은 와이파이의 다른 기기가 QR이나 서버 목록으로 접속할 수 있어요. 무료 Apple 계정은 앱 3개까지라 SideStore·COMMANDER·COMMANDER 서버를 함께 쓰면 꽉 차요.</p>
     <h3>접속하기</h3>
     <ul>
       <li>서버를 켜면 화면에 <code>http://IP주소:8787</code>과 QR이 나와요. 같은 화면은 서버 PC의 <code>http://localhost:8787/connect</code>에도 있어요.</li>

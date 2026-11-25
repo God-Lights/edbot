@@ -12,12 +12,20 @@ on:
       - "local-server/src/plugins.ts"
       - ".github/workflows/ios-server-app.yml"
   workflow_dispatch:
+  # 릴리스 워크플로(server-release.yml)가 버전을 넘겨 부른다.
+  workflow_call:
+    inputs:
+      version:
+        description: "앱 버전 (CFBundleShortVersionString·CFBundleVersion). 비우면 프로젝트 설정 그대로"
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
 
 concurrency:
-  group: ios-server-app-${{ github.ref }}
+  group: ios-server-app-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -71,12 +79,20 @@ jobs:
 
       - name: 앱에 엔진과 웹 화면이 들어 있는지 확인하고 .ipa 만들기
         working-directory: ios-server
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
           app=build/CommanderServer.xcarchive/Products/Applications/CommanderServer.app
           test -f "$app/engine.js" || { echo "engine.js 가 앱에 없다"; exit 1; }
           test -f "$app/web/index.html" || { echo "web/index.html 이 앱에 없다"; exit 1; }
           test -f "$app/web/js/main.js" || { echo "web/js/main.js 가 앱에 없다"; exit 1; }
           /usr/libexec/PlistBuddy -c 'Print :NSBonjourServices:0' "$app/Info.plist" | grep -q "_commander._tcp"
+          # 릴리스 버전: SideStore 는 앱의 CFBundleVersion 이 소스의 buildVersion(= 버전 번호)과 같은지 본다
+          if [ -n "$VERSION" ]; then
+            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" -c "Set :CFBundleVersion $VERSION" "$app/Info.plist"
+            test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Info.plist")" = "$VERSION"
+          fi
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")" = "com.officialgl.commander.server"
           rm -rf build/Payload && mkdir -p build/Payload
           cp -R "$app" build/Payload/
           (cd build && zip -qr CommanderServer.ipa Payload)

@@ -4,6 +4,10 @@
 
 export const IOS_TAG_PREFIX = "ios-v";
 export const BUNDLE_ID = "com.officialgl.commander";
+/** 서버 앱(ios-server/): 릴리스 태그 server-vX.Y.Z 에 CommanderServer.ipa 가 붙는다 */
+export const SERVER_TAG_PREFIX = "server-v";
+export const SERVER_BUNDLE_ID = "com.officialgl.commander.server";
+const SERVER_IPA_NAME = "CommanderServer.ipa";
 /** 릴리스에 아이콘이 없을 때 쓰는 주소. SideStore는 빈 문자열을 잘못된 URL로 보고 소스 추가를 거부한다. */
 export const FALLBACK_ICON_URL =
   "https://raw.githubusercontent.com/God-Lights/edbot/main/ios/EdbotApp/Assets.xcassets/AppIcon.appiconset/icon-1024.png";
@@ -35,16 +39,20 @@ export interface SideStoreVersion {
   localizedDescription: string;
 }
 
-/** 소스에 올릴 수 있는 릴리스(공개된 ios-v* 태그 + .ipa 첨부)를 새것부터 골라 버전 정보로 바꾼다. */
-export function versionsFromReleases(releases: GithubRelease[]): { versions: SideStoreVersion[]; iconURL: string | null } {
+/** 소스에 올릴 수 있는 릴리스(공개된 ios-v* 태그 + .ipa 첨부)를 새것부터 골라 버전 정보로 바꾼다. 서버 앱은 prefix·ipaName 을 바꿔 부른다. */
+export function versionsFromReleases(
+  releases: GithubRelease[],
+  prefix = IOS_TAG_PREFIX,
+  ipaName = IPA_NAME,
+): { versions: SideStoreVersion[]; iconURL: string | null } {
   const usable = releases
-    .filter((r) => !r.draft && r.tag_name.startsWith(IOS_TAG_PREFIX))
-    .map((r) => ({ release: r, ipa: r.assets?.find((a) => a.name === IPA_NAME) }))
+    .filter((r) => !r.draft && r.tag_name.startsWith(prefix))
+    .map((r) => ({ release: r, ipa: r.assets?.find((a) => a.name === ipaName) }))
     .filter((x): x is { release: GithubRelease; ipa: GithubAsset } => x.ipa !== undefined)
     .sort((a, b) => Date.parse(b.release.published_at ?? "") - Date.parse(a.release.published_at ?? ""));
 
   const versions = usable.map(({ release, ipa }) => {
-    const version = release.tag_name.slice(IOS_TAG_PREFIX.length);
+    const version = release.tag_name.slice(prefix.length);
     return {
       version,
       buildVersion: version,
@@ -62,38 +70,50 @@ export function versionsFromReleases(releases: GithubRelease[]): { versions: Sid
 /** AltStore 소스 형식(v1)의 JSON. 옛 SideStore를 위해 최신 버전을 앱 최상위에도 적는다. */
 export function buildSource(releases: GithubRelease[], sourceURL: string): unknown {
   const { versions, iconURL } = versionsFromReleases(releases);
-  const latest = versions[0];
+  const server = versionsFromReleases(releases, SERVER_TAG_PREFIX, SERVER_IPA_NAME);
   const icon = iconURL ?? FALLBACK_ICON_URL;
+  const app = (fields: { name: string; bundleIdentifier: string; subtitle: string; localizedDescription: string }, list: SideStoreVersion[]) => {
+    const latest = list[0]!;
+    return {
+      ...fields,
+      developerName: "God Lights",
+      iconURL: icon,
+      tintColor: "B040BE",
+      screenshotURLs: [],
+      version: latest.version,
+      versionDate: latest.date,
+      versionDescription: latest.localizedDescription,
+      downloadURL: latest.downloadURL,
+      size: latest.size,
+      versions: list,
+      appPermissions: { entitlements: [], privacy: {} },
+    };
+  };
+  // 릴리스가 아직 없는 앱은 싣지 않는다. 다운로드 주소가 없는 앱은 SideStore가 소스를 거부할 수 있다.
+  const apps = [
+    ...(versions.length ? [app({
+      name: "COMMANDER",
+      bundleIdentifier: BUNDLE_ID,
+      subtitle: "체스판 자동 전투 · 2인 실시간 대전",
+      localizedDescription: "상점에서 캐릭터를 사서 체스판에 놓고, 자동으로 싸우는 2인 실시간 대전 게임입니다. 시너지, 무기 재련, 진화, 무한(뫼비우스) 모드가 있습니다.",
+    }, versions)] : []),
+    ...(server.versions.length ? [app({
+      name: "COMMANDER 서버",
+      bundleIdentifier: SERVER_BUNDLE_ID,
+      subtitle: "iPad를 COMMANDER 서버로 (시험판)",
+      localizedDescription: "이 iPad에서 COMMANDER 서버를 켭니다. 같은 와이파이의 다른 기기가 QR이나 서버 목록으로 접속해 대전할 수 있습니다. 전적은 이 iPad에 남습니다.",
+    }, server.versions)] : []),
+  ];
   return {
     name: "COMMANDER",
     identifier: `${BUNDLE_ID}.source`,
     subtitle: "COMMANDER iPad 앱",
-    description: "COMMANDER iPad 앱을 SideStore로 설치하고 업데이트합니다.",
+    description: "COMMANDER iPad 앱(과 서버 앱)을 SideStore로 설치하고 업데이트합니다.",
     iconURL: icon,
     website: "https://edgame-api.officialgl.com",
     tintColor: "B040BE",
     sourceURL,
-    // 릴리스가 아직 없으면 앱을 싣지 않는다. 다운로드 주소가 없는 앱은 SideStore가 소스를 거부할 수 있다.
-    apps: !latest ? [] : [
-      {
-        name: "COMMANDER",
-        bundleIdentifier: BUNDLE_ID,
-        developerName: "God Lights",
-        subtitle: "2인 실시간 전략 대전",
-        localizedDescription:
-          "캐릭터 12명 중 5명을 뽑아 세 레인에 보내고, 타워를 부수며 싸우는 2인 실시간 전략 대전 게임입니다.",
-        iconURL: icon,
-        tintColor: "B040BE",
-        screenshotURLs: [],
-        version: latest.version,
-        versionDate: latest.date,
-        versionDescription: latest.localizedDescription,
-        downloadURL: latest.downloadURL,
-        size: latest.size,
-        versions,
-        appPermissions: { entitlements: [], privacy: {} },
-      },
-    ],
+    apps,
     news: [],
   };
 }
