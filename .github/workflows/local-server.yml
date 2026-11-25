@@ -210,7 +210,12 @@ jobs:
 
   macos:
     name: 맥에서 만들고 실행 점검
+    # main 에 머지할 때(push)는 건너뛴다: 같은 코드를 PR 에서 이미 점검했고, 맥 러너는 자리가 모자라 오래 기다리다 실패하곤 한다.
+    # PR, 수동 실행, 서버 릴리스(태그 push 포함)에서는 돈다.
+    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/')
     runs-on: macos-15
+    # 러너를 못 잡아 멈춘 채로 오래 있지 않게
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
