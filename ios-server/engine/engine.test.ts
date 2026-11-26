@@ -32,7 +32,7 @@ function boot() {
   const context = vm.createContext(sandbox);
   vm.runInContext(code, context);
   const engineApi = (sandbox as { CommanderEngine: { start(o: unknown): any } }).CommanderEngine;
-  return { engineApi, posts };
+  return { engineApi, posts, sandbox };
 }
 
 const b64 = (text: string) => btoa(unescape(encodeURIComponent(text)));
@@ -124,3 +124,22 @@ test("두 사람이 한 판 하면 전적이 파일 변경으로 넘어가고, �
   const board2 = (await json(again, "GET", "/api/leaderboard?limit=10")).data.entries as Array<{ nickname: string }>;
   expect(board2.map((e) => e.nickname).sort()).toEqual(["가나", "다라"]);
 }, 30000);
+
+test("앱이 돌리는 타이머 (안드로이드): setTimeout 이 앱에 맡겨지고, 앱이 부르면 실행된다", async () => {
+  const { engineApi, sandbox } = boot();
+  const scheduled: Array<[number, number]> = [];
+  const cancelled: number[] = [];
+  const engine = engineApi.start({
+    host: { post() {} }, files: {}, name: "타이머", edition: "vanilla",
+    timers: { schedule: (id: number, ms: number) => scheduled.push([id, ms]), cancel: (id: number) => cancelled.push(id) },
+  });
+  // 방을 만들면 단계 타이머(알람)가 앱에 맡겨진다
+  const res = await engine.fetch({ method: "POST", url: "http://x/api/rooms", headers: [], body: null });
+  expect(res.status).toBeLessThan(300);
+  // 저장 미루기(0.15초)나 방 알람이 앱에 맡겨진다. 앱이 부르면(__hostTimer) 실행되고, 지운 타이머는 cancel 로 알린다.
+  expect(scheduled.length).toBeGreaterThan(0);
+  const ids = scheduled.map(([id]) => id);
+  // 앱이 시간이 되어 부르는 것처럼 실행해 본다 (오류 없이 돈다)
+  for (const id of ids) (sandbox.__hostTimer as (id: number) => void)(id);
+  expect(scheduled.every(([id, ms]) => Number.isInteger(id) && ms >= 0)).toBe(true);
+});

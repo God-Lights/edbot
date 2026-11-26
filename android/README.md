@@ -12,6 +12,23 @@ app/src/main/java/com/officialgl/commander/
   Ui.kt               헥스텍 색과 버튼 (웹·iOS 와 같은 색)
 ```
 
+## 서버 앱 (`server/`, COMMANDER 서버)
+이 폰을 같은 와이파이용 게임 서버로 켠다. 패키지 `com.officialgl.commander.server`. iPad 서버 앱(`ios-server/`)과 같은 구조다.
+
+```
+server/src/main/java/com/officialgl/commander/server/
+  ServerActivity.kt  설정(이름·포트·바닐라/엑스퍼트), 켜기/끄기, 접속 주소와 QR, 기록
+  ServerService.kt   포그라운드 서비스: 엔진 + 접속 서버 + 같은 와이파이 알림(mDNS). 앱을 내려도 돈다
+  Engine.kt          숨은 WebView 에서 서버 엔진(engine.js)을 돌린다. 요청·소켓·파일 저장을 주고받는다
+  HttpServer.kt      HTTP + WebSocket (NanoHTTPD). 웹 화면은 APK 의 assets/web, 나머지는 엔진으로
+  DataStore.kt       데이터 폴더(전적·방). 엔진이 알려 주는 파일 변경을 순서대로 쓴다
+```
+- 엔진은 `ios-server/engine` 의 `engine.js`(서버 코드 전체를 한 파일로 묶은 것)를 그대로 쓴다. 빌드 전에 `cd ios-server/engine && bun build.ts`.
+- **타이머는 앱이 돌린다**: 화면에 안 보이는 WebView 는 setTimeout 을 늦추므로, 엔진의 `timers` 옵션으로 Kotlin(Handler)이 시간을 잰다.
+- 화면이 꺼져도 돌게 부분 wake lock·와이파이 lock 을 잡는다. 오래 켜 둘 때는 배터리 최적화를 끄는 게 좋다.
+- WebView 100 이상이 필요하다 (엔진이 최신 JS 문법을 쓴다).
+- CI 는 에뮬레이터(14)에서 서버 앱을 켜고 `local-server/scripts/smoke.ts` 로 봇과 한 판·두 사람 한 판까지 점검한다.
+
 ## 왜 웹 화면을 쓰나
 게임 화면(로비·준비·전투·도감)은 서버가 함께 내보내는 웹 화면(`web/`)을 그대로 쓴다.
 서버와 화면 버전이 늘 맞고, 웹에 들어간 디자인·기능이 앱에도 바로 들어온다.

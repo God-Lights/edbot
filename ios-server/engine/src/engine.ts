@@ -17,6 +17,8 @@ import { upgradeTarget } from "../../../local-server/src/runtime/websocket";
 import type { ServerSocket } from "../../../local-server/src/runtime/websocket";
 import { loadPlugins } from "../../../local-server/src/plugins";
 import { MemFs } from "./memfs";
+import { installHostTimers } from "./host-timers";
+import type { HostTimers } from "./host-timers";
 import type { FsOp } from "./memfs";
 import worker, { Room, AuthStore, Matchmaker, LiveRegistry, SupportDesk } from "../../../server/src/index";
 
@@ -33,6 +35,8 @@ export interface StartOptions {
   version?: string;
   /** 단계 시간 배율(시험용). 기본 "1" */
   phaseScale?: string;
+  /** 앱이 타이머를 대신 돌린다(안드로이드: 숨은 웹뷰의 타이머가 늦어지지 않게). 없으면 웹뷰 타이머를 쓴다. */
+  timers?: HostTimers;
 }
 
 export interface EngineRequest {
@@ -71,6 +75,7 @@ class HostSocket {
 
 export function start(options: StartOptions) {
   const { host } = options;
+  if (options.timers) installHostTimers(options.timers);
   const fs = new MemFs(options.files, (ops: FsOp[]) => host.post({ t: "fs", ops }));
   for (const level of ["log", "warn", "error"] as const) {
     console[level] = (...args: unknown[]) => host.post({ t: "log", level, text: args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ") });

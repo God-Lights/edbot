@@ -1,6 +1,6 @@
 name: Android
 
-# 안드로이드 앱(android/): 안드로이드 8.0(API 26) 이상.
+# 안드로이드 앱(android/): 안드로이드 8.0(API 26) 이상. 게임 앱(app)과 서버 앱(server).
 # - android/ 를 바꾸는 PR: 단위 시험, APK 빌드, 에뮬레이터(안드로이드 8.0, 14)에서 화면 찍기
 # - Actions 탭 > Android > Run workflow 에서 버전(예: 0.1.0)을 적고 실행하거나 태그 android-vX.Y.Z 를 올리면 릴리스에 APK 를 올린다
 # 서명: 저장소 비밀값 ANDROID_KEYSTORE_B64(.jks 를 base64), ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD 가 있으면 그 키로,
@@ -9,6 +9,7 @@ on:
   pull_request:
     paths:
       - "android/**"
+      - "ios-server/engine/**"
       - ".github/workflows/android.yml"
   push:
     tags: ["android-v*"]
@@ -37,6 +38,13 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      # 서버 앱에 넣을 엔진 (iPad 서버 앱과 같은 묶음)
+      - name: 서버 엔진 묶기와 시험
+        working-directory: ios-server/engine
+        run: bun run test
 
       - name: 버전 정하기
         id: version
@@ -92,7 +100,11 @@ jobs:
         run: |
           ./gradlew --no-daemon testDebugUnitTest assembleDebug assembleRelease lintDebug
           cp app/build/outputs/apk/release/app-release.apk "build-Commander-${{ steps.version.outputs.name }}.apk"
-          ls -lh app/build/outputs/apk/*/ build-*.apk
+          cp server/build/outputs/apk/release/server-release.apk "build-CommanderServer-${{ steps.version.outputs.name }}.apk"
+          ls -lh app/build/outputs/apk/*/ server/build/outputs/apk/*/ build-*.apk
+          # 서버 앱에 엔진과 웹 화면이 들어 있는지
+          unzip -l server/build/outputs/apk/release/server-release.apk | grep -E "assets/engine.js|assets/web/index.html|assets/web/js/main.js" | tee "$RUNNER_TEMP/assets.txt"
+          [ "$(wc -l < "$RUNNER_TEMP/assets.txt")" -ge 3 ] || { echo "서버 앱에 엔진이나 웹 화면이 없다"; exit 1; }
           # minSdk 26 (안드로이드 8.0) 확인
           aapt=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
           "$aapt" dump badging app/build/outputs/apk/release/app-release.apk | grep -E "^package|[sS]dkVersion"
@@ -102,20 +114,26 @@ jobs:
         if: always()
         with:
           name: android-lint
-          path: android/app/build/reports/lint-results-debug.html
+          path: |
+            android/app/build/reports/lint-results-debug.html
+            android/server/build/reports/lint-results-debug.html
           if-no-files-found: ignore
           retention-days: 7
 
       - uses: actions/upload-artifact@v4
         with:
           name: commander-android-apk
-          path: android/build-Commander-*.apk
+          path: |
+            android/build-Commander-*.apk
+            android/build-CommanderServer-*.apk
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
         with:
           name: android-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/server/build/outputs/apk/debug/server-debug.apk
           if-no-files-found: error
           retention-days: 3
 
@@ -126,10 +144,11 @@ jobs:
           VERSION: ${{ steps.version.outputs.release }}
         run: |
           mv "android/build-Commander-${VERSION}.apk" "android/Commander-${VERSION}.apk"
-          gh release create "android-v${VERSION}" "android/Commander-${VERSION}.apk" \
+          mv "android/build-CommanderServer-${VERSION}.apk" "android/CommanderServer-${VERSION}.apk"
+          gh release create "android-v${VERSION}" "android/Commander-${VERSION}.apk" "android/CommanderServer-${VERSION}.apk" \
             --repo "${GITHUB_REPOSITORY}" --target "${GITHUB_SHA}" \
             --title "COMMANDER Android ${VERSION}" \
-            --notes "안드로이드 8.0 이상. APK 를 받아 설치하세요(출처를 알 수 없는 앱 허용). 게임 화면은 Android System WebView 111 이상이 필요합니다."
+            --notes "안드로이드 8.0 이상. APK 를 받아 설치하세요(출처를 알 수 없는 앱 허용). Commander: 게임 (Android System WebView 111 이상). CommanderServer: 이 폰을 같은 와이파이용 게임 서버로 (WebView 100 이상)."
 
   screenshots:
     name: 에뮬레이터 화면 (안드로이드 ${{ matrix.label }})
@@ -148,7 +167,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: android-debug-apk
-          path: android/app/build/outputs/apk/debug
+          path: android/apks
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
