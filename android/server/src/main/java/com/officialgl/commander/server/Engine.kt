@@ -10,8 +10,10 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import org.json.JSONArray
 import org.json.JSONObject
+import android.util.Base64
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -38,6 +40,8 @@ class Engine(private val context: Context, private val listener: Listener) {
     private val calls = ConcurrentHashMap<Int, CompletableFuture<String>>()
     private val nextCall = AtomicInteger(1)
     private val timers = ConcurrentHashMap<Int, Runnable>()
+    /** 엔진이 밖으로 보내는 HTTP 요청을 대신 보내는 스레드 (HostHttp) */
+    private val net = Executors.newCachedThreadPool()
     @Volatile private var bootFiles: String = "{}"
     @Volatile private var onBooted: ((Result<BootInfo>) -> Unit)? = null
 
@@ -78,7 +82,9 @@ class Engine(private val context: Context, private val listener: Listener) {
               host: { post: function (m) { AndroidHost.post(JSON.stringify(m)); } },
               files: JSON.parse(AndroidHost.bootFiles()),
               name: ${JSONObject.quote(name)}, edition: ${JSONObject.quote(edition)}, version: ${JSONObject.quote(version)},
-              timers: { schedule: function (id, ms) { AndroidHost.schedule(id, ms); }, cancel: function (id) { AndroidHost.cancel(id); } }
+              timers: { schedule: function (id, ms) { AndroidHost.schedule(id, ms); }, cancel: function (id) { AndroidHost.cancel(id); } },
+              // 밖으로 나가는 요청(공식 서버)은 앱이 보낸다: 숨은 웹뷰의 fetch 는 막힌다
+              net: { request: function (id, req) { AndroidHost.httpRequest(id, req); } }
             };
             ${if (phaseScale != null) "options.phaseScale = ${JSONObject.quote(phaseScale)};" else ""}
             ${if (auth != null) "options.auth = $auth;" else ""}
@@ -141,6 +147,7 @@ class Engine(private val context: Context, private val listener: Listener) {
             webView = null
             for (f in calls.values) f.complete("")
         }
+        net.shutdownNow()
     }
 
     /** 웹뷰의 JS 가 부르는 것들 (웹뷰의 다른 스레드에서 불린다) */
@@ -164,6 +171,26 @@ class Engine(private val context: Context, private val listener: Listener) {
         @JavascriptInterface
         fun reply(id: Int, json: String) {
             calls[id]?.complete(json)
+        }
+
+        /** 엔진의 밖으로 나가는 요청을 보내고, 답을 netReply 로 돌려준다 */
+        @JavascriptInterface
+        fun httpRequest(id: Int, json: String) {
+            net.execute {
+                val reply = try {
+                    val req = JSONObject(json)
+                    val headers = req.optJSONArray("headers") ?: JSONArray()
+                    val pairs = (0 until headers.length()).mapNotNull { i -> headers.optJSONArray(i)?.let { it.optString(0) to it.optString(1) } }
+                    val body = req.optString("body").takeIf { !req.isNull("body") && it.isNotEmpty() }?.let { Base64.decode(it, Base64.DEFAULT) }
+                    val r = HostHttp.perform(req.getString("url"), req.optString("method", "GET"), pairs, body)
+                    val outHeaders = JSONArray()
+                    for ((k, v) in r.headers) outHeaders.put(JSONArray().put(k).put(v))
+                    JSONObject().put("ok", true).put("status", r.status).put("headers", outHeaders).put("body", Base64.encodeToString(r.body, Base64.NO_WRAP))
+                } catch (e: Exception) {
+                    JSONObject().put("ok", false).put("error", "${e.javaClass.simpleName}: ${e.message ?: ""}")
+                }
+                eval("window.__engine && window.__engine.netReply($id, ${JSONObject.quote(reply.toString())});")
+            }
         }
 
         @JavascriptInterface
