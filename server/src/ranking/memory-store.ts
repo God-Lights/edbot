@@ -197,6 +197,14 @@ export class MemoryRankingStore implements RankingStore {
     this.onReplaySaved(replay);
   }
 
+  /** 랭킹을 처음부터 (선수 표와 판 기록을 비운다). 다시 보기는 남긴다. */
+  async resetRanking(_now?: Date): Promise<string | null> {
+    this.players.clear();
+    this.matches.length = 0;
+    this.matchIds.clear();
+    return null;
+  }
+
   async getReplay(id: string): Promise<string | null> {
     return this.replays.get(id)?.data ?? null;
   }

@@ -16,6 +16,7 @@ export interface ServerEnv extends AuthEnv {
   EDITION?: string;
   SERVER_VERSION?: string;
   RECORD_ANONYMOUS?: string;
+  LINK_OWNER?: string;
 }
 
 export interface ServerInfo {
@@ -36,6 +37,8 @@ export interface ServerInfo {
   ranking: boolean;
   /** 게스트(학번과 이름) 방을 쓸 수 있는가: GL 로그인이 있는 서버에서만 의미가 있다 */
   guestRooms: boolean;
+  /** GL 연결 서버: 로그인은 GL 계정(공식 서버가 확인), 전적은 이 서버. 이때 authMode 는 gl(GL 계정만) 또는 hybrid(이름도 됨) */
+  linked?: { owner: string | null };
 }
 
 const ENVIRONMENTS: readonly string[] = ["production", "development", "local"];
@@ -58,5 +61,6 @@ export function serverInfo(env: ServerEnv): ServerInfo {
     packs: (activeContent()?.packs ?? []).map(({ id, name, version, kind }) => ({ id, name, version, kind })),
     ranking: mode === "open" ? env.RECORD_ANONYMOUS === "true" : true,
     guestRooms: mode !== "open",
+    ...(String(env.AUTH_MODE) === "linked" ? { linked: { owner: (env.LINK_OWNER ?? "").trim() || null } } : {}),
   };
 }

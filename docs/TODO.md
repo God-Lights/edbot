@@ -90,6 +90,9 @@ iOS 화면은 이 환경에서 실행할 수 없으므로, 먼저 CI에서 시�
 - [ ] (나중) 웹 화면을 앱에 넣어 서버 없이도 첫 화면이 뜨게 할지, iOS 처럼 네이티브 화면으로 바꿀지
 
 ## 4. 서버·배포
+- [x] GL 연결 서버 (로그인은 GL 계정을 공식 서버가 확인, 전적은 개인 서버): 공식 `/api/link/*`·`/link`, 개인 서버 `AUTH_MODE=linked`, 주인 관리 `/server-admin.html`, 안드로이드 서버 앱 설정, 로컬 서버 `--auth linked` (docs/LINKED-SERVER.md)
+- [ ] GL 연결 서버: 공식 서버에 배포해야 실제로 로그인된다 (main 머지 → 배포)
+- [ ] (나중) GL 연결 서버: iPad 서버 앱 설정, 공개 서버 목록, 공식 쪽 서버 막기 화면
 - [x] 맥용 로컬 서버: CI `macos` 작업에서 바닐라·엑스퍼트를 만들어 실행 점검(웹·API·봇 대전·두 사람 대전·데이터 폴더·잠금·재시작 뒤 전적·팩 적용), 결과물 `commander-server-macos`
 - [ ] 개발 서버 도메인 (env.dev, 지금은 workers.dev 주소)
 - [x] 문의(채팅): 설치 안내의 "문의하기" 탭, 관리자 페이지 `/support-admin.html` (Durable Object SupportDesk)

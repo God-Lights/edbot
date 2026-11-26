@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0c26">
+<meta name="robots" content="noindex">
+<title>서버 관리</title>
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<style>
+  :root {
+    --bg: #08071f; --panel: rgba(23,33,64,.85); --gold: #c8aa6e; --gold-hi: #f0d9a0; --silver: #d1d1d6; --dim: #9a9ab0;
+    --line: rgba(200,170,110,.35); --bad: #ff7a6b; --good: #6bd98c;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { background: var(--bg); }
+  body { margin: 0; min-height: 100vh; color: var(--silver); background: linear-gradient(#0e0c26, var(--bg) 600px) no-repeat, var(--bg);
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 1.15rem; color: var(--gold-hi); }
+  header .grow { flex: 1; }
+  main { max-width: 860px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .sub { color: var(--dim); font-size: .9rem; }
+  .btn { display: inline-block; min-height: 36px; padding: 7px 14px; border-radius: 8px; font: inherit; font-weight: 700; cursor: pointer; text-decoration: none;
+    background: linear-gradient(var(--gold-hi), var(--gold)); color: #1a1205; border: 1px solid rgba(255,255,255,.3); }
+  .btn.sec { background: rgba(255,255,255,.06); color: var(--silver); border-color: var(--line); }
+  .btn.bad { background: rgba(255,122,107,.15); color: var(--bad); border-color: rgba(255,122,107,.5); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid rgba(255,255,255,.07); vertical-align: middle; }
+  th { color: var(--dim); font-weight: 600; font-size: .85rem; }
+  td.num { font-variant-numeric: tabular-nums; }
+  .tag { font-size: .75rem; padding: 1px 8px; border-radius: 10px; border: 1px solid currentColor; }
+  .tag.bad { color: var(--bad); } .tag.owner { color: var(--gold-hi); }
+  .msg { color: var(--gold-hi); }
+  @media (max-width: 600px) { .hide-sm { display: none; } th, td { padding: 7px 3px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>서버 관리</h1><span id="server" class="sub"></span><span class="grow"></span>
+  <a class="btn sec" href="/">게임으로</a>
+</header>
+<main>
+  <div id="state" class="panel">불러오는 중…</div>
+  <div id="admin" hidden>
+    <div class="panel">
+      <b>사람</b> <span class="sub">이 서버에 GL 계정으로 들어온 사람이에요. 막으면 그 사람은 다시 로그인하거나 새 방에 들어올 수 없어요. (지금 하던 판은 끝까지 해요)</span>
+      <table>
+        <thead><tr><th>닉네임</th><th class="hide-sm">GL 아이디</th><th>레이팅</th><th class="hide-sm">판</th><th class="hide-sm">마지막 접속</th><th></th></tr></thead>
+        <tbody id="players"></tbody>
+      </table>
+    </div>
+    <div class="panel" style="margin-top:14px">
+      <b>랭킹 처음부터</b>
+      <p class="sub">모든 사람의 레이팅과 전적을 지우고 새로 시작해요. 지우기 전의 기록은 데이터 폴더의 <code>backups/reset-날짜</code> 에 남아요. 다시 보기는 지우지 않아요.</p>
+      <button class="btn bad" id="reset">랭킹 처음부터</button> <span id="resetMsg" class="msg"></span>
+    </div>
+  </div>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+  const when = (ms) => {
+    const d = new Date(ms);
+    return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  };
+  async function get(path) {
+    const res = await fetch(path, { credentials: "same-origin" });
+    return { status: res.status, body: await res.json().catch(() => ({})) };
+  }
+  async function post(path, body) {
+    const res = await fetch(path, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify(body ?? {}) });
+    return { status: res.status, body: await res.json().catch(() => ({})) };
+  }
+  const state = (html) => { $("state").innerHTML = html; $("state").hidden = false; };
+
+  async function load() {
+    const server = (await get("/api/server")).body;
+    $("server").textContent = server.name ?? "";
+    if (!server.linked) return state("이 서버는 GL 연결 서버가 아니에요. 서버 앱에서 로그인 방식을 <b>GL 연결</b>로 바꾸면 쓸 수 있어요.");
+    const owner = server.linked.owner;
+    if (!owner) return state("서버 앱 설정에 <b>주인 GL 아이디</b>가 없어요. 설정에서 주인 아이디를 적고 서버를 다시 켜 주세요.");
+    const me = await get("/api/auth/me");
+    if (me.status !== 200) {
+      return state(`주인(<b>${esc(owner)}</b>) GL 계정으로 로그인해 주세요.<br><br><a class="btn" href="/auth/login?return=/server-admin.html">GL 계정으로 로그인</a>`);
+    }
+    const list = await get("/api/admin/players");
+    if (list.status === 403) return state(`지금 <b>${esc(me.body.user.username)}</b> 계정으로 로그인되어 있어요. 이 서버의 주인은 <b>${esc(owner)}</b> 예요.`);
+    if (list.status !== 200) return state("목록을 불러오지 못했어요.");
+    $("state").hidden = true;
+    $("admin").hidden = false;
+    const players = list.body.players;
+    $("players").innerHTML = players.length ? players.map((p) => {
+      const isMe = p.id === me.body.user.id;
+      const tag = isMe ? ' <span class="tag owner">주인</span>' : p.banned ? ' <span class="tag bad">막힘</span>' : "";
+      const button = isMe ? "" : `<button class="btn ${p.banned ? "sec" : "bad"}" data-ban="${esc(p.id)}" data-to="${p.banned ? "0" : "1"}">${p.banned ? "풀기" : "막기"}</button>`;
+      return `<tr><td>${esc(p.nickname)}${tag}</td><td class="hide-sm">${esc(p.username)}</td><td class="num">${p.rating ?? "-"}</td><td class="num hide-sm">${p.games}</td><td class="hide-sm">${when(p.lastSeen)}</td><td>${button}</td></tr>`;
+    }).join("") : `<tr><td colspan="6" class="sub">아직 아무도 없어요.</td></tr>`;
+  }
+
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-ban]");
+    if (b) {
+      const banned = b.dataset.to === "1";
+      if (banned && !confirm("이 사람을 막을까요? 다시 로그인하거나 새 방에 들어올 수 없어요.")) return;
+      b.disabled = true;
+      await post("/api/admin/ban", { id: b.dataset.ban, banned });
+      load();
+    }
+  });
+  $("reset").addEventListener("click", async () => {
+    if (!confirm("정말 랭킹을 처음부터 할까요? 모든 레이팅과 전적이 지워져요. (백업은 남아요)")) return;
+    const r = await post("/api/admin/reset-ranking");
+    $("resetMsg").textContent = r.status === 200 ? "처음부터 시작했어요." : "하지 못했어요.";
+    load();
+  });
+  load();
+</script>
+</body>
+</html>

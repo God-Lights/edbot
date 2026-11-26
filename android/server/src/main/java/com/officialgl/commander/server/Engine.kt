@@ -43,7 +43,8 @@ class Engine(private val context: Context, private val listener: Listener) {
 
     /** 엔진을 켠다. (메인 스레드) files 는 데이터 폴더의 {경로: 글자}. */
     @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
-    fun start(engineSource: String, files: Map<String, String>, name: String, edition: String, version: String, phaseScale: String?, done: (Result<BootInfo>) -> Unit) {
+    /** auth: 로그인 방식 {mode: open|linked, owner, guests} (없으면 open) */
+    fun start(engineSource: String, files: Map<String, String>, name: String, edition: String, version: String, phaseScale: String?, auth: JSONObject?, done: (Result<BootInfo>) -> Unit) {
         bootFiles = JSONObject(files as Map<*, *>).toString()
         onBooted = done
         val web = WebView(context)
@@ -55,7 +56,7 @@ class Engine(private val context: Context, private val listener: Listener) {
             override fun onPageFinished(view: WebView, url: String?) {
                 if (onBooted == null) return
                 view.evaluateJavascript(engineSource + "\n;0", null)
-                view.evaluateJavascript(bootScript(name, edition, version, phaseScale), null)
+                view.evaluateJavascript(bootScript(name, edition, version, phaseScale, auth), null)
             }
 
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
@@ -70,7 +71,7 @@ class Engine(private val context: Context, private val listener: Listener) {
         web.loadDataWithBaseURL("http://localhost/", "<!doctype html><meta charset=\"utf-8\"><title>engine</title>", "text/html", "utf-8", null)
     }
 
-    private fun bootScript(name: String, edition: String, version: String, phaseScale: String?): String = """
+    private fun bootScript(name: String, edition: String, version: String, phaseScale: String?, auth: JSONObject?): String = """
         (function () {
           try {
             var options = {
@@ -80,6 +81,7 @@ class Engine(private val context: Context, private val listener: Listener) {
               timers: { schedule: function (id, ms) { AndroidHost.schedule(id, ms); }, cancel: function (id) { AndroidHost.cancel(id); } }
             };
             ${if (phaseScale != null) "options.phaseScale = ${JSONObject.quote(phaseScale)};" else ""}
+            ${if (auth != null) "options.auth = $auth;" else ""}
             window.__engine = CommanderEngine.start(options);
             window.__fetch = function (id, req) {
               Promise.resolve().then(function () { return window.__engine.fetch(req); }).then(

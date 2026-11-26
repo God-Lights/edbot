@@ -18,6 +18,20 @@ const match = (over: Partial<MatchInput> = {}): MatchInput => ({
 });
 
 describe("JSON 파일 저장소", () => {
+  test("랭킹 처음부터: 백업해 두고 비우고, 다시 켜도 빈 채로, 다시 보기는 남는다", async () => {
+    const a = new JsonRankingStore(data(), join(root, "backups"));
+    await a.recordMatch(match());
+    await a.saveReplay("ABCD:1000", "{}");
+    const backup = await a.resetRanking(new Date("2026-11-26T05:06:07Z"));
+    expect(backup).toBe(join(root, "backups", "reset-20261126-050607"));
+    expect(readFileSync(join(backup!, "matches.jsonl"), "utf8").trim().split("\n")).toHaveLength(1);
+    expect(await a.getLeaderboard(10, null)).toEqual([]);
+    const b = new JsonRankingStore(data(), join(root, "backups"));
+    expect(await b.getPlayerStats("name:에드")).toBeNull();
+    expect(await b.getReplay("ABCD:1000")).toBe("{}");
+    expect(await b.recordMatch(match())).not.toBeNull(); // 같은 판도 다시 기록할 수 있다
+  });
+
   test("저장하고, 서버를 다시 켜도(새 객체) 같은 전적·순위·최근 판·다시 보기가 나온다", async () => {
     const a = new JsonRankingStore(data());
     await a.recordMatch(match());

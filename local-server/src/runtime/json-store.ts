@@ -173,6 +173,22 @@ export class JsonRankingStore extends MemoryRankingStore {
     return super.isEmpty() && this.readReplays().length === 0;
   }
 
+  // ---- 랭킹 처음부터 (GL 연결 서버의 주인 관리) ----
+
+  /** 선수 표와 판 기록을 backups/reset-<시각>/ 에 옮겨 두고 비운다. 다시 보기는 남긴다. 백업 폴더를 돌려준다. */
+  override async resetRanking(now = new Date()): Promise<string | null> {
+    const stamp = now.toISOString().replace(/[-:]/g, "").replace(/\..*$/, "").replace("T", "-");
+    const target = join(this.backupRoot, `reset-${stamp}`);
+    this.fs.mkdir(target);
+    for (const file of [this.playersFile, this.matchesFile]) if (this.fs.exists(file)) this.fs.copy(file, join(target, file.split(/[\\/]/).pop()!));
+    this.players.clear();
+    this.matches.length = 0;
+    this.matchIds.clear();
+    this.writePlayers();
+    writeAtomicFs(this.fs, this.matchesFile, "");
+    return target;
+  }
+
   // ---- 백업 ----
 
   /** 오늘 날짜 폴더에 players.json·matches.jsonl 을 복사하고, 오래된 것은 지운다. */

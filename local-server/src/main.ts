@@ -4,6 +4,8 @@
 //   bun run dev -- --port 9000 --data D:\commander --phase-scale 0.05
 //
 // 같은 와이파이의 기기에서 http://<이 컴퓨터 IP>:8787 로 접속한다. 로그인은 이름만 쓰는 방식(open)이다.
+// GL 연결 서버: --auth linked --link-owner <주인 GL 아이디> [--link-guests]
+//   로그인은 GL 계정(공식 서버가 확인, 이 컴퓨터는 인터넷이 필요), 전적·랭킹은 이 데이터 폴더. 주인 관리: /server-admin.html
 
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, networkInterfaces } from "node:os";
@@ -142,15 +144,25 @@ if (process.env.COMMANDER_EDITION === "expert") {
 }
 
 const serverName = option("name", "내 컴퓨터 서버");
+// 로그인 방식: open(이름만, 기본) | linked(GL 연결 서버: 로그인은 GL 계정을 공식 서버가 확인, 전적은 이 데이터 폴더)
+const linked = option("auth", "open") === "linked";
 const env: Record<string, unknown> = {
   STORE: store,
   PHASE_SCALE: phaseScale,
-  AUTH_MODE: "open", // 로컬 서버는 이름만 쓴다. (GL 계정 검증은 인터넷이 필요하다)
+  AUTH_MODE: linked ? "linked" : "open",
+  ...(linked
+    ? {
+        LINK_OWNER: option("link-owner", ""), // 주인 GL 아이디 (/server-admin.html)
+        LINK_GUESTS: process.argv.includes("--link-guests") || process.env.COMMANDER_LINK_GUESTS === "true" ? "true" : "false",
+        LINK_ORIGIN: option("link-origin", ""), // 시험용: 공식 서버 주소 바꾸기
+      }
+    : {}),
   SERVER_ENV: "local",
   SERVER_NAME: serverName,
   EDITION: edition === "expert" ? "expert" : "vanilla",
   SERVER_VERSION: packageInfo.version,
-  RECORD_ANONYMOUS: "true", // GL 계정이 없으니 이름으로 전적을 남긴다. (봇과 한 판은 남기지 않는다)
+  // open: GL 계정이 없으니 이름으로 전적을 남긴다. linked: GL 계정끼리만 남긴다. (봇과 한 판은 남기지 않는다)
+  RECORD_ANONYMOUS: linked ? "false" : "true",
   // 문의 답하기(관리자 페이지 support-admin.html)용 키: --support-key 또는 COMMANDER_SUPPORT_KEY. 없으면 답하기만 꺼진다.
   SUPPORT_ADMIN_KEY: option("support-key", ""),
 };
@@ -248,7 +260,8 @@ function lanAddresses(): string[] {
   return out;
 }
 
-console.log(`${serverName} (COMMANDER 로컬 서버 ${packageInfo.version}, ${edition})  |  데이터: ${dataDir}`);
+console.log(`${serverName} (COMMANDER 로컬 서버 ${packageInfo.version}, ${edition}${linked ? ", GL 연결" : ""})  |  데이터: ${dataDir}`);
+if (linked) console.log(`  GL 연결 서버: 로그인은 GL 계정(인터넷 필요), 전적은 이 데이터 폴더. 주인: ${String(env.LINK_OWNER) || "(없음, --link-owner)"}${env.LINK_GUESTS === "true" ? ", 게스트 허용" : ""}`);
 console.log(`  이 컴퓨터:        http://localhost:${server.port}`);
 for (const ip of lanAddresses()) console.log(`  같은 와이파이:    http://${ip}:${server.port}`);
 const lan = lanAddresses();

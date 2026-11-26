@@ -1,4 +1,5 @@
 import { handleSupport } from "./support";
+import { handleLinkHub, handleLinkedServer } from "./link-routes";
 import { SupportDesk } from "./support-desk";
 import { roster } from "./chess/roster";
 import { MARKET_PRICE, materials, weapons as chessWeapons } from "./chess/weapons";
@@ -103,6 +104,12 @@ export default {
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
+
+    // ---- GL 연결 서버 (link-routes.ts): 공식 쪽 승인, 개인 서버 쪽 로그인·주인 관리 ----
+    const linkHub = await handleLinkHub(request, env, url);
+    if (linkHub) return linkHub;
+    const linkedServer = await handleLinkedServer(request, env, url);
+    if (linkedServer) return linkedServer;
 
     // ---- GL Account 로그인 ----
 

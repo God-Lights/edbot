@@ -23,7 +23,11 @@ function serverBand() {
   const server = S.server;
   if (!server || server.env === "production") return "";
   const local = server.env === "local";
-  const note = local
+  // GL 연결 서버: 로그인은 GL 계정(공식 서버가 확인), 전적은 이 서버
+  const linked = !!server.linked;
+  const note = linked
+    ? `로그인은 GL 계정, 전적은 이 서버에만 남아요.${server.authMode === "hybrid" ? " 로그인하지 않으면 이름으로 놀 수 있어요(전적 없음)." : ""}`
+    : local
     ? "이름이 곧 계정이에요. 전적은 이 서버에만 남아요."
     : "시험용 서버예요. 전적은 개발용 데이터예요.";
   const packs = server.packs ?? [];
@@ -31,7 +35,11 @@ function serverBand() {
   const expert = server.edition === "expert"
     ? ` <span class="badge mob" title="${esc(packs.length ? `적용된 팩: ${packNames}` : "플러그인으로 규칙이 달라질 수 있어요")}">엑스퍼트${packs.length ? ` · 팩 ${packs.length}개` : ""}</span>`
     : "";
-  return `<div class="srvband ${esc(server.env)}">${ic(local ? "server" : "flask")} <b>${local ? "로컬 서버" : "개발 서버"} · ${esc(server.name)}</b>${expert}<span class="sub tiny">${note}</span></div>`;
+  const kind = linked ? "GL 연결 서버" : local ? "로컬 서버" : "개발 서버";
+  const owner = linked && server.linked.owner && S.user && S.user.username?.toLowerCase() === server.linked.owner.toLowerCase()
+    ? ` <a class="badge mob" href="/server-admin.html">서버 관리</a>`
+    : "";
+  return `<div class="srvband ${esc(server.env)}${linked ? " linked" : ""}">${ic(local ? "server" : "flask")} <b>${kind} · ${esc(server.name)}</b>${expert}${owner}<span class="sub tiny">${note}</span></div>`;
 }
 
 function lobbyView() {
@@ -43,7 +51,7 @@ function lobbyView() {
   const nameHint = mode === "open" ? "이름 (이 서버에서 쓸 이름)" : mode === "hybrid" ? "이름 (로그인하지 않으면 이 이름으로 놀아요)" : "이름 (로그인하지 않은 개발 서버용)";
   const nameInput = mode !== "gl" ? `<input id="name" class="input" maxlength="16" placeholder="${nameHint}" value="${esc(S.name)}">` : "";
   const account = loggedIn
-    ? `<div class="panel"><div class="row tight"><div><div class="sub">로그인됨</div><b class="big">${esc(S.user.nickname)}</b></div><span class="grow"></span><button class="btn sec" data-act="logout">새로고침</button></div></div>`
+    ? `<div class="panel"><div class="row tight"><div><div class="sub">로그인됨</div><b class="big">${esc(S.user.nickname)}</b></div><span class="grow"></span>${S.server?.linked ? `<button class="btn sec" data-act="linked-logout">로그아웃</button>` : `<button class="btn sec" data-act="logout">새로고침</button>`}</div></div>`
     : `<div class="panel stack tight">${loginButton}${nameInput}</div>`;
   const guestCard = guestRooms ? `
         <div class="panel stack tight">
@@ -556,6 +564,10 @@ document.addEventListener("click", (event) => {
     case "guide-tab": update({ guideTab: d.tab }); break;
     case "close-modal": update({ modal: null }); break;
     case "logout": refreshUser(); break;
+    case "linked-logout":
+      // GL 연결 서버: 이 서버의 세션 쿠키만 지운다 (GL 계정 로그아웃은 account.officialgl.com)
+      fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).finally(refreshUser);
+      break;
     case "leave": leave(); break;
     case "ready": act.ready(!me()?.ready); break;
     case "buy": act.buy(num(d.slot)); break;

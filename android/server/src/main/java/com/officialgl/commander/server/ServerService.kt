@@ -17,6 +17,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.Executors
 
@@ -90,8 +91,14 @@ class ServerService : Service(), Engine.Listener {
                 val name = intent.getStringExtra(EXTRA_NAME)?.takeIf { it.isNotBlank() } ?: "내 안드로이드 서버"
                 val edition = if (intent.getStringExtra(EXTRA_EDITION) == "expert") "expert" else "vanilla"
                 port = intent.getIntExtra(EXTRA_PORT, DEFAULT_PORT)
+                // 로그인 방식: 이름만(open) 또는 GL 연결(linked: 로그인은 GL 계정, 전적은 이 폰)
+                val auth = if (intent.getStringExtra(EXTRA_AUTH) == "linked") {
+                    JSONObject().put("mode", "linked")
+                        .put("owner", intent.getStringExtra(EXTRA_LINK_OWNER)?.trim().orEmpty())
+                        .put("guests", intent.getBooleanExtra(EXTRA_LINK_GUESTS, false))
+                } else null
                 goForeground("켜는 중…")
-                startServer(name, edition, intent.getStringExtra(EXTRA_PHASE_SCALE))
+                startServer(name, edition, intent.getStringExtra(EXTRA_PHASE_SCALE), auth)
             }
         }
         return START_NOT_STICKY
@@ -99,7 +106,7 @@ class ServerService : Service(), Engine.Listener {
 
     // ---- 켜기 ----
 
-    private fun startServer(name: String, edition: String, phaseScale: String?) {
+    private fun startServer(name: String, edition: String, phaseScale: String?, auth: JSONObject?) {
         ServerState.set(ServerState.Status.STARTING, name = name, addresses = emptyList(), plugins = null)
         val data = DataStore(File(filesDir, "commander-data"))
         store = data
@@ -111,15 +118,15 @@ class ServerService : Service(), Engine.Listener {
             main.post {
                 val e = Engine(this, this)
                 engine = e
-                e.start(source, files, name, edition, version, phaseScale) { result ->
+                e.start(source, files, name, edition, version, phaseScale, auth) { result ->
                     result.onFailure { fail("엔진을 시작하지 못했다: ${it.message}") }
-                    result.onSuccess { info -> worker.execute { openPort(name, edition, info) } }
+                    result.onSuccess { info -> worker.execute { openPort(name, edition, info, auth) } }
                 }
             }
         }
     }
 
-    private fun openPort(name: String, edition: String, info: Engine.BootInfo) {
+    private fun openPort(name: String, edition: String, info: Engine.BootInfo, auth: JSONObject?) {
         val e = engine ?: return
         val server = HttpServer(port, e, assets) { ServerState.append(it) }
         try {
@@ -138,7 +145,7 @@ class ServerService : Service(), Engine.Listener {
         http = server
         acquireLocks()
         val ips = NetworkInfo.ipv4Addresses()
-        advertise(name, edition, ips)
+        advertise(name, edition, ips, auth != null)
         val addresses = ips.map { "http://$it:$port" }
         if (info.woken > 0) ServerState.append("이어서 진행하는 방 ${info.woken}개")
         val plugins = info.plugins?.let { p ->
@@ -146,12 +153,17 @@ class ServerService : Service(), Engine.Listener {
             "플러그인 ${accepted?.length() ?: 0}개 적용"
         }
         ServerState.set(ServerState.Status.RUNNING, addresses = addresses, name = name, plugins = plugins)
-        ServerState.append("서버를 켰다 (${if (edition == "expert") "엑스퍼트" else "바닐라"}, 포트 $port)")
+        ServerState.append("서버를 켰다 (${if (edition == "expert") "엑스퍼트" else "바닐라"}${if (auth != null) ", GL 연결" else ""}, 포트 $port)")
+        if (auth != null) {
+            val owner = auth.optString("owner")
+            ServerState.append("GL 연결: 로그인은 GL 계정(인터넷 필요), 전적은 이 폰. 주인: ${owner.ifEmpty { "(없음)" }}${if (auth.optBoolean("guests")) ", 게스트 허용" else ""}")
+            if (owner.isNotEmpty()) addresses.firstOrNull()?.let { ServerState.append("주인 관리: $it/server-admin.html") }
+        }
         main.post { goForeground(addresses.firstOrNull() ?: "http://localhost:$port") }
     }
 
     /** 같은 와이파이의 앱이 찾을 수 있게 알린다. TXT 는 로컬 서버와 같다: name, ip, port, ed, proto */
-    private fun advertise(name: String, edition: String, ips: List<String>) {
+    private fun advertise(name: String, edition: String, ips: List<String>, linked: Boolean) {
         val manager = getSystemService(Context.NSD_SERVICE) as NsdManager
         val service = NsdServiceInfo().apply {
             serviceName = name
@@ -162,6 +174,7 @@ class ServerService : Service(), Engine.Listener {
             setAttribute("port", this@ServerService.port.toString())
             setAttribute("ed", edition)
             setAttribute("proto", "1")
+            if (linked) setAttribute("au", "linked")
         }
         val listener = object : NsdManager.RegistrationListener {
             override fun onServiceRegistered(info: NsdServiceInfo) = ServerState.append("같은 와이파이에 알림: ${info.serviceName}")
@@ -277,6 +290,9 @@ class ServerService : Service(), Engine.Listener {
         const val EXTRA_PORT = "port"
         const val EXTRA_EDITION = "edition"
         const val EXTRA_PHASE_SCALE = "phaseScale"
+        const val EXTRA_AUTH = "auth"
+        const val EXTRA_LINK_OWNER = "linkOwner"
+        const val EXTRA_LINK_GUESTS = "linkGuests"
         const val DEFAULT_PORT = 8787
         private const val CHANNEL = "server"
         private const val NOTIFICATION_ID = 1

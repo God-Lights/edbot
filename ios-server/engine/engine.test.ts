@@ -143,3 +143,45 @@ test("앱이 돌리는 타이머 (안드로이드): setTimeout 이 앱에 맡겨
   for (const id of ids) (sandbox.__hostTimer as (id: number) => void)(id);
   expect(scheduled.every(([id, ms]) => Number.isInteger(id) && ms >= 0)).toBe(true);
 });
+
+test("GL 연결 서버: 공식 서버에 묻고, 웹 로그인 쿠키가 웹뷰 Request 를 지나 세션이 된다", async () => {
+  const { engineApi, sandbox } = boot();
+  // 공식 서버 흉내: 등록·요청·결과 (요청을 만들자마자 승인된 것으로)
+  const calls: string[] = [];
+  sandbox.fetch = async (url: string, init: RequestInit) => {
+    const path = new URL(url).pathname;
+    calls.push(path);
+    const body = JSON.parse(String(init.body ?? "{}"));
+    if (path === "/api/link/register") return new Response(JSON.stringify({ serverId: "abcdef012345", secret: "a".repeat(64) }), { status: 201 });
+    if (path === "/api/link/start") {
+      expect(body.returnTo).toBe("http://app/auth/done");
+      return new Response(JSON.stringify({ linkId: "b".repeat(32), pollSecret: "c".repeat(48), linkUrl: "https://edgame-api.officialgl.com/link?id=" + "b".repeat(32) }));
+    }
+    if (path === "/api/link/poll") return new Response(JSON.stringify({ status: "approved", user: { id: "gl-1", username: "ed", nickname: "에드", emailVerified: true } }));
+    return new Response("{}", { status: 404 });
+  };
+  const engine = engineApi.start({ host: { post() {} }, files: {}, name: "폰 서버", edition: "vanilla", auth: { mode: "linked", owner: "ed" } });
+  const info = await json(engine, "GET", "/api/server");
+  expect(info.data.authMode).toBe("gl");
+  expect(info.data.linked).toEqual({ owner: "ed" });
+  const header = (res: { headers: string[][] }, name: string) => res.headers.filter(([k]) => k.toLowerCase() === name).map(([, v]) => v);
+  const login = await engine.fetch({ method: "GET", url: "http://app/auth/login", headers: [], body: null });
+  expect(login.status).toBe(302);
+  expect(header(login, "location")[0]).toContain("/link?id=");
+  const loginCookie = header(login, "set-cookie")[0]!.split(";")[0]!;
+  const done = await engine.fetch({ method: "GET", url: "http://app/auth/done", headers: [["cookie", loginCookie]], body: null });
+  expect(done.status).toBe(302);
+  const cookies = header(done, "set-cookie");
+  expect(cookies).toHaveLength(1);
+  const session = cookies[0]!.split(";")[0]!;
+  const me = await engine.fetch({ method: "GET", url: "http://app/api/auth/me", headers: [["cookie", session]], body: null });
+  expect(JSON.parse(unb64(me.body)).user.username).toBe("ed");
+  expect(calls).toEqual(["/api/link/register", "/api/link/start", "/api/link/poll"]);
+  // 주인 관리: 같은 출처에서 보낸 것만
+  const players = await engine.fetch({ method: "GET", url: "http://app/api/admin/players", headers: [["cookie", session]], body: null });
+  expect(players.status).toBe(200);
+  const cross = await engine.fetch({ method: "POST", url: "http://app/api/admin/reset-ranking", headers: [["cookie", session], ["origin", "https://evil.example"]], body: null });
+  expect(cross.status).toBe(403);
+  const same = await engine.fetch({ method: "POST", url: "http://app/api/admin/reset-ranking", headers: [["cookie", session], ["origin", "http://app"]], body: null });
+  expect(same.status).toBe(200);
+});

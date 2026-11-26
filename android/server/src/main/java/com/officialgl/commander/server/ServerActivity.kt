@@ -50,17 +50,26 @@ class ServerActivity : Activity() {
     private lateinit var nameInput: EditText
     private lateinit var portInput: EditText
     private lateinit var editionRow: LinearLayout
+    private lateinit var authRow: LinearLayout
+    private lateinit var linkBox: LinearLayout
+    private lateinit var ownerInput: EditText
+    private lateinit var guestsButton: TextView
     private lateinit var toggle: TextView
     private lateinit var addressBox: LinearLayout
     private lateinit var pluginsText: TextView
     private lateinit var logText: TextView
     private var edition = "vanilla"
+    /** 로그인 방식: open(이름만) | linked(GL 연결: 로그인은 GL 계정, 전적은 이 폰) */
+    private var auth = "open"
+    private var linkGuests = false
     private val prefs by lazy { getSharedPreferences("server", Context.MODE_PRIVATE) }
     private val renderListener: () -> Unit = { render() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         edition = prefs.getString("edition", "vanilla") ?: "vanilla"
+        auth = if (prefs.getString("auth", "open") == "linked") "linked" else "open"
+        linkGuests = prefs.getBoolean("linkGuests", false)
         setContentView(buildContent())
         checkForUpdate()
         // 시험용(CI): 바로 켜기
@@ -233,6 +242,20 @@ class ServerActivity : Activity() {
         column.addView(editionRow)
         column.addView(label("엑스퍼트는 콘텐츠 팩(플러그인)을 읽는 서버예요. 처음이면 바닐라.", 12f, Palette.dim).apply { setPadding(dp(4), dp(6), dp(4), 0) })
 
+        // 로그인 방식
+        column.addView(label("로그인", 13f, Palette.silver, bold = true).apply { setPadding(dp(4), dp(14), dp(4), dp(6)) })
+        authRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        column.addView(authRow)
+        linkBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(8), 0, 0) }
+        ownerInput = input("주인 GL 아이디 (서버 관리용)", prefs.getString("linkOwner", "") ?: "", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS)
+        linkBox.addView(ownerInput, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp(8) })
+        guestsButton = plainButton("") { if (ServerState.status == ServerState.Status.STOPPED || ServerState.status == ServerState.Status.FAILED) { linkGuests = !linkGuests; render() } }
+        linkBox.addView(guestsButton, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        linkBox.addView(label(
+            "GL 연결: 로그인은 GL 계정으로 하고(공식 서버가 확인), 전적·랭킹은 이 폰에만 남아요. 로그인할 때 이 폰이 인터넷에 연결되어 있어야 해요.\n" +
+                "주인 GL 아이디를 적으면 그 계정으로 브라우저에서 /server-admin.html 을 열어 사람을 막거나 랭킹을 처음부터 할 수 있어요.", 12f, Palette.dim).apply { setPadding(dp(4), dp(6), dp(4), 0) })
+        column.addView(linkBox)
+
         toggle = goldButton("서버 켜기") { if (ServerState.status == ServerState.Status.RUNNING) stop() else start(null) }
         column.addView(toggle, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(16) })
 
@@ -255,7 +278,7 @@ class ServerActivity : Activity() {
             "• 접속하는 기기는 이 폰과 같은 와이파이(또는 이 폰의 핫스팟)에 있어야 해요.\n" +
                 "• COMMANDER 앱은 서버 목록에 이 서버가 뜨고, QR 을 찍어도 돼요. 브라우저는 주소를 그대로 열어요.\n" +
                 "• 앱을 내려도 서버는 켜져 있어요 (알림에서 끌 수 있어요). 오래 켜 둘 때는 배터리 최적화를 꺼 주세요.\n" +
-                "• 전적은 이 폰에 남아요. 이름이 같으면 같은 사람으로 이어져요.", 13f, Palette.silver))
+                "• 전적은 이 폰에 남아요. '이름만'이면 이름이 같으면 같은 사람으로, 'GL 연결'이면 GL 계정으로 이어져요.", 13f, Palette.silver))
         column.addView(plainButton("배터리 최적화 설정 열기") {
             runCatching { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
         }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(10) })
@@ -311,7 +334,17 @@ class ServerActivity : Activity() {
         toggle.text = if (running) "서버 끄기" else if (busy) "켜는 중…" else "서버 켜기"
         toggle.isEnabled = !busy
         toggle.alpha = if (busy) 0.5f else 1f
-        for (v in listOf(nameInput, portInput)) { v.isEnabled = !running && !busy; v.alpha = if (running || busy) 0.6f else 1f }
+        for (v in listOf(nameInput, portInput, ownerInput)) { v.isEnabled = !running && !busy; v.alpha = if (running || busy) 0.6f else 1f }
+
+        authRow.removeAllViews()
+        for ((key, title) in listOf("open" to "이름만", "linked" to "GL 연결")) {
+            val button = if (auth == key) goldButton(title) {} else plainButton(title) { if (!running && !busy) { auth = key; render() } }
+            button.isEnabled = !running && !busy
+            authRow.addView(button, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { if (key == "open") marginEnd = dp(8) })
+        }
+        linkBox.visibility = if (auth == "linked") View.VISIBLE else View.GONE
+        guestsButton.text = if (linkGuests) "GL 계정 없는 사람도 받기: 켬 (이름으로 놀고 전적 없음)" else "GL 계정 없는 사람도 받기: 끔"
+        guestsButton.isEnabled = !running && !busy
 
         editionRow.removeAllViews()
         for ((key, title) in listOf("vanilla" to "바닐라", "expert" to "엑스퍼트")) {
@@ -346,6 +379,13 @@ class ServerActivity : Activity() {
             addressBox.addView(rowButton(address, "눌러서 주소 복사") { copy(address) })
         }
         addressBox.addView(plainButton("이 폰에서 게임 열기") { openHere() }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(4) })
+        // GL 연결 서버의 주인 관리 페이지 (브라우저에서 주인 GL 계정으로)
+        if (auth == "linked" && ownerInput.text.isNotBlank()) {
+            val admin = "${addresses.firstOrNull() ?: "http://localhost:${portInput.text}"}/server-admin.html"
+            addressBox.addView(rowButton("서버 관리: $admin", "주인 GL 계정으로 브라우저에서 열어요 · 눌러서 열기") {
+                runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(admin))) }.onFailure { copy(admin) }
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(8) })
+        }
     }
 
     private fun copy(text: String) {
@@ -381,7 +421,9 @@ class ServerActivity : Activity() {
             return
         }
         val name = nameInput.text.toString().trim().ifEmpty { "내 안드로이드 서버" }
-        prefs.edit().putString("name", name).putInt("port", port).putString("edition", edition).apply()
+        val owner = ownerInput.text.toString().trim()
+        prefs.edit().putString("name", name).putInt("port", port).putString("edition", edition)
+            .putString("auth", auth).putString("linkOwner", owner).putBoolean("linkGuests", linkGuests).apply()
         // 서버가 켜져 있다는 알림 (안드로이드 13+ 은 권한을 물어본다. 거절해도 서버는 돈다)
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
@@ -390,6 +432,9 @@ class ServerActivity : Activity() {
             .putExtra(ServerService.EXTRA_NAME, name)
             .putExtra(ServerService.EXTRA_PORT, port)
             .putExtra(ServerService.EXTRA_EDITION, edition)
+            .putExtra(ServerService.EXTRA_AUTH, auth)
+            .putExtra(ServerService.EXTRA_LINK_OWNER, owner)
+            .putExtra(ServerService.EXTRA_LINK_GUESTS, linkGuests)
         if (phaseScale != null) intent.putExtra(ServerService.EXTRA_PHASE_SCALE, phaseScale)
         startForegroundService(intent)
     }
