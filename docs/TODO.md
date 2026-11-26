@@ -78,8 +78,9 @@ iOS 화면은 이 환경에서 실행할 수 없으므로, 먼저 CI에서 시�
 - [x] 서버 고르기(공식 서버·같은 와이파이 mDNS·최근·직접 적기), QR 찍기, `commander://connect` 링크, 게임 화면은 서버의 웹 화면(WebView)
 - [x] WebView 가 111 미만이면 업데이트 안내 (웹 화면이 color-mix 등을 씀)
 - [x] CI: 단위 시험, APK, 에뮬레이터(8.0, 14) 화면 찍기 (`android-screenshots-api*`)
-- [ ] 실제 폰에서 설치 확인 (Actions "Android"의 `commander-android-apk`)
-- [ ] (선택) 서명 키 비밀값 넣기: 없으면 빌드마다 키가 달라 업데이트할 때 앱을 지웠다 깔아야 한다
+- [x] 서명 키: GitHub Secrets `ANDROID_KEYSTORE_B64` 등 4개 (키 파일은 운영자가 따로 보관)
+- [x] 설치 안내 안드로이드 섹션: APK 받기·설치 순서
+- [ ] 첫 릴리스 android-v0.1.0, 실제 폰에서 설치 확인
 - [ ] (나중) 웹 화면을 앱에 넣어 서버 없이도 첫 화면이 뜨게 할지, iOS 처럼 네이티브 화면으로 바꿀지
 
 ## 4. 서버·배포
