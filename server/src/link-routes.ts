@@ -250,9 +250,10 @@ export async function handleLinkedServer(request: Request, env: LinkEnv, url: UR
     }
   } catch (error) {
     if (error instanceof LinkClientFailure) {
+      console.warn(`[GL 연결] 공식 서버와 통신 실패 (${error.code})${error.detail ? `: ${error.detail}` : ""}`);
       const status = error.code === "blocked" ? 403 : 503;
       if (path.startsWith("/auth/")) return page("로그인", `<h1>로그인하지 못했어요</h1><p>${escapeHtml(linkErrorText(error.code))}</p><a class="btn" href="/">처음으로</a>`);
-      return json({ error: `link_${error.code}`, message: linkErrorText(error.code) }, status);
+      return json({ error: `link_${error.code}`, message: linkErrorText(error.code), detail: error.detail }, status);
     }
     throw error;
   }

@@ -73,7 +73,13 @@ class ServerActivity : Activity() {
         setContentView(buildContent())
         checkForUpdate()
         // 시험용(CI): 바로 켜기
-        if (savedInstanceState == null && intent.getBooleanExtra("autostart", false)) start(intent.getStringExtra("phaseScale"))
+        if (savedInstanceState == null && intent.getBooleanExtra("autostart", false)) {
+            // 시험용(CI): 로그인 방식도 정할 수 있다 (--es auth linked --es linkOwner 아이디)
+            intent.getStringExtra("auth")?.let { auth = if (it == "linked") "linked" else "open" }
+            intent.getStringExtra("linkOwner")?.let { ownerInput.setText(it) }
+            render()
+            start(intent.getStringExtra("phaseScale"))
+        }
     }
 
     override fun onStart() {

@@ -141,8 +141,9 @@ export class LinkedCore {
 export type LinkClientError = "unreachable" | "unknown_server" | "blocked" | "bad_response";
 
 export class LinkClientFailure extends Error {
-  constructor(readonly code: LinkClientError) {
-    super(code);
+  /** detail: 무엇이 틀렸는지 (HTTP 상태, 네트워크 오류 글) — 서버 기록과 오류 응답에 남겨 원인을 찾는다 */
+  constructor(readonly code: LinkClientError, readonly detail = "") {
+    super(detail ? `${code}: ${detail}` : code);
   }
 }
 
@@ -156,17 +157,17 @@ export class LinkClient {
     let res: Response;
     try {
       res = await this.fetcher(`${this.origin}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    } catch {
-      throw new LinkClientFailure("unreachable");
+    } catch (error) {
+      throw new LinkClientFailure("unreachable", `${path} 요청 실패: ${String((error as Error)?.message ?? error)}`);
     }
     const parsed = (await res.json().catch(() => null)) as T | null;
-    if (res.status >= 500 || res.status === 404) throw new LinkClientFailure("unreachable");
+    if (res.status >= 500 || res.status === 404) throw new LinkClientFailure("unreachable", `${path} HTTP ${res.status}`);
     return { status: res.status, body: parsed };
   }
 
   async register(name: string): Promise<LinkCredentials> {
     const { body } = await this.post<{ serverId?: string; secret?: string }>("/api/link/register", { name });
-    if (!body?.serverId || !body.secret) throw new LinkClientFailure("bad_response");
+    if (!body?.serverId || !body.secret) throw new LinkClientFailure("bad_response", `/api/link/register ${JSON.stringify(body)?.slice(0, 120)}`);
     return { serverId: body.serverId, secret: body.secret };
   }
 
@@ -174,7 +175,7 @@ export class LinkClient {
     const { status, body } = await this.post<{ linkId?: string; pollSecret?: string; linkUrl?: string; error?: string }>("/api/link/start", { ...cred, name, returnTo });
     if (status === 403 && body?.error === "blocked") throw new LinkClientFailure("blocked");
     if (status === 403) throw new LinkClientFailure("unknown_server");
-    if (!body?.linkId || !body.pollSecret || !body.linkUrl) throw new LinkClientFailure("bad_response");
+    if (!body?.linkId || !body.pollSecret || !body.linkUrl) throw new LinkClientFailure("bad_response", `/api/link/start HTTP ${status} ${JSON.stringify(body)?.slice(0, 120)}`);
     return { linkId: body.linkId, pollSecret: body.pollSecret, linkUrl: body.linkUrl };
   }
 
