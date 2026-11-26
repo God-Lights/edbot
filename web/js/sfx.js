@@ -154,13 +154,30 @@ export const bgm = {
   },
 };
 
+/**
+ * 폰 진동 (안드로이드 Chrome·앱. iOS Safari 는 진동 API 가 없어 조용히 넘어간다).
+ * 손가락으로 하는 행동과 라운드 결과에만, 짧게. 효과음을 끄면 진동도 끈다. 전투 중 맞는 소리 같은 잦은 것은 뺀다.
+ */
+const HAPTICS = {
+  buy: 12, sell: 12, place: 10, drop: 10, pickup: 8, ready: 15, equip: 18, smelt: 20, combatStart: 20,
+  merge: [20, 40, 30], combine: [15, 30, 25], promote: [15, 30, 15],
+  roundWin: [25, 50, 25], roundLose: 60, win: [40, 60, 40, 60, 80], lose: [80, 80, 120],
+};
+const touchDevice = (() => { try { return matchMedia("(pointer: coarse)").matches; } catch { return false; } })();
+function haptic(name) {
+  const pattern = HAPTICS[name];
+  if (!pattern || !touchDevice || typeof navigator.vibrate !== "function") return;
+  try { navigator.vibrate(pattern); } catch { /* 진동이 안 돼도 게임은 된다 */ }
+}
+
 export const sfx = {
-  /** 이름의 소리를 낸다. 같은 소리는 60ms 안에 두 번 나지 않는다. */
+  /** 이름의 소리를 낸다(폰이면 짧은 진동도). 같은 소리는 60ms 안에 두 번 나지 않는다. */
   play(name) {
     if (muted || !SOUNDS[name]) return;
     const now = performance.now();
     if (now - (lastPlayed[name] ?? -1e9) < 60) return;
     lastPlayed[name] = now;
+    haptic(name);
     try { SOUNDS[name](); } catch { /* 소리가 안 나도 게임은 된다 */ }
   },
   get muted() { return muted; },

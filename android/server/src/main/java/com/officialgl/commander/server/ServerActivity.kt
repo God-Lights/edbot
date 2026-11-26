@@ -25,6 +25,19 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import com.officialgl.commander.common.AppUpdater
+import com.officialgl.commander.common.Palette
+import com.officialgl.commander.common.dp
+import com.officialgl.commander.common.goldButton
+import com.officialgl.commander.common.label
+import com.officialgl.commander.common.padForSystemBars
+import com.officialgl.commander.common.panelBackground
+import com.officialgl.commander.common.plainButton
+import com.officialgl.commander.common.rowButton
+import com.officialgl.commander.common.screenBackground
+import com.officialgl.commander.common.sectionTitle
+import com.officialgl.commander.common.toast
+import com.officialgl.commander.common.updateBanner
 
 /**
  * COMMANDER 서버 (안드로이드): 이 폰을 게임 서버로 켠다. 같은 와이파이의 기기가 주소·QR·서버 목록으로 접속한다.
@@ -47,6 +60,7 @@ class ServerActivity : Activity() {
         super.onCreate(savedInstanceState)
         edition = prefs.getString("edition", "vanilla") ?: "vanilla"
         setContentView(buildContent())
+        checkForUpdate()
         // 시험용(CI): 바로 켜기
         if (savedInstanceState == null && intent.getBooleanExtra("autostart", false)) start(intent.getStringExtra("phaseScale"))
     }
@@ -62,8 +76,24 @@ class ServerActivity : Activity() {
         super.onStop()
     }
 
+    private lateinit var column: LinearLayout
+
+    /** GitHub 릴리스에 새 버전이 있으면 맨 위에 띠를 띄운다 */
+    private fun checkForUpdate() {
+        val current = AppUpdater.currentVersion(this)
+        Thread {
+            val update = AppUpdater.check(current, "CommanderServer-") ?: return@Thread
+            runOnUiThread {
+                if (isFinishing) return@runOnUiThread
+                lateinit var banner: View
+                banner = updateBanner(update.version, current, onUpdate = { AppUpdater.install(this, update) }, onDismiss = { column.removeView(banner) })
+                column.addView(banner, 0)
+            }
+        }.start()
+    }
+
     private fun buildContent(): View {
-        val column = LinearLayout(this).apply {
+        column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(16), dp(20), dp(24))
         }

@@ -444,3 +444,7 @@ body {
 .mini.gene { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-height: 2.4rem; padding: 4px 8px; white-space: normal; text-align: left; }
 .mini.gene small { font-size: .72em; color: var(--gold, #c8aa6e); font-weight: 500; }
 .mini.gene.locked { opacity: .45; cursor: not-allowed; }
+
+/* 폰·태블릿: 눌렀을 때 회색 번쩍임, 길게 눌렀을 때 글자 선택·메뉴가 게임을 가리지 않게 (입력칸은 그대로) */
+body { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+input, textarea, select, [contenteditable], .selectable, .code-big, .mono { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }

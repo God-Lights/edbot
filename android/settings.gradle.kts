@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 rootProject.name = "commander-android"
 include(":app")
 include(":server")
+include(":common")

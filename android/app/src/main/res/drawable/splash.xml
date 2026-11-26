@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 시작 화면: 남색 바탕 가운데 로고 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/bg" />
+    <item android:width="180dp" android:height="174dp" android:gravity="center" android:drawable="@drawable/logo" />
+</layer-list>

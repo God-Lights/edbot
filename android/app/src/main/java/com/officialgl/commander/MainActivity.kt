@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
+import android.view.View
 import android.view.KeyEvent
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
@@ -19,6 +20,19 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import com.google.zxing.integration.android.IntentIntegrator
+import com.officialgl.commander.common.AppUpdater
+import com.officialgl.commander.common.Palette
+import com.officialgl.commander.common.dp
+import com.officialgl.commander.common.goldButton
+import com.officialgl.commander.common.label
+import com.officialgl.commander.common.padForSystemBars
+import com.officialgl.commander.common.panelBackground
+import com.officialgl.commander.common.plainButton
+import com.officialgl.commander.common.rowButton
+import com.officialgl.commander.common.screenBackground
+import com.officialgl.commander.common.sectionTitle
+import com.officialgl.commander.common.toast
+import com.officialgl.commander.common.updateBanner
 
 /**
  * 첫 화면: 서버 고르기. 공식 서버, 같은 와이파이에서 찾은 서버, 최근 서버, 주소 직접 적기, QR 찍기.
@@ -32,6 +46,9 @@ class MainActivity : Activity() {
     private lateinit var recentList: LinearLayout
     private lateinit var recentTitle: android.widget.TextView
     private lateinit var input: EditText
+    private lateinit var column: LinearLayout
+    private lateinit var continueBox: LinearLayout
+    private var updateShown = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,6 +56,22 @@ class MainActivity : Activity() {
         discovery = ServerDiscovery(this) { showFound(it) }
         setContentView(buildContent())
         if (savedInstanceState == null) handleIntent(intent)
+        checkForUpdate()
+    }
+
+    /** GitHub 릴리스에 새 버전이 있으면 맨 위에 띠를 띄운다 (개발용·시험판은 확인하지 않는다) */
+    private fun checkForUpdate() {
+        val current = AppUpdater.currentVersion(this)
+        Thread {
+            val update = AppUpdater.check(current, "Commander-") ?: return@Thread
+            runOnUiThread {
+                if (isFinishing || updateShown) return@runOnUiThread
+                updateShown = true
+                lateinit var banner: View
+                banner = updateBanner(update.version, current, onUpdate = { AppUpdater.install(this, update) }, onDismiss = { column.removeView(banner) })
+                column.addView(banner, 0)
+            }
+        }.start()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -72,7 +105,7 @@ class MainActivity : Activity() {
     }
 
     private fun buildContent(): FrameLayout {
-        val column = LinearLayout(this).apply {
+        column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(16), dp(20), dp(24))
         }
@@ -81,6 +114,10 @@ class MainActivity : Activity() {
             adjustViewBounds = true
             contentDescription = "COMMANDER"
         }, LinearLayout.LayoutParams(dp(150), WRAP_CONTENT).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(4) })
+
+        // 이어하기: 마지막으로 들어간 서버를 한 번에
+        continueBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        column.addView(continueBox)
 
         column.addView(sectionTitle("공식 서버"))
         column.addView(rowButton("COMMANDER 공식 서버", OFFICIAL_SERVER.removePrefix("https://")) { open(OFFICIAL_SERVER, "공식 서버") })
@@ -153,6 +190,12 @@ class MainActivity : Activity() {
     }
 
     private fun showRecent() {
+        continueBox.removeAllViews()
+        store.recent().firstOrNull()?.let { last ->
+            val title = last.name ?: last.url.substringAfter("://")
+            continueBox.addView(goldButton("이어하기 · $title") { open(last.url, last.name) },
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
+        }
         recentList.removeAllViews()
         val recent = store.recent().filter { it.url != OFFICIAL_SERVER }
         recentTitle.visibility = if (recent.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
@@ -219,6 +262,8 @@ class MainActivity : Activity() {
     private fun launchGame(url: String, name: String?) {
         store.remember(url, name)
         startActivity(Intent(this, GameActivity::class.java).putExtra(EXTRA_URL, url).putExtra(EXTRA_NAME, name))
+        @Suppress("DEPRECATION") // 안드로이드 8에서도 되는 방식
+        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
 
     private fun openStore(pkg: String) {

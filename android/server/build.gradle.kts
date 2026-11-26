@@ -68,6 +68,7 @@ android {
 tasks.named("preBuild") { dependsOn(copyServerAssets) }
 
 dependencies {
+    implementation(project(":common"))
     // HTTP + WebSocket 서버
     implementation("org.nanohttpd:nanohttpd-websocket:2.3.1")
     // 접속 QR
