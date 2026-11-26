@@ -154,7 +154,7 @@ test("GL 연결 서버: 공식 서버에 묻고, 웹 로그인 쿠키가 웹뷰 
     const body = JSON.parse(String(init.body ?? "{}"));
     if (path === "/api/link/register") return new Response(JSON.stringify({ serverId: "abcdef012345", secret: "a".repeat(64) }), { status: 201 });
     if (path === "/api/link/start") {
-      expect(body.returnTo).toBe("http://app/auth/done");
+      expect(body.returnTo).toMatch(/^http:\/\/app\/auth\/done\?login=[0-9a-f]{48}$/);
       return new Response(JSON.stringify({ linkId: "b".repeat(32), pollSecret: "c".repeat(48), linkUrl: "https://edgame-api.officialgl.com/link?id=" + "b".repeat(32) }));
     }
     if (path === "/api/link/poll") return new Response(JSON.stringify({ status: "approved", user: { id: "gl-1", username: "ed", nickname: "에드", emailVerified: true } }));

@@ -13,6 +13,8 @@ export const LINK_ORIGIN_DEFAULT = "https://edgame-api.officialgl.com";
 export const LINK_SESSION_COOKIE = "cmd_session";
 export const LINK_LOGIN_COOKIE = "cmd_login";
 const REMOTE_MS = 10 * 60_000;
+/** 로그인을 끝낸 뒤에도 이만큼은 같은 요청에 같은 세션을 준다 (두 번 와도 "만료"가 되지 않게) */
+const REMOTE_DONE_MS = 2 * 60_000;
 
 export interface LinkedEnv {
   AUTH_MODE?: string;
@@ -50,7 +52,14 @@ export interface RemoteLogin {
   linkId: string;
   pollSecret: string;
   createdAt: number;
+  /** 로그인을 끝냈으면 그때 만든 이 서버의 세션 */
+  token?: string;
+  user?: PublicUser;
+  doneAt?: number;
 }
+
+const remoteExpired = (r: RemoteLogin, now: number): boolean =>
+  r.doneAt !== undefined ? now - r.doneAt > REMOTE_DONE_MS : now - r.createdAt > REMOTE_MS;
 
 export interface KnownUser {
   id: string;
@@ -79,12 +88,18 @@ export class LinkedCore {
     if (!/^[0-9a-f]{16,64}$/.test(loginId)) return null;
     const r = await this.storage.get<RemoteLogin>(`lremote:${loginId}`);
     if (!r) return null;
-    if (now - r.createdAt > REMOTE_MS) {
+    if (remoteExpired(r, now)) {
       await this.storage.delete(`lremote:${loginId}`);
       return null;
     }
     return r;
   }
+  /** 로그인을 끝냈다: 같은 요청이 다시 와도 같은 세션을 준다 */
+  async finishRemote(loginId: string, token: string, user: PublicUser, now = Date.now()): Promise<void> {
+    const r = await this.storage.get<RemoteLogin>(`lremote:${loginId}`);
+    if (r) await this.storage.put(`lremote:${loginId}`, { ...r, token, user, doneAt: now } satisfies RemoteLogin);
+  }
+
   async dropRemote(loginId: string): Promise<void> {
     await this.storage.delete(`lremote:${loginId}`);
   }
@@ -117,7 +132,7 @@ export class LinkedCore {
   }
 
   async sweep(now = Date.now()): Promise<void> {
-    for (const [key, r] of await this.storage.list<RemoteLogin>({ prefix: "lremote:" })) if (now - r.createdAt > REMOTE_MS) await this.storage.delete(key);
+    for (const [key, r] of await this.storage.list<RemoteLogin>({ prefix: "lremote:" })) if (remoteExpired(r, now)) await this.storage.delete(key);
   }
 }
 
