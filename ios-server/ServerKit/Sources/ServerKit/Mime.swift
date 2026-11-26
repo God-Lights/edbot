@@ -39,3 +39,23 @@ public struct StaticFiles: Sendable {
         return (data, Mime.type(forPath: url.path))
     }
 }
+
+/// 팩의 그림·소리: /packs/<팩id>/<경로> 를 그 팩 폴더에서 찾는다. 그림·소리 파일만 내준다(문서·스크립트는 내주지 않는다).
+public struct PackFiles: Sendable {
+    /// 팩 id -> 팩 폴더
+    public let dirs: [String: URL]
+    public init(dirs: [String: URL]) { self.dirs = dirs }
+
+    private static let media: Set<String> = ["png", "jpg", "jpeg", "webp", "gif", "mp3", "ogg", "m4a", "wav"]
+
+    /// /packs/ 로 시작하지 않으면 nil. 없거나 안전하지 않은 파일도 nil.
+    public func load(path: String) -> (data: Data, mime: String)? {
+        guard path.hasPrefix("/packs/") else { return nil }
+        let rest = String(path.dropFirst("/packs/".count))
+        guard let slash = rest.firstIndex(of: "/") else { return nil }
+        let id = String(rest[..<slash])
+        let sub = String(rest[rest.index(after: slash)...])
+        guard let dir = dirs[id], Self.media.contains((sub as NSString).pathExtension.lowercased()) else { return nil }
+        return StaticFiles(root: dir).load(path: "/" + sub)
+    }
+}

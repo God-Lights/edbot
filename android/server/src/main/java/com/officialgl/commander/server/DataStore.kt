@@ -25,6 +25,10 @@ sealed class FileOp {
 
 /** 데이터 폴더(전적, 방, 플러그인). 엔진이 시작할 때 전부 읽어 가고, 바뀐 것은 순서대로 여기에 쓴다. */
 class DataStore(root: File) {
+    private companion object {
+        val BINARY = setOf("png", "jpg", "jpeg", "webp", "gif", "mp3", "ogg", "m4a", "wav", "zip")
+    }
+
     val root: File = root.canonicalFile.also { it.mkdirs() }
 
     /** 폴더 밖으로 나가거나 절대 경로면 null. */
@@ -39,7 +43,8 @@ class DataStore(root: File) {
     /** 모든 파일을 {상대 경로: 글자}로. 임시 파일은 건너뛴다. */
     fun loadAll(): Map<String, String> {
         val out = sortedMapOf<String, String>()
-        root.walkTopDown().filter { it.isFile && !it.name.endsWith(".tmp") }.forEach { file ->
+        // 팩의 그림·소리 같은 바이너리는 엔진에 넘기지 않는다 (엔진은 글자 파일만 쓴다. 그림·소리는 접속 서버가 /packs/ 로 내준다)
+        root.walkTopDown().filter { it.isFile && !it.name.endsWith(".tmp") && it.extension.lowercase() !in BINARY }.forEach { file ->
             val rel = file.relativeTo(root).invariantSeparatorsPath
             runCatching { file.readText(Charsets.UTF_8) }.onSuccess { out[rel] = it }
         }

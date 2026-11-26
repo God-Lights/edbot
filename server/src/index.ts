@@ -9,7 +9,7 @@ import { CHARACTERS } from "./characters";
 import { AuthStore } from "./auth-store";
 import { USER_HEADER, authMode, authRequired, authStore, bearerToken, identify, loginRedirectUrl } from "./auth";
 import { ensureContent } from "./content-load";
-import { currentRuleset } from "./chess/content";
+import { activeContent, currentRuleset } from "./chess/content";
 import { serverInfo } from "./server-info";
 import type { AuthEnv } from "./auth";
 import { loadSourceJson } from "./sidestore";
@@ -108,6 +108,8 @@ export default {
 
     // GET /api/server -> 이 서버의 이름·환경·로그인 방식·에디션·프로토콜 버전. 클라이언트가 로비를 맞추는 데 쓴다.
     if (request.method === "GET" && url.pathname === "/api/server") return json(serverInfo(env));
+    // GET /api/packs -> 적용된 팩 전체(설명, 설명서, 리소스 주소, 바꾼 것 요약). 로비의 팩 목록과 가이드의 "팩" 탭, 리소스 적용에 쓴다.
+    if (request.method === "GET" && url.pathname === "/api/packs") return json({ packs: activeContent()?.packs ?? [] });
 
     // GET / -> 현재 로그인 상태. 자동으로 로그인 화면으로 보내지 않고, 버튼을 눌러야 간다.
     if (request.method === "GET" && url.pathname === "/") {

@@ -17,6 +17,10 @@ export const S = {
   authChecked: false,
   /** GET /api/server: { protocol, name, env, authMode, edition, ... }. 아직 모르거나 오래된 서버면 null */
   server: null,
+  /** GET /api/packs: 이 서버의 팩 (엑스퍼트). res: 합친 리소스(색·그림·소리) */
+  packs: [],
+  res: {},
+  guidePack: null,
   name: load("edbot.name", "Player"),
   roomCode: "",
   room: null,

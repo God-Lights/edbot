@@ -30,8 +30,8 @@ export interface ServerInfo {
   version: string;
   /** 규칙 묶음의 이름: 공식이면 "official", 콘텐츠 팩이 있으면 "custom-<해시>" */
   ruleset: string;
-  /** 적용된 콘텐츠 팩(없으면 빈 목록). 엑스퍼트 서버에서만 있을 수 있다. */
-  packs: PackInfo[];
+  /** 적용된 콘텐츠 팩(없으면 빈 목록). 엑스퍼트 서버에서만 있을 수 있다. 설명서·리소스는 /api/packs 에서 */
+  packs: Array<Pick<PackInfo, "id" | "name" | "version" | "kind">>;
   /** 판이 끝나면 전적과 랭킹이 남는 서버인가 */
   ranking: boolean;
   /** 게스트(학번과 이름) 방을 쓸 수 있는가: GL 로그인이 있는 서버에서만 의미가 있다 */
@@ -55,7 +55,7 @@ export function serverInfo(env: ServerEnv): ServerInfo {
     edition: env.EDITION === "expert" ? "expert" : "vanilla",
     version: env.SERVER_VERSION ?? "0.0.0",
     ruleset: currentRuleset(),
-    packs: [...(activeContent()?.packs ?? [])],
+    packs: (activeContent()?.packs ?? []).map(({ id, name, version, kind }) => ({ id, name, version, kind })),
     ranking: mode === "open" ? env.RECORD_ANONYMOUS === "true" : true,
     guestRooms: mode !== "open",
   };

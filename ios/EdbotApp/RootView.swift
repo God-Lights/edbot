@@ -17,6 +17,7 @@ struct RootView: View {
         // 가이드는 로비에서도, 방 안에서도 열 수 있다. (방 안에서 열어 둔 동안에도 게임은 계속된다)
         .sheet(isPresented: $model.showGuide) { GuideView() }
         .sheet(isPresented: $model.showRanking) { RankingView() }
+        .sheet(isPresented: $model.showPacks) { PacksView() }
         .sheet(isPresented: $model.showLive) { LiveView() }
         .sheet(isPresented: $model.showMyRooms) { MyRoomsView() }
         .sheet(isPresented: Binding(get: { model.createdGuestRoomCode != nil }, set: { if !$0 { model.createdGuestRoomCode = nil } })) {
@@ -114,6 +115,12 @@ struct LobbyView: View {
                 Text("2인 실시간 전략 대전")
                     .font(compact ? .caption : .title3)
                     .foregroundStyle(Theme.silver.opacity(0.8))
+                if !model.packs.isEmpty {
+                    Button { model.showPacks = true } label: {
+                        Label("이 서버의 팩 \(model.packs.count)개", systemImage: "shippingbox.fill")
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                }
             }
             .frame(maxWidth: compact ? 190 : .infinity)
 

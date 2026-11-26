@@ -180,14 +180,30 @@ final class ApiTests: XCTestCase {
     }
 
     func testServerInfoDecodesPacksAndDefaultsToNone() throws {
-        let withPacks = #"{"protocol":1,"name":"x","env":"local","authMode":"open","edition":"expert","ruleset":"custom-ab12cd34","packs":[{"id":"example","name":"예시","version":"1.0.0"}]}"#
+        let withPacks = #"{"protocol":1,"name":"x","env":"local","authMode":"open","edition":"expert","ruleset":"custom-ab12cd34","packs":[{"id":"example","name":"예시","version":"1.0.0"},{"id":"night","name":"밤","version":"1","kind":"resource"}]}"#
         let a = try JSONDecoder().decode(ServerInfo.self, from: Data(withPacks.utf8))
-        XCTAssertEqual(a.packs, [ServerInfo.Pack(id: "example", name: "예시", version: "1.0.0")])
+        XCTAssertEqual(a.packs, [ServerInfo.Pack(id: "example", name: "예시", version: "1.0.0"), ServerInfo.Pack(id: "night", name: "밤", version: "1", kind: "resource")])
         XCTAssertEqual(a.ruleset, "custom-ab12cd34")
         let old = #"{"protocol":1,"name":"x","env":"production","authMode":"gl"}"#
         let b = try JSONDecoder().decode(ServerInfo.self, from: Data(old.utf8))
         XCTAssertTrue(b.packs.isEmpty)
         XCTAssertEqual(b.ruleset, "official")
+    }
+
+    func testPacksDecodeKindsGuideAndResources() async throws {
+        let json = #"{"packs":[{"id":"night-skin","name":"밤하늘","version":"1.0.0","kind":"resource","author":"GL","resources":{"colors":{"gold":"#88aaff","accent":"#5566ff"},"logo":"/packs/night-skin/assets/logo.png","units":{"swordsman":"/packs/night-skin/a.png"}},"summary":{"units":[],"overrides":[],"materials":[],"weapons":[],"rules":[]}},{"id":"starfall","name":"별똥별","version":"0.2.0","kind":"bundle","guide":[{"title":"혜성 기사","body":"새 캐릭터"}],"summary":{"units":["혜성 기사"],"rules":["rerollCost"]}},{"id":"old","name":"옛 팩","version":"1"}]}"#
+        let http = StubHTTP { _ in (json, 200) }
+        let packs = try await ApiClient(baseURL: base, http: http).packs()
+        XCTAssertEqual(http.last?.url?.path, "/api/packs")
+        XCTAssertEqual(packs.map(\.kindName), ["리소스", "종합", "플러그인"])
+        XCTAssertEqual(packs[0].resourceLine, "색 2가지, 로고, 캐릭터 그림 1명")
+        XCTAssertEqual(packs[1].guide?.first?.title, "혜성 기사")
+        XCTAssertEqual(packs[1].summary?.units, ["혜성 기사"])
+        XCTAssertEqual(packs[1].summary?.weapons, [])
+        XCTAssertNil(packs[2].resourceLine)
+        XCTAssertEqual(PackDetail.ruleName("rerollCost"), "새로고침 비용")
+        let none = try await ApiClient(baseURL: base, http: StubHTTP { _ in ("{}", 404) }).packs()
+        XCTAssertTrue(none.isEmpty)
     }
 
     func testConnectLinkParsesServerAndName() {

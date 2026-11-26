@@ -127,10 +127,18 @@ if (subcommand === "export" || subcommand === "import") {
 // ---- Cloudflare가 주던 것들 ----
 
 // 엑스퍼트 서버만 plugins/ 의 콘텐츠 팩을 읽는다. 바닐라 실행파일에서는 이 분기와 plugins.ts 가 빌드에서 빠진다.
-let pluginReport: { accepted: Array<{ id: string; name: string; version: string }>; rejected: Array<{ id: string; errors: string[] }>; notes: string[]; ruleset: string } | null = null;
+let pluginReport: { accepted: Array<{ id: string; name: string; version: string; kind?: string; dir?: string }>; rejected: Array<{ id: string; errors: string[] }>; notes: string[]; ruleset: string } | null = null;
+/** 팩 id -> 팩 폴더(절대 경로): 그림·소리를 /packs/<id>/ 로 내준다 */
+const packDirs = new Map<string, string>();
+let packAssetHandler: ((pathname: string, dirs: ReadonlyMap<string, string>) => Response | null) | null = null;
 if (process.env.COMMANDER_EDITION === "expert") {
   const { loadPlugins } = await import("./plugins");
+  const { extractZipPacks, packAsset } = await import("./pack-files");
+  const zipNotes = extractZipPacks(join(dataDir, "plugins"));
   pluginReport = loadPlugins(dataDir);
+  pluginReport.notes.push(...zipNotes);
+  for (const p of pluginReport.accepted) if (p.dir) packDirs.set(p.id, resolve(dataDir, p.dir));
+  packAssetHandler = packAsset;
 }
 
 const serverName = option("name", "내 컴퓨터 서버");
@@ -191,6 +199,10 @@ const server = Bun.serve<SocketData>({
     if (request.method === "GET" && url.pathname === "/connect") {
       const urls = lanAddresses().map((ip) => `http://${ip}:${port}`);
       return new Response(connectPage(serverName, urls), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
+    }
+    // 팩의 그림·소리 (엑스퍼트)
+    if (packAssetHandler && request.method === "GET" && url.pathname.startsWith("/packs/")) {
+      return packAssetHandler(url.pathname, packDirs) ?? new Response("없다", { status: 404 });
     }
     if ((request.method === "GET" || request.method === "HEAD") && !API_PREFIXES.some((p) => url.pathname.startsWith(p))) {
       const file = staticFile(url.pathname);

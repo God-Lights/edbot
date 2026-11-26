@@ -2,7 +2,7 @@ import EdbotKit
 import SwiftUI
 
 enum GuideTab: String, CaseIterable, Identifiable {
-    case flow, prep, combat, characters, synergy, resources, recipes, mobius, controls
+    case flow, prep, combat, characters, synergy, resources, recipes, mobius, controls, packs
 
     var id: String { rawValue }
 
@@ -17,6 +17,7 @@ enum GuideTab: String, CaseIterable, Identifiable {
         case .recipes: return "조합 도감"
         case .mobius: return "무한 모드"
         case .controls: return "조작"
+        case .packs: return "팩"
         }
     }
 }
@@ -52,9 +53,10 @@ struct GuideView: View {
     private var tabBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(GuideTab.allCases) { tab in
+                // 팩 탭은 이 서버에 팩이 있을 때만
+                ForEach(GuideTab.allCases.filter { $0 != .packs || !model.packs.isEmpty }) { tab in
                     Button { model.guideTab = tab } label: {
-                        Text(tab.title)
+                        Text(tab == .packs ? "팩 \(model.packs.count)" : tab.title)
                             .font(.subheadline.weight(.semibold))
                             .padding(.horizontal, 14).padding(.vertical, 9)
                             .background(Capsule().fill(model.guideTab == tab ? Theme.accent.opacity(0.9) : Theme.panelStrong))
@@ -77,6 +79,7 @@ struct GuideView: View {
         case .recipes: RecipeGuide()
         case .mobius: MobiusGuide()
         case .controls: ControlsGuide()
+        case .packs: PackGuide()
         }
     }
 }

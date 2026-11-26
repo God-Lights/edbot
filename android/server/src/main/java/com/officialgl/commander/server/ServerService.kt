@@ -128,6 +128,13 @@ class ServerService : Service(), Engine.Listener {
             fail("포트 $port 를 열지 못했다: ${ex.message}")
             return
         }
+        // 팩 폴더(엔진이 알려 준 plugins/...): 그림·소리를 /packs/<id>/ 로 내준다
+        val accepted = info.plugins?.optJSONArray("accepted")
+        server.packDirs = (0 until (accepted?.length() ?: 0)).mapNotNull { i ->
+            val p = accepted!!.optJSONObject(i) ?: return@mapNotNull null
+            val dir = p.optString("dir").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            p.optString("id") to File(store?.root ?: return@mapNotNull null, dir.removePrefix("./"))
+        }.toMap()
         http = server
         acquireLocks()
         val ips = NetworkInfo.ipv4Addresses()

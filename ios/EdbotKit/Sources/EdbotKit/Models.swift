@@ -555,7 +555,9 @@ public struct ServerInfo: Codable, Equatable, Sendable {
         public let id: String
         public let name: String
         public let version: String
-        public init(id: String, name: String, version: String) { self.id = id; self.name = name; self.version = version }
+        /// plugin | resource | bundle (오래된 서버면 없음)
+        public var kind: String? = nil
+        public init(id: String, name: String, version: String, kind: String? = nil) { self.id = id; self.name = name; self.version = version; self.kind = kind }
     }
 
     public let protocolVersion: Int

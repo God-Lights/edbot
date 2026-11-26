@@ -3,6 +3,7 @@
 import { ic, withIcons } from "./icons.js";
 import { S, update } from "./state.js";
 import { PIECE_COLOR, PIECE_NAME, RARITY_COLOR, RARITY_NAME, WORMHOLE_BEATS, esc } from "./util.js";
+import { packsGuide } from "./packs.js";
 
 export const TABS = [
   ["flow", "게임 흐름"], ["prep", "상점과 배치"], ["combat", "전투 규칙"], ["characters", "캐릭터"],
@@ -174,10 +175,12 @@ const mobius = () => card("무한 모드란?", [
   "암살·기동 기물과 나이트·퀸·룩·비숍은 이음매를 돌아서 적 뒷줄로 **측면 기습**을 가기도 해요.",
 ]);
 
-const BODY = { flow, prep, combat, characters, synergy, resources, recipes, mobius, controls };
+const BODY = { flow, prep, combat, characters, synergy, resources, recipes, mobius, controls, packs: packsGuide };
 
 export function guideModal() {
-  const tabs = TABS.map(([id, title]) => `<button class="tab${S.guideTab === id ? " on" : ""}" data-act="guide-tab" data-tab="${id}">${title}</button>`).join("");
+  // 서버에 팩이 있으면 "팩" 탭 (팩마다 설명서와 바꾸는 것)
+  const tabList = S.packs?.length ? [...TABS, ["packs", `팩 ${S.packs.length}`]] : TABS;
+  const tabs = tabList.map(([id, title]) => `<button class="tab${S.guideTab === id ? " on" : ""}" data-act="guide-tab" data-tab="${id}">${title}</button>`).join("");
   return `<div class="modal"><div class="modal-box"><div class="modal-head"><h2>게임 가이드</h2><button class="btn sec" data-act="close-modal">닫기</button></div>
     <div class="tabs">${tabs}</div><div class="modal-body">${(BODY[S.guideTab] ?? flow)()}</div></div></div>`;
 }

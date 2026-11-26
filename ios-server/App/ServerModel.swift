@@ -65,6 +65,7 @@ final class ServerModel {
         defaults.set(port, forKey: "server.port")
         defaults.set(edition, forKey: "server.edition")
 
+        var pluginsJSON: String?
         let bridge = EngineBridge()
         bridge.onFileOps = { [weak self] ops in
             guard let self else { return }
@@ -84,6 +85,7 @@ final class ServerModel {
             )
             if info.woken > 0 { append("이어서 진행하는 방 \(info.woken)개") }
             pluginsText = info.pluginsJSON.flatMap(Self.describePlugins)
+            pluginsJSON = info.pluginsJSON
         } catch {
             teardown()
             status = .failed("엔진을 시작하지 못했다: \(error.localizedDescription)")
@@ -93,6 +95,7 @@ final class ServerModel {
         let webRoot = Bundle.main.url(forResource: "web", withExtension: nil)
         if webRoot == nil { append("[주의] 웹 화면(web)이 앱에 들어 있지 않다. API만 열린다.") }
         let server = LocalServer(engine: bridge, webRoot: webRoot)
+        server.packFiles = PackFiles(dirs: Self.packDirs(pluginsJSON: pluginsJSON, root: dataRoot))
         let ips = NetworkInfo.ipv4Addresses()
         let txt = ["name": name, "ip": ips.joined(separator: ","), "port": String(port), "ed": edition, "proto": "1"]
         self.server = server
@@ -131,6 +134,18 @@ final class ServerModel {
 
     /// 앱이 백그라운드로 가기 직전: 저장을 서둘러 한다.
     func flushNow() { bridge?.flush() }
+
+    /// 엔진이 알려 준 팩 폴더(accepted[].dir, 데이터 폴더 기준) -> 팩 id: 폴더
+    private static func packDirs(pluginsJSON: String?, root: URL) -> [String: URL] {
+        guard let json = pluginsJSON, let data = json.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
+        var out: [String: URL] = [:]
+        for p in obj["accepted"] as? [[String: Any]] ?? [] {
+            guard let id = p["id"] as? String, let dir = p["dir"] as? String, !dir.isEmpty else { continue }
+            out[id] = root.appendingPathComponent(dir.hasPrefix("./") ? String(dir.dropFirst(2)) : dir)
+        }
+        return out
+    }
 
     private static func describePlugins(_ json: String) -> String? {
         guard let data = json.data(using: .utf8), let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }

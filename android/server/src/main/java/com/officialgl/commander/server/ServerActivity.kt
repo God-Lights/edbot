@@ -95,9 +95,10 @@ class ServerActivity : Activity() {
             else -> "켜진 팩은 서버를 켤 때 적용돼요. 바꾼 뒤에는 서버를 껐다 켜 주세요."
         }
         for (entry in list) {
-            val info = runCatching { JSONObject(entry.file.readText()) }.getOrNull()
+            val info = runCatching { JSONObject(entry.manifest.readText()) }.getOrNull()
             val title = info?.optString("name")?.takeIf { it.isNotEmpty() } ?: entry.baseName
             val detail = listOfNotNull(
+                KIND_NAME[packKind(info)],
                 info?.optString("id")?.takeIf { it.isNotEmpty() },
                 info?.optString("version")?.takeIf { it.isNotEmpty() }?.let { "v$it" },
                 if (info == null) "읽을 수 없는 파일" else null,
@@ -142,7 +143,7 @@ class ServerActivity : Activity() {
     /** 안드로이드 파일 고르기(내려받기·드라이브 등)로 팩 JSON 을 고른다 */
     private fun pickPack() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
-            .putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/json", "text/plain", "application/octet-stream"))
+            .putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/json", "text/plain", "application/zip", "application/x-zip-compressed", "application/octet-stream"))
         try {
             startActivityForResult(intent, PICK_PACK)
         } catch (_: ActivityNotFoundException) {
@@ -155,25 +156,35 @@ class ServerActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != PICK_PACK || resultCode != RESULT_OK) return
         val uri = data?.data ?: return
-        val text = runCatching {
+        val bytes = runCatching {
             contentResolver.openInputStream(uri)?.use { input ->
-                val bytes = input.readBytes()
-                require(bytes.size <= 2_000_000) { "파일이 너무 커요 (2MB 까지)" }
-                String(bytes, Charsets.UTF_8)
+                val all = input.readBytes()
+                require(all.size <= PluginStore.MAX_ZIP_BYTES) { "파일이 너무 커요 (40MB 까지)" }
+                all
             }
         }.getOrElse { toast("파일을 읽지 못했어요: ${it.message}"); return } ?: return
-        val pack = runCatching { JSONObject(text) }.getOrElse { toast("JSON 파일이 아니에요"); return }
+        // 그림·소리가 있는 팩은 .zip (안에 pack.json), 파일 하나짜리 팩은 .json
+        val zipFiles = if (PluginStore.isZip(bytes)) runCatching { PluginStore.readZipPack(bytes) }.getOrElse { toast("zip 을 읽지 못했어요: ${it.message}"); return } else null
+        val text = zipFiles?.get("pack.json")?.toString(Charsets.UTF_8) ?: String(bytes, Charsets.UTF_8)
+        val pack = runCatching { JSONObject(text) }.getOrElse { toast(if (zipFiles != null) "zip 안의 pack.json 을 읽지 못했어요" else "JSON 파일이 아니에요"); return }
         val id = pack.optString("id")
+        val save = { if (zipFiles != null) saveZip(id, zipFiles) else savePack(id, text) }
         when {
             pack.optInt("apiVersion", 0) != 1 -> toast("팩 형식이 아니에요 (apiVersion 1 이 필요해요)")
             !PluginStore.validId(id) -> toast("팩 id 가 올바르지 않아요 (영문 소문자·숫자·-)")
             plugins.has(id) -> AlertDialog.Builder(this)
                 .setMessage("'$id' 팩이 이미 있어요. 새 파일로 바꿀까요?")
-                .setPositiveButton("바꾸기") { _, _ -> savePack(id, text) }
+                .setPositiveButton("바꾸기") { _, _ -> save() }
                 .setNegativeButton("취소", null)
                 .show()
-            else -> savePack(id, text)
+            else -> save()
         }
+    }
+
+    private fun saveZip(id: String, files: Map<String, ByteArray>) {
+        runCatching { plugins.addZip(id, files) }
+            .onSuccess { changedPacks("'$id' 팩을 넣었어요 (그림·소리 ${files.size - 1}개).") }
+            .onFailure { toast("넣지 못했어요: ${it.message}") }
     }
 
     private fun savePack(id: String, text: String) {
@@ -236,7 +247,7 @@ class ServerActivity : Activity() {
         column.addView(pluginNote)
         pluginBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         column.addView(pluginBox)
-        column.addView(plainButton("팩 추가 (.json 파일 고르기)") { pickPack() }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(4) })
+        column.addView(plainButton("팩 추가 (.json 또는 .zip 고르기)") { pickPack() }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(4) })
         column.addView(label("팩 만드는 법: docs/PLUGINS.md (GitHub). 틀린 팩은 서버를 켤 때 거절되고 기록에 이유가 나와요.", 11.5f, Palette.dim).apply { setPadding(dp(4), dp(6), dp(4), 0) })
 
         column.addView(sectionTitle("안내"))
@@ -395,7 +406,16 @@ class ServerActivity : Activity() {
         }
     }
 
+    /** 팩 종류: kind 를 안 적었으면 내용으로 (서버와 같은 규칙) */
+    private fun packKind(info: JSONObject?): String {
+        if (info == null) return ""
+        info.optString("kind").takeIf { it.isNotEmpty() }?.let { return it }
+        val gameplay = listOf("units", "unitOverrides", "materials", "weapons", "fusions", "rules").any { info.has(it) }
+        return if (info.has("resources")) (if (gameplay) "bundle" else "resource") else "plugin"
+    }
+
     companion object {
+        private val KIND_NAME = mapOf("bundle" to "종합", "resource" to "리소스", "plugin" to "플러그인")
         private const val PICK_PACK = 7
         /** 엔진(engine.js)이 쓰는 문법(?. ?? 등)이 도는 WebView */
         const val MIN_WEBVIEW_MAJOR = 100

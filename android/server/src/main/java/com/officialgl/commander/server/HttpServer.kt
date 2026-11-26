@@ -30,6 +30,9 @@ class HttpServer(
 
     private val sockets = ConcurrentHashMap<Int, EngineSocket>()
 
+    /** 팩 id -> 팩 폴더: 리소스(그림·소리)를 /packs/<id>/<경로> 로 내준다 (엑스퍼트) */
+    @Volatile var packDirs: Map<String, java.io.File> = emptyMap()
+
     /** 소켓이 열리기 전에 엔진이 보낸 것(WebSocket 을 받자마자 보내는 첫 상태 등). 열리면 순서대로 보낸다. */
     private sealed class Outgoing {
         data class Frame(val data: String, val binary: Boolean) : Outgoing()
@@ -77,6 +80,9 @@ class HttpServer(
                 }
             }
             return toResponse(res, method)
+        }
+        if ((method == "GET" || method == "HEAD") && path.startsWith("/packs/")) {
+            return packFile(path) ?: NanoHTTPD.newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "없다")
         }
         if ((method == "GET" || method == "HEAD") && apiPrefixes.none { path.startsWith(it) }) {
             staticFile(path)?.let { return it }
@@ -156,6 +162,23 @@ class HttpServer(
         return response
     }
 
+    /** /packs/<id>/<경로>: 팩 폴더의 그림·소리만 (문서·스크립트는 내주지 않는다) */
+    private fun packFile(path: String): Response? {
+        val rest = path.removePrefix("/packs/")
+        val id = rest.substringBefore('/', "")
+        val sub = rest.substringAfter('/', "")
+        val dir = packDirs[id] ?: return null
+        val mime = PACK_MIME[sub.substringAfterLast('.', "").lowercase()] ?: return null
+        if (sub.isEmpty() || sub.contains("..") || sub.contains('\u0000')) return null
+        val file = java.io.File(dir, sub).canonicalFile
+        if (!file.path.startsWith(dir.canonicalPath + java.io.File.separator) || !file.isFile) return null
+        val bytes = runCatching { file.readBytes() }.getOrNull() ?: return null
+        val response = NanoHTTPD.newFixedLengthResponse(Response.Status.OK, mime, ByteArrayInputStream(bytes), bytes.size.toLong())
+        response.addHeader("Cache-Control", "public, max-age=3600")
+        response.addHeader("X-Content-Type-Options", "nosniff")
+        return response
+    }
+
     /** 아무 상태 코드나 쓸 수 있게 (NanoHTTPD 의 목록에 없는 것도) */
     private class Code(private val code: Int) : Response.IStatus {
         override fun getRequestStatus(): Int = code
@@ -218,6 +241,11 @@ class HttpServer(
             "json" to "application/json", "png" to "image/png", "jpg" to "image/jpeg", "jpeg" to "image/jpeg", "svg" to "image/svg+xml",
             "webp" to "image/webp", "ico" to "image/x-icon", "mp3" to "audio/mpeg", "ogg" to "audio/ogg", "wav" to "audio/wav",
             "m4a" to "audio/mp4", "woff2" to "font/woff2", "txt" to "text/plain; charset=utf-8",
+        )
+
+        private val PACK_MIME = mapOf(
+            "png" to "image/png", "jpg" to "image/jpeg", "jpeg" to "image/jpeg", "webp" to "image/webp", "gif" to "image/gif",
+            "mp3" to "audio/mpeg", "ogg" to "audio/ogg", "m4a" to "audio/mp4", "wav" to "audio/wav",
         )
 
         fun mimeOf(path: String): String = MIME[path.substringAfterLast('.', "").lowercase()] ?: "application/octet-stream"

@@ -10,6 +10,7 @@ import { openMatchReplay, openReplay, replayAction, replayModal, replayScrub, st
 import { openRanking, rankingModal } from "./ranking.js";
 import { combineItems, itemName } from "./crafting.js";
 import { bgm, sfx } from "./sfx.js";
+import { loadPacks, logoUrl, packsModal } from "./packs.js";
 import { PHASE_NAME, PROTOCOL_VERSION, REASON_TEXT, countdown, esc } from "./util.js";
 
 const app = document.getElementById("app");
@@ -55,7 +56,7 @@ function lobbyView() {
           </form>
         </div>` : "";
   return `${serverBand()}<div class="lobby">
-    <div class="hero"><img class="logo" src="assets/logo.png" alt="COMMANDER"><div class="sub herotext">체스판 자동 전투 · 2인 실시간 대전</div></div>
+    <div class="hero"><img class="logo" src="${esc(logoUrl())}" alt="COMMANDER"><div class="sub herotext">체스판 자동 전투 · 2인 실시간 대전</div></div>
     <div class="menu">
       <div class="mgroup">
         ${account}
@@ -84,6 +85,7 @@ function lobbyView() {
           <button class="modecard" data-act="join-code" data-code="ADMX" title="봇, 앞면·밑면과 이음매가 있는 무한 모드"><span class="mi">${ic("infinity")}</span><span><b>무한 대전</b><small>봇과 · 뫼비우스 규칙</small></span></button>
         </div>
         <div class="panel two tight"><button class="btn sec" data-act="ranking">${ic("trophy")} 랭킹</button><button class="btn sec" data-act="guide" data-tab="flow">${ic("book")} 가이드</button></div>
+        ${S.packs.length ? `<button class="btn sec wide" data-act="packs">${ic("list")} 이 서버의 팩 ${S.packs.length}개</button>` : ""}
         <a class="btn sec wide" href="install.html">${ic("link")} 앱 설치 안내</a>
       </div>
     </div></div>`;
@@ -283,7 +285,7 @@ function roomShell(room) {
   const reconnect = S.status === "reconnecting" ? `<div class="reconnect">다시 연결하는 중...</div>` : "";
   if (S.spectating) {
     if (room.phase === "combat" && room.chess?.combat) return spectatorCombat(room) + reconnect;
-    return `<div class="topbar"><img class="mini-logo" src="assets/logo.png" alt=""><b class="mono">${esc(room.code)}</b><span class="grow"></span>
+    return `<div class="topbar"><img class="mini-logo" src="${esc(logoUrl())}" alt=""><b class="mono">${esc(room.code)}</b><span class="grow"></span>
       <button class="ibtn" data-act="mute" title="효과음">${ic(sfx.muted ? "volume-off" : "volume")}</button><button class="btn sec" data-act="leave">관전 끝내기</button></div>
       ${reconnect}<div class="room">${spectatorBody(room)}</div>`;
   }
@@ -297,7 +299,7 @@ function roomShell(room) {
     case "result": body = resultView(room); break;
     default: body = `<div class="center-msg">이 웹 버전은 체스판 자동 전투만 지원해요. (${esc(PHASE_NAME[room.phase] ?? room.phase)})</div>`;
   }
-  return `<div class="topbar"><img class="mini-logo" src="assets/logo.png" alt=""><b class="mono">${esc(room.code)}</b><span class="grow"></span>${players}
+  return `<div class="topbar"><img class="mini-logo" src="${esc(logoUrl())}" alt=""><b class="mono">${esc(room.code)}</b><span class="grow"></span>${players}
     <button class="ibtn" data-act="mute" title="효과음">${ic(sfx.muted ? "volume-off" : "volume")}</button><button class="ibtn" data-act="bgm" title="배경 음악">${ic(bgm.on ? "music" : "music-off")}</button><button class="ibtn" data-act="guide" data-tab="flow" title="가이드">${ic("book")}</button>
     ${room.isHost ? `<button class="ibtn" data-act="room-close" data-code="${esc(room.code)}" data-from="room" title="방 닫기">${ic("trash")}</button>` : ""}<button class="btn sec" data-act="leave">나가기</button></div>
     ${reconnect}<div class="room">${body}</div>`;
@@ -364,6 +366,7 @@ function render() {
   const keepFocus = active && active.id ? { id: active.id, start: active.selectionStart, end: active.selectionEnd } : null;
   const room = S.room;
   const inRoom = !!room && S.status !== "idle";
+  document.body.classList.toggle("in-lobby", !inRoom); // 리소스 팩의 로비 배경
   bgm.scene(musicScene(room, inRoom));
   // 전투가 시작되면 열려 있던 다시 보기는 닫는다. (판이 두 개 겹치지 않게)
   if (S.modal === "replay" && room?.phase === "combat") S.modal = null;
@@ -371,7 +374,7 @@ function render() {
   stopPlayback();
   const modalScroll = document.querySelector(".modal-body")?.scrollTop ?? 0;
   app.innerHTML = (inRoom ? roomShell(room) : S.quick ? quickView() : S.status === "connecting" ? `<div class="center-msg">접속하는 중...</div>` : lobbyView())
-    + (S.modal === "guestroom" && S.guestRoom ? guestRoomModal() : S.modal === "live" ? liveModal() : S.modal === "myrooms" ? myRoomsModal() : S.modal === "guide" ? guideModal() : S.modal === "ranking" ? rankingModal() : S.modal === "replay" && S.replay ? replayModal() : "");
+    + (S.modal === "guestroom" && S.guestRoom ? guestRoomModal() : S.modal === "live" ? liveModal() : S.modal === "myrooms" ? myRoomsModal() : S.modal === "guide" ? guideModal() : S.modal === "packs" ? packsModal() : S.modal === "ranking" ? rankingModal() : S.modal === "replay" && S.replay ? replayModal() : "");
   const modalBody = document.querySelector(".modal-body");
   if (modalBody) modalBody.scrollTop = modalScroll;
   if (S.modal === "replay") startReplay();
@@ -545,6 +548,11 @@ document.addEventListener("click", (event) => {
     case "join-code": join(d.code, S.botLevel); break;
     case "ranking": openRanking(); break;
     case "guide": openGuide(d.tab); break;
+    case "packs": update({ modal: "packs" }); break;
+    case "pack-guide":
+      update({ modal: "guide", guideTab: "packs", guidePack: d.id });
+      requestAnimationFrame(() => document.getElementById(`pack-${d.id}`)?.scrollIntoView({ block: "start", behavior: "smooth" }));
+      break;
     case "guide-tab": update({ guideTab: d.tab }); break;
     case "close-modal": update({ modal: null }); break;
     case "logout": refreshUser(); break;
@@ -772,6 +780,8 @@ async function refreshServer() {
     S.server = null;
   }
   if (S.server && S.server.protocol > PROTOCOL_VERSION) toast("서버가 더 새로운 버전이에요. 페이지를 새로고침해 주세요.");
+  await loadPacks(); // 엑스퍼트 서버의 팩: 로비 목록, 가이드 "팩" 탭, 리소스(색·그림·소리)
+  render();
   document.title = S.server && S.server.env !== "production" ? `${S.server.name} · COMMANDER` : document.title;
 }
 

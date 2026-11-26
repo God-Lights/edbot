@@ -58,8 +58,10 @@ public final class DataStore {
     public func loadAll() -> [String: String] {
         var out: [String: String] = [:]
         guard let walker = fm.enumerator(atPath: root.path) else { return out }
+        // 팩의 그림·소리 같은 바이너리는 엔진에 넘기지 않는다 (그림·소리는 접속 서버가 /packs/ 로 내준다)
+        let binary: Set<String> = ["png", "jpg", "jpeg", "webp", "gif", "mp3", "ogg", "m4a", "wav", "zip"]
         for case let rel as String in walker {
-            if rel.hasSuffix(".tmp") { continue }
+            if rel.hasSuffix(".tmp") || binary.contains((rel as NSString).pathExtension.lowercased()) { continue }
             let url = root.appendingPathComponent(rel)
             var isDir: ObjCBool = false
             guard fm.fileExists(atPath: url.path, isDirectory: &isDir), !isDir.boolValue else { continue }

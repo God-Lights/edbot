@@ -7,7 +7,7 @@
 
 import { ABILITIES } from "./abilities";
 import { OFFICIAL_RULES } from "./content";
-import type { Content, PackInfo, Rules, WeaponStats } from "./content";
+import type { Content, PackGuideSection, PackInfo, PackKind, PackResources, PackSummary, Rules, WeaponStats } from "./content";
 import { MATERIAL_FUSIONS, buildFusions } from "./crafting";
 import { BASE, PIECE_TUNING, ROLE, ROSTER } from "./roster";
 import { LITE_IDS } from "./game";
@@ -32,7 +32,29 @@ const NEXT_RARITY: Record<Rarity, Rarity | null> = { common: "uncommon", uncommo
 const PASSIVE_ABILITIES: ReadonlySet<string> = new Set(["relic-shield", "spore", "hunger", "royal-ascent"]);
 const ID = /^[a-z][a-z0-9-]{0,30}$/;
 const PACK_ID = /^[a-z][a-z0-9-]{1,30}$/;
-const TOP_KEYS = new Set(["apiVersion", "id", "name", "version", "description", "units", "unitOverrides", "materials", "weapons", "fusions", "rules"]);
+const GAMEPLAY_KEYS = ["units", "unitOverrides", "materials", "weapons", "fusions", "rules"] as const;
+const TOP_KEYS = new Set(["apiVersion", "id", "name", "version", "description", "kind", "author", "guide", "resources", ...GAMEPLAY_KEYS]);
+const KINDS: readonly PackKind[] = ["plugin", "resource", "bundle"];
+
+// ---- 리소스(화면·소리) ----
+/** 바꿀 수 있는 색 (웹 CSS 변수와 가격 색) */
+export const COLOR_KEYS = ["bgTop", "bgBottom", "panel", "gold", "goldHi", "accent", "text", "mine", "theirs", "cost1", "cost2", "cost3", "cost4", "cost5"] as const;
+/** 바꿀 수 있는 효과음 (web/js/sfx.js 의 이름) */
+export const SOUND_NAMES = [
+  "click", "buy", "sell", "place", "ready", "hit", "ability", "death", "promote", "mine", "roundWin", "roundLose", "win", "lose",
+  "pickup", "drop", "equip", "smelt", "combine", "merge", "full", "roundStart", "combatStart", "ghost", "surface", "tick", "suddenDeath",
+] as const;
+export const MUSIC_TRACKS = ["prep", "combat", "finale"] as const;
+const IMAGE_EXT = ["png", "jpg", "jpeg", "webp", "gif"];
+const AUDIO_EXT = ["mp3", "ogg", "m4a", "wav"];
+/** 팩 안 파일 경로: 상대 경로, 영문·숫자·_-./ 만, .. 없음 (SVG·HTML 같은 문서 파일은 받지 않는다) */
+const ASSET_PATH = /^[A-Za-z0-9_][A-Za-z0-9_\-./]{0,119}$/;
+const COLOR = /^#[0-9a-fA-F]{6}$/;
+export const MAX_GUIDE_SECTIONS = 12;
+export const MAX_UNIT_ART = 150;
+
+/** 리소스 파일이 서버에서 보이는 주소 (로컬 서버·서버 앱이 plugins/ 의 팩 폴더에서 내준다) */
+export const packAssetUrl = (packId: string, path: string): string => `/packs/${packId}/${path}`;
 
 export interface BuildResult {
   /** 받아들인 팩이 없으면 null (= 공식 그대로) */
@@ -134,6 +156,32 @@ function applyPack(base: State, raw: unknown): { state: State; info: PackInfo } 
   const name = c.str(raw, "name", "", { max: 40 });
   const version = c.str(raw, "version", "", { max: 20 });
   if (raw.description !== undefined && (typeof raw.description !== "string" || raw.description.length > 300)) c.fail("description", "300자 이하 글자여야 한다.");
+  const author = c.str(raw, "author", "", { max: 40, optional: true });
+  const hasGameplay = GAMEPLAY_KEYS.some((k) => raw[k] !== undefined);
+  const hasResources = raw.resources !== undefined;
+  // kind 를 안 적으면 내용으로 정한다 (예전 팩은 plugin)
+  let kind: PackKind = hasResources ? (hasGameplay ? "bundle" : "resource") : "plugin";
+  if (raw.kind !== undefined) {
+    const k = c.oneOf(raw, "kind", "", KINDS);
+    if (k) kind = k;
+    if (k === "resource" && hasGameplay) c.fail("kind", `리소스 팩에는 규칙·캐릭터(${GAMEPLAY_KEYS.filter((x) => raw[x] !== undefined).join(", ")})를 넣을 수 없다. 종합 팩이면 "bundle".`);
+    if (k === "plugin" && hasResources) c.fail("kind", '플러그인 팩에는 resources 를 넣을 수 없다. 종합 팩이면 "bundle".');
+  }
+  const guide: PackGuideSection[] = [];
+  if (raw.guide !== undefined) {
+    if (!Array.isArray(raw.guide)) c.fail("guide", "[{ title, body }] 목록이어야 한다.");
+    else {
+      if (raw.guide.length > MAX_GUIDE_SECTIONS) c.fail("guide", `${MAX_GUIDE_SECTIONS}개까지다.`);
+      raw.guide.forEach((g, i) => {
+        const path = `guide[${i}]`;
+        if (!isObj(g)) return c.fail(path, "객체여야 한다.");
+        c.noExtra(g, path, ["title", "body"]);
+        const title = c.str(g, "title", path, { max: 40 });
+        const body = c.str(g, "body", path, { max: 4000 });
+        if (title && body) guide.push({ title, body });
+      });
+    }
+  }
 
   const state: State = {
     units: base.units.map((u) => ({ ...u })),
@@ -343,6 +391,86 @@ function applyPack(base: State, raw: unknown): { state: State; info: PackInfo } 
     }
   }
 
+  // 리소스: 색, 로고·배경, 캐릭터 그림, 효과음·음악 (경로는 팩 폴더 안의 파일)
+  let resources: PackResources | undefined;
+  if (hasResources) {
+    const res = raw.resources;
+    if (!isObj(res)) c.fail("resources", "객체여야 한다.");
+    else {
+      resources = {};
+      c.noExtra(res, "resources", ["colors", "logo", "lobbyBackground", "boardBackground", "units", "sounds", "music"]);
+      const asset = (value: unknown, path: string, exts: readonly string[]): string | undefined => {
+        if (typeof value !== "string" || !ASSET_PATH.test(value) || value.includes("..") || value.includes("//")) {
+          c.fail(path, "팩 안의 파일 경로여야 한다. (예: assets/logo.png, 영문·숫자·_-./ 만)");
+          return undefined;
+        }
+        const ext = value.split(".").pop()!.toLowerCase();
+        if (!exts.includes(ext)) {
+          c.fail(path, `${exts.join(", ")} 파일이어야 한다.`);
+          return undefined;
+        }
+        return packAssetUrl(packId ?? "pack", value);
+      };
+      if (res.colors !== undefined) {
+        if (!isObj(res.colors)) c.fail("resources.colors", "{ 이름: \"#rrggbb\" } 형태여야 한다.");
+        else {
+          c.noExtra(res.colors, "resources.colors", COLOR_KEYS);
+          const colors: Record<string, string> = {};
+          for (const [k, v] of Object.entries(res.colors)) {
+            if (typeof v !== "string" || !COLOR.test(v)) c.fail(`resources.colors.${k}`, "#rrggbb 색이어야 한다.");
+            else colors[k] = v.toLowerCase();
+          }
+          resources.colors = colors;
+        }
+      }
+      for (const key of ["logo", "lobbyBackground", "boardBackground"] as const) {
+        if (res[key] !== undefined) resources[key] = asset(res[key], `resources.${key}`, IMAGE_EXT);
+      }
+      if (res.units !== undefined) {
+        if (!isObj(res.units)) c.fail("resources.units", "{ 캐릭터id: 그림 경로 } 형태여야 한다.");
+        else {
+          if (Object.keys(res.units).length > MAX_UNIT_ART) c.fail("resources.units", `${MAX_UNIT_ART}개까지다.`);
+          const units: Record<string, string> = {};
+          for (const [uid, v] of Object.entries(res.units)) {
+            // 이 팩의 캐릭터는 짧은 id, 공식·다른 팩 캐릭터는 전체 id
+            const id = state.units.some((u) => u.id === full(uid)) ? full(uid) : uid;
+            if (!state.units.some((u) => u.id === id)) { c.fail(`resources.units.${uid}`, "그런 캐릭터가 없다."); continue; }
+            const url = asset(v, `resources.units.${uid}`, IMAGE_EXT);
+            if (url) units[id] = url;
+          }
+          resources.units = units;
+        }
+      }
+      if (res.sounds !== undefined) {
+        if (!isObj(res.sounds)) c.fail("resources.sounds", "{ 효과음 이름: 소리 경로 } 형태여야 한다.");
+        else {
+          c.noExtra(res.sounds, "resources.sounds", SOUND_NAMES);
+          const sounds: Record<string, string> = {};
+          for (const [k, v] of Object.entries(res.sounds)) { const url = asset(v, `resources.sounds.${k}`, AUDIO_EXT); if (url) sounds[k] = url; }
+          resources.sounds = sounds;
+        }
+      }
+      if (res.music !== undefined) {
+        if (!isObj(res.music)) c.fail("resources.music", "{ prep, combat, finale } 형태여야 한다.");
+        else {
+          c.noExtra(res.music, "resources.music", MUSIC_TRACKS);
+          const music: Record<string, string> = {};
+          for (const [k, v] of Object.entries(res.music)) { const url = asset(v, `resources.music.${k}`, AUDIO_EXT); if (url) music[k] = url; }
+          resources.music = music;
+        }
+      }
+    }
+  }
+
+  // 요약 (가이드 "팩" 탭의 자동 설명)
+  const summary: PackSummary = {
+    units: state.units.filter((u) => !base.units.some((b) => b.id === u.id)).map((u) => u.id),
+    overrides: isObj(raw.unitOverrides) ? Object.keys(raw.unitOverrides) : [],
+    materials: state.materials.filter((m) => !base.materials.some((b) => b.id === m.id)).map((m) => m.id),
+    weapons: state.weapons.filter((w) => !base.weapons.some((b) => b.id === w.id)).map((w) => w.id),
+    rules: isObj(raw.rules) ? Object.keys(raw.rules) : [],
+  };
+
   // 전체 점검: 개수 제한, 가격·희귀도마다 하나 이상
   if (c.errors.length === 0) {
     if (state.units.length > MAX_TOTAL_UNITS) c.fail("", `캐릭터가 너무 많다. (전체 ${MAX_TOTAL_UNITS}명까지)`);
@@ -350,7 +478,12 @@ function applyPack(base: State, raw: unknown): { state: State; info: PackInfo } 
     if (state.weapons.length > MAX_TOTAL_WEAPONS) c.fail("", `무기가 너무 많다. (전체 ${MAX_TOTAL_WEAPONS}종까지)`);
   }
   if (c.errors.length > 0 || !name || !version || !packId) return { errors: c.errors, id: idForError };
-  return { state, info: { id: packId, name, version } };
+  const info: PackInfo = { id: packId, name, version, kind, summary };
+  if (typeof raw.description === "string" && raw.description.trim()) info.description = raw.description.trim();
+  if (author) info.author = author;
+  if (guide.length) info.guide = guide;
+  if (resources) info.resources = resources;
+  return { state, info };
 }
 
 // ---- 해시(규칙 묶음 이름) ----
@@ -391,8 +524,10 @@ export function buildContent(rawPacks: readonly unknown[]): BuildResult {
 
   const fusions = buildFusions(state.materials, state.fixedFusions);
   const body = { units: state.units, materials: state.materials, weapons: state.weapons, weaponStats: state.weaponStats, fusions, rules: state.rules, liteIds: state.liteIds };
+  // 리소스 팩만 있으면 규칙은 공식 그대로다 (진행 중인 판·전적이 공식과 같은 규칙으로 남는다)
+  const gameplay = accepted.some((p) => p.kind !== "resource");
   const content: Content = {
-    ruleset: `custom-${fnv1a(JSON.stringify(body))}`,
+    ruleset: gameplay ? `custom-${fnv1a(JSON.stringify(body))}` : "official",
     packs: accepted,
     units: state.units,
     unitMap: new Map(state.units.map((u) => [u.id, u])),
