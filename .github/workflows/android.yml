@@ -185,6 +185,8 @@ jobs:
     name: 에뮬레이터 화면 (안드로이드 ${{ matrix.label }})
     needs: build
     runs-on: ubuntu-latest
+    # 보통 4~5분. 에뮬레이터가 부팅에서 멈추면 몇 시간씩 붙잡지 않게
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
