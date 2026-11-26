@@ -2,7 +2,7 @@ name: Server release
 
 # 서버 앱을 릴리스로 올린다. (태그 server-vX.Y.Z)
 # - 로컬 서버: 윈도우 .exe, 맥(애플 실리콘·인텔), 리눅스 실행파일, 우분투 .deb — 바닐라와 엑스퍼트
-# - iPad 서버 앱: 서명 없는 CommanderServer.ipa (SideStore 소스에도 올라간다, 시험판)
+# - iPhone·iPad 서버 앱: 서명 없는 CommanderServer.ipa (SideStore 소스에도 올라간다, 시험판)
 # 빌드와 실행 점검은 local-server.yml, ios-server-app.yml 을 그대로 불러서 한다. 점검을 통과해야 릴리스가 만들어진다.
 #
 # 실행: Actions 탭 > Server release > Run workflow 에서 버전(예: 0.1.0)을 적는다. (main 에서만)
@@ -61,7 +61,7 @@ jobs:
       version: ${{ needs.version.outputs.version }}
 
   ipad:
-    name: iPad 서버 앱
+    name: iPhone·iPad 서버 앱
     needs: version
     uses: ./.github/workflows/ios-server-app.yml
     with:
@@ -110,7 +110,7 @@ jobs:
           cat > notes.md <<NOTES
           COMMANDER 서버 ${VERSION}
 
-          같은 와이파이에서 친구들과 할 때 PC(또는 iPad) 한 대를 서버로 켭니다. 전적은 그 기기에 남습니다.
+          같은 와이파이에서 친구들과 할 때 PC(또는 iPhone·iPad·안드로이드 폰) 한 대를 서버로 켭니다. 전적은 그 기기에 남습니다.
           설치 안내: https://edgame-api.officialgl.com/install.html#server
 
           | 기기 | 파일 |
@@ -120,7 +120,7 @@ jobs:
           | 맥 (인텔) | \`commander-server-macos-intel\` |
           | 우분투 | \`commander-server_${VERSION}_amd64.deb\` (앱 메뉴에 "COMMANDER 서버") |
           | 리눅스 | \`commander-server-linux-x64\` |
-          | iPad (시험판) | \`CommanderServer.ipa\` — SideStore 의 COMMANDER 소스에서도 설치 |
+          | iPhone·iPad (시험판) | \`CommanderServer.ipa\` — SideStore 의 COMMANDER 소스에서도 설치. 앱을 화면에 켜 두고, 그 기기에서 하려면 '이 기기에서 하기' |
 
           \`expert\` 가 붙은 파일은 엑스퍼트 서버입니다. (\`commander-data/plugins/\` 의 콘텐츠 팩을 읽음)
           서명하지 않은 파일이라 윈도우는 "추가 정보 → 실행", 맥은 처음 한 번 \`xattr -d com.apple.quarantine <파일>\` 이 필요합니다.
@@ -130,7 +130,7 @@ jobs:
             --repo "${GITHUB_REPOSITORY}" --target "${GITHUB_SHA}" \
             --title "COMMANDER 서버 ${VERSION}" --notes-file notes.md
 
-      # iPad 서버 앱을 SideStore 소스(서버의 /sidestore.json)에 싣는다. (ios.yml 과 같은 방법)
+      # 서버 앱(iPhone·iPad)을 SideStore 소스(서버의 /sidestore.json)에 싣는다. (ios.yml 과 같은 방법)
       - uses: actions/setup-node@v4
         with:
           node-version: 22

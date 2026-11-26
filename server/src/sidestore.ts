@@ -1,5 +1,5 @@
 // SideStore(AltStore 호환) 소스. SideStore에서 "소스 추가"에 이 서버의 /sidestore.json 주소를 넣으면
-// COMMANDER iPad 앱이 목록에 나타나고 업데이트도 알려 준다.
+// COMMANDER 앱(iPad·iPhone)이 목록에 나타나고 업데이트도 알려 준다.
 // 앱 파일(.ipa)은 GitHub 릴리스(태그 ios-vX.Y.Z)에서 받는다. 서버는 릴리스 목록만 읽어서 소스를 만든다.
 
 export const IOS_TAG_PREFIX = "ios-v";
@@ -100,15 +100,15 @@ export function buildSource(releases: GithubRelease[], sourceURL: string): unkno
     ...(server.versions.length ? [app({
       name: "COMMANDER 서버",
       bundleIdentifier: SERVER_BUNDLE_ID,
-      subtitle: "iPad를 COMMANDER 서버로 (시험판)",
-      localizedDescription: "이 iPad에서 COMMANDER 서버를 켭니다. 같은 와이파이의 다른 기기가 QR이나 서버 목록으로 접속해 대전할 수 있습니다. 전적은 이 iPad에 남습니다.",
+      subtitle: "iPhone·iPad를 COMMANDER 서버로 (시험판)",
+      localizedDescription: "이 iPhone·iPad에서 COMMANDER 서버를 켭니다. 같은 와이파이(또는 개인용 핫스팟)의 다른 기기가 QR이나 서버 목록으로 접속해 대전할 수 있고, 서버 앱 안에서 직접 같이 할 수도 있습니다. 전적은 이 기기에 남습니다.",
     }, server.versions)] : []),
   ];
   return {
     name: "COMMANDER",
     identifier: `${BUNDLE_ID}.source`,
-    subtitle: "COMMANDER iPad 앱",
-    description: "COMMANDER iPad 앱(과 서버 앱)을 SideStore로 설치하고 업데이트합니다.",
+    subtitle: "COMMANDER iPad·iPhone 앱",
+    description: "COMMANDER 앱(과 서버 앱)을 iPad·iPhone에 SideStore로 설치하고 업데이트합니다.",
     iconURL: icon,
     website: "https://edgame-api.officialgl.com",
     tintColor: "B040BE",
