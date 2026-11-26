@@ -10,6 +10,8 @@
 import type { PublicUser } from "./auth";
 
 export const LINK_PENDING_MS = 10 * 60_000;
+/** 승인 결과를 처음 받은 뒤에도 이만큼은 다시 받을 수 있다 (같은 요청이 두 번 와도 "만료"가 되지 않게) */
+export const LINK_RESULT_MS = 2 * 60_000;
 export const SERVER_NAME_MAX = 40;
 
 export interface LinkStorage {
@@ -35,6 +37,8 @@ interface LinkRecord {
   returnTo: string | null;
   createdAt: number;
   user: PublicUser | null;
+  /** 개인 서버가 승인 결과를 처음 받은 때 */
+  claimedAt?: number;
 }
 
 export interface LinkInfo {
@@ -69,13 +73,14 @@ export function serverIdLabel(id: string): string {
   return id.match(/.{1,4}/g)?.join("-") ?? id;
 }
 
-/** 승인 뒤 돌아갈 주소: http(s) 의 /auth/done 만 */
+/** 승인 뒤 돌아갈 주소: http(s) 의 /auth/done 만. 개인 서버의 로그인 번호(?login=, 16진수)만 남긴다 */
 export function cleanReturnTo(raw: unknown): string | null {
   if (typeof raw !== "string" || raw.length > 300) return null;
   try {
     const url = new URL(raw);
     if ((url.protocol !== "http:" && url.protocol !== "https:") || url.pathname !== "/auth/done" || url.username || url.password) return null;
-    return `${url.origin}/auth/done`;
+    const login = url.searchParams.get("login");
+    return login && /^[0-9a-f]{16,64}$/.test(login) ? `${url.origin}/auth/done?login=${login}` : `${url.origin}/auth/done`;
   } catch {
     return null;
   }
@@ -119,7 +124,8 @@ export class LinkHubCore {
     if (typeof linkId !== "string" || !TOKEN.test(linkId)) return null;
     const link = await this.storage.get<LinkRecord>(`link:${linkId}`);
     if (!link) return null;
-    if (now - link.createdAt > LINK_PENDING_MS) {
+    const expired = link.claimedAt !== undefined ? now - link.claimedAt > LINK_RESULT_MS : now - link.createdAt > LINK_PENDING_MS;
+    if (expired) {
       await this.storage.delete(`link:${linkId}`);
       return null;
     }
@@ -139,12 +145,12 @@ export class LinkHubCore {
     return { serverId: link.serverId, serverName: link.serverName, returnTo: link.returnTo };
   }
 
-  /** 승인되었으면 사용자를 한 번만 내준다 (그 뒤로는 unknown) */
+  /** 승인되었으면 사용자를 내준다. 처음 받은 뒤 2분 동안은 같은 결과를 다시 받을 수 있고, 그 뒤로는 unknown */
   async poll(linkId: unknown, pollSecret: unknown, now = Date.now()): Promise<LinkPoll> {
     const link = await this.live(linkId, now);
     if (!link || typeof pollSecret !== "string" || link.pollHash !== (await sha256(pollSecret))) return { status: "unknown" };
     if (!link.user) return { status: "pending" };
-    await this.storage.delete(`link:${linkId as string}`);
+    if (link.claimedAt === undefined) await this.storage.put(`link:${linkId as string}`, { ...link, claimedAt: now } satisfies LinkRecord);
     return { status: "approved", user: link.user };
   }
 
@@ -159,7 +165,8 @@ export class LinkHubCore {
   /** 오래된 로그인 요청을 치운다 */
   async sweep(now = Date.now()): Promise<void> {
     for (const [key, link] of await this.storage.list<LinkRecord>({ prefix: "link:" })) {
-      if (now - link.createdAt > LINK_PENDING_MS) await this.storage.delete(key);
+      const expired = link.claimedAt !== undefined ? now - link.claimedAt > LINK_RESULT_MS : now - link.createdAt > LINK_PENDING_MS;
+      if (expired) await this.storage.delete(key);
     }
   }
 }

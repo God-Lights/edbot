@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PublicUser } from "../src/auth";
 import { authMode, identify } from "../src/auth";
-import { LINK_PENDING_MS, LinkHubCore, cleanReturnTo, cleanServerName, serverIdLabel } from "../src/link-hub";
+import { LINK_PENDING_MS, LINK_RESULT_MS, LinkHubCore, cleanReturnTo, cleanServerName, serverIdLabel } from "../src/link-hub";
 import type { LinkStorage } from "../src/link-hub";
 import { allowRegister, handleLinkHub, handleLinkedServer } from "../src/link-routes";
 import { LinkedCore } from "../src/linked";
@@ -73,6 +73,7 @@ function fakeAuthStore() {
     saveRemote: (id: string, r: { linkId: string; pollSecret: string }) => linked.saveRemote(id, r),
     remote: (id: string) => linked.remote(id),
     dropRemote: (id: string) => linked.dropRemote(id),
+    finishRemote: (id: string, token: string, user: PublicUser) => linked.finishRemote(id, token, user),
     rememberUser: (u: PublicUser) => linked.rememberUser(u),
     isBanned: (id: string) => linked.isBanned(id),
     setBanned: (id: string, b: boolean) => linked.setBanned(id, b),
@@ -91,21 +92,23 @@ const mina: PublicUser = { id: "gl-mina", username: "mina", nickname: "미나", 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("공식 쪽 로그인 요청 (LinkHubCore)", () => {
-  it("등록 → 요청 → 승인 → 한 번만 결과", async () => {
+  it("등록 → 요청 → 승인 → 결과 (처음 받은 뒤 2분 동안은 다시 받을 수 있다)", async () => {
     const hub = new LinkHubCore(memoryStorage());
     const { serverId, secret } = await hub.register("우리 반 서버");
     expect(serverId).toMatch(/^[0-9a-f]{12}$/);
     expect(await hub.start({ serverId, secret: "0".repeat(64), name: "x" })).toEqual({ ok: false, code: "unknown_server" });
     expect(await hub.start({ serverId: "../x", secret, name: "x" })).toEqual({ ok: false, code: "bad_request" });
-    const started = await hub.start({ serverId, secret, name: "우리 반 서버", returnTo: "http://192.168.0.5:8787/auth/done?x=1" });
+    const started = await hub.start({ serverId, secret, name: "우리 반 서버", returnTo: "http://192.168.0.5:8787/auth/done?x=1" }, 1000);
     if (!started.ok) throw new Error("start");
-    expect(await hub.info(started.linkId)).toEqual({ serverId, serverName: "우리 반 서버", returnTo: "http://192.168.0.5:8787/auth/done" });
-    expect(await hub.poll(started.linkId, started.pollSecret)).toEqual({ status: "pending" });
-    expect(await hub.poll(started.linkId, "f".repeat(48))).toEqual({ status: "unknown" });
-    expect(await hub.approve(started.linkId, ed)).not.toBeNull();
-    expect(await hub.approve(started.linkId, mina)).toBeNull(); // 두 번 승인 안 됨
-    expect(await hub.poll(started.linkId, started.pollSecret)).toEqual({ status: "approved", user: ed });
-    expect(await hub.poll(started.linkId, started.pollSecret)).toEqual({ status: "unknown" });
+    expect(await hub.info(started.linkId, 1000)).toEqual({ serverId, serverName: "우리 반 서버", returnTo: "http://192.168.0.5:8787/auth/done" });
+    expect(await hub.poll(started.linkId, started.pollSecret, 1000)).toEqual({ status: "pending" });
+    expect(await hub.poll(started.linkId, "f".repeat(48), 1000)).toEqual({ status: "unknown" });
+    expect(await hub.approve(started.linkId, ed, 2000)).not.toBeNull();
+    expect(await hub.approve(started.linkId, mina, 2000)).toBeNull(); // 두 번 승인 안 됨
+    expect(await hub.poll(started.linkId, started.pollSecret, 3000)).toEqual({ status: "approved", user: ed });
+    // 같은 요청이 한 번 더 와도 (두 번 열림, 동시에 물음) 같은 결과
+    expect(await hub.poll(started.linkId, started.pollSecret, 3000 + LINK_RESULT_MS)).toEqual({ status: "approved", user: ed });
+    expect(await hub.poll(started.linkId, started.pollSecret, 3001 + LINK_RESULT_MS)).toEqual({ status: "unknown" });
   });
 
   it("10분이 지나면 만료, 막힌 서버는 요청을 못 만든다", async () => {
@@ -126,6 +129,9 @@ describe("공식 쪽 로그인 요청 (LinkHubCore)", () => {
     expect(cleanReturnTo("https://evil.example/steal")).toBeNull();
     expect(cleanReturnTo("http://u:p@10.0.0.2/auth/done")).toBeNull();
     expect(cleanReturnTo("http://10.0.0.2:8787/auth/done")).toBe("http://10.0.0.2:8787/auth/done");
+    // 로그인 번호(16진수)만 남긴다
+    expect(cleanReturnTo(`http://10.0.0.2:8787/auth/done?login=${"ab".repeat(24)}&x=1`)).toBe(`http://10.0.0.2:8787/auth/done?login=${"ab".repeat(24)}`);
+    expect(cleanReturnTo("http://10.0.0.2:8787/auth/done?login=<script>")).toBe("http://10.0.0.2:8787/auth/done");
     expect(serverIdLabel("abcdef012345")).toBe("abcd-ef01-2345");
   });
 
@@ -181,7 +187,9 @@ describe("개인 서버 (AUTH_MODE=linked)", () => {
     expect(done.user).toEqual(ed);
     // 이 서버의 세션으로 확인된다 (공식 토큰이 아니다)
     expect(await identify(s.personalEnv, new Request("http://x/", { headers: { authorization: `Bearer ${done.token}` } }))).toEqual(ed);
-    expect((await s.call(`/api/auth/poll?id=${started.loginId}`))!.status).toBe(404);
+    // 한 번 더 물어도 같은 세션 (앱이 동시에 두 번 물어도 "만료"가 되지 않게)
+    const again = (await (await s.call(`/api/auth/poll?id=${started.loginId}`))!.json()) as { token: string };
+    expect(again.token).toBe(done.token);
     // 두 번째 로그인은 같은 서버 id 로
     const cred = await s.personal.linkCredentials();
     await s.call("/api/auth/start", { method: "POST" });
@@ -201,6 +209,17 @@ describe("개인 서버 (AUTH_MODE=linked)", () => {
     expect(done.headers.get("location")).toBe("/server-admin.html");
     const session = done.headers.get("set-cookie")!.match(/cmd_session=([0-9a-f]+)/)![1];
     expect(await identify(s.personalEnv, new Request("http://x/", { headers: { cookie: `cmd_session=${session}` } }))).toEqual(ed);
+    // 쿠키가 없어도 주소의 로그인 번호로 이어지고, 두 번 열려도 같은 세션
+    const login2 = (await s.call("/auth/login"))!;
+    const id2 = decodeURIComponent(login2.headers.get("set-cookie")!).match(/cmd_login=([0-9a-f]+)/)![1];
+    const info = await s.official.linkInfo(new URL(login2.headers.get("location")!).searchParams.get("id"));
+    expect(info?.returnTo).toBe(`http://192.168.0.5:8787/auth/done?login=${id2}`);
+    await s.approveLatest(mina);
+    const noCookie = (await s.call(`/auth/done?login=${id2}`))!;
+    expect(noCookie.status).toBe(302);
+    expect(noCookie.headers.get("location")).toBe("/");
+    const twice = (await s.call(`/auth/done?login=${id2}`))!;
+    expect(twice.headers.get("set-cookie")).toBe(noCookie.headers.get("set-cookie"));
     // 밖으로 보내는 return 은 무시
     const evil = (await s.call("/auth/login?return=//evil.example"))!;
     expect(decodeURIComponent(evil.headers.get("set-cookie")!)).toMatch(/\|\/;/);

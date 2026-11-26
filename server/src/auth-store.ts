@@ -99,6 +99,7 @@ export class AuthStore extends DurableObject {
   }
   remote(loginId: string) { return this.linked().remote(loginId); }
   dropRemote(loginId: string) { return this.linked().dropRemote(loginId); }
+  finishRemote(loginId: string, token: string, user: PublicUser) { return this.linked().finishRemote(loginId, token, user); }
   rememberUser(user: PublicUser) { return this.linked().rememberUser(user); }
   isBanned(userId: string) { return this.linked().isBanned(userId); }
   setBanned(userId: string, banned: boolean) { return this.linked().setBanned(userId, banned); }

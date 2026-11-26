@@ -147,32 +147,55 @@ export async function handleLinkedServer(request: Request, env: LinkEnv, url: UR
     setCredentials: (c: Parameters<LinkedCore["setCredentials"]>[0]) => store.setLinkCredentials(c),
   } as unknown as LinkedCore;
 
-  const begin = async (returnTo: string | null) => {
-    const remote = await startRemoteLogin(core, client, serverName, returnTo);
+  /** web: 웹에서 시작했으면 승인 뒤 /auth/done?login=<번호> 로 돌아오게 한다 (쿠키가 없어도 이어지게) */
+  const begin = async (web: boolean) => {
     const loginId = await store.start();
+    const remote = await startRemoteLogin(core, client, serverName, web ? `${origin}/auth/done?login=${loginId}` : null);
     await store.saveRemote(loginId, { linkId: remote.linkId, pollSecret: remote.pollSecret });
     return { loginId, linkUrl: remote.linkUrl };
   };
+  const warn = (text: string) => console.warn(`[GL 연결] ${text}`);
 
   /** 공식 서버에 결과를 묻고, 승인되었으면 이 서버의 세션을 만든다 */
   const finish = async (loginId: string): Promise<{ status: "pending" | "unknown" | "banned" } | { status: "approved"; token: string; user: PublicUser }> => {
     const remote = await store.remote(loginId);
-    if (!remote) return { status: "unknown" };
+    if (!remote) {
+      warn(loginId ? "로그인 확인 실패: 이 서버에 그 로그인 요청이 없어요 (10분이 지났거나 다른 서버에서 시작함)" : "로그인 확인 실패: 로그인 번호가 없어요 (주소·쿠키에 없음)");
+      return { status: "unknown" };
+    }
+    // 이미 끝낸 로그인이 다시 오면(두 번 열림, 동시에 물음) 같은 세션을 준다
+    if (remote.token && remote.user) return { status: "approved", token: remote.token, user: remote.user };
     const result = await client.poll(remote.linkId, remote.pollSecret);
     if (result.status === "pending") return { status: "pending" };
-    await store.dropRemote(loginId);
-    if (result.status === "unknown") return { status: "unknown" };
+    if (result.status === "unknown") {
+      await store.dropRemote(loginId);
+      warn("로그인 확인 실패: 공식 서버가 이 요청을 모른대요 (만료되었거나 승인이 끝나지 않음)");
+      return { status: "unknown" };
+    }
     await store.rememberUser(result.user);
-    if (await store.isBanned(result.user.id)) return { status: "banned" };
-    if (!(await store.approve(loginId, result.user))) return { status: "unknown" };
-    const claimed = await store.claim(loginId);
-    return claimed.status === "approved" ? claimed : { status: "unknown" };
+    if (await store.isBanned(result.user.id)) {
+      await store.dropRemote(loginId);
+      return { status: "banned" };
+    }
+    if (await store.approve(loginId, result.user)) {
+      const claimed = await store.claim(loginId);
+      if (claimed.status === "approved") {
+        await store.finishRemote(loginId, claimed.token, claimed.user);
+        return claimed;
+      }
+    }
+    // 같은 요청이 동시에 와서 다른 쪽이 먼저 끝냈다: 그쪽이 만든 세션을 준다
+    await new Promise((r) => setTimeout(r, 300));
+    const again = await store.remote(loginId);
+    if (again?.token && again.user) return { status: "approved", token: again.token, user: again.user };
+    warn("로그인 확인 실패: 세션을 만들지 못했어요");
+    return { status: "unknown" };
   };
 
   try {
     // 앱: 기기 로그인
     if (request.method === "POST" && path === "/api/auth/start") {
-      const { loginId, linkUrl } = await begin(null);
+      const { loginId, linkUrl } = await begin(false);
       return json({ loginId, loginUrl: linkUrl, expiresInSeconds: 600 });
     }
     if (request.method === "GET" && path === "/api/auth/poll") {
@@ -187,15 +210,17 @@ export async function handleLinkedServer(request: Request, env: LinkEnv, url: UR
 
     // 웹: 쿠키
     if (request.method === "GET" && path === "/auth/login") {
-      const { loginId, linkUrl } = await begin(`${origin}/auth/done`);
+      const { loginId, linkUrl } = await begin(true);
       const back = safeReturnPath(url.searchParams.get("return"));
       const headers = new Headers({ location: linkUrl, "cache-control": "no-store" });
       headers.append("set-cookie", cookie(LINK_LOGIN_COOKIE, `${loginId}|${back}`, 600));
       return new Response(null, { status: 302, headers });
     }
     if (request.method === "GET" && path === "/auth/done") {
+      // 로그인 번호는 주소(?login=)에서, 없으면(예전 공식 서버) 쿠키에서. 돌아갈 화면은 쿠키에서 (없으면 처음 화면)
       const raw = readCookie(cookieHeader(request), LINK_LOGIN_COOKIE) ?? "";
-      const [loginId = "", back = "/"] = raw.split("|");
+      const [cookieLogin = "", back = "/"] = raw.split("|");
+      const loginId = url.searchParams.get("login") || cookieLogin;
       const result = await finish(loginId);
       if (result.status === "pending") {
         return page("로그인", `<h1>아직 승인하지 않았어요</h1><p>공식 페이지에서 승인한 뒤 다시 와 주세요.</p><a class="btn" href="/auth/login">다시 로그인</a>`);
