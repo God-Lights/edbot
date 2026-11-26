@@ -1,5 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 import type { ClaimResult, PublicUser } from "./auth";
+import { LinkHubCore } from "./link-hub";
+import type { LinkStorage } from "./link-hub";
+import { LinkedCore } from "./linked";
+import type { LinkCredentials, RemoteLogin } from "./linked";
 
 const PENDING_LOGIN_MS = 10 * 60_000;
 const GAME_SESSION_MS = 7 * 24 * 60 * 60_000;
@@ -58,12 +62,47 @@ export class AuthStore extends DurableObject {
       await this.ctx.storage.delete(`session:${token}`);
       return null;
     }
+    // GL 연결 서버: 주인이 막은 사람은 이미 받은 세션도 쓸 수 없다
+    if (await this.linked().isBanned(session.user.id)) return null;
     return session.user;
   }
 
   async logout(token: string): Promise<void> {
     await this.ctx.storage.delete(`session:${token}`);
   }
+
+  // ---- GL 연결 서버: 공식 쪽 (link-hub.ts) ----
+
+  private hub(): LinkHubCore {
+    return new LinkHubCore(this.ctx.storage as unknown as LinkStorage);
+  }
+  linkRegister(name: unknown) { return this.hub().register(name); }
+  async linkStart(input: { serverId: unknown; secret: unknown; name: unknown; returnTo?: unknown }) {
+    const result = await this.hub().start(input);
+    if (result.ok) await this.ctx.storage.setAlarm(Date.now() + PENDING_LOGIN_MS);
+    return result;
+  }
+  linkInfo(linkId: unknown) { return this.hub().info(linkId); }
+  linkApprove(linkId: unknown, user: PublicUser) { return this.hub().approve(linkId, user); }
+  linkPoll(linkId: unknown, pollSecret: unknown) { return this.hub().poll(linkId, pollSecret); }
+  linkBlock(serverId: string, blocked: boolean) { return this.hub().setBlocked(serverId, blocked); }
+
+  // ---- GL 연결 서버: 개인 서버 쪽 (linked.ts) ----
+
+  private linked(): LinkedCore {
+    return new LinkedCore(this.ctx.storage as unknown as LinkStorage);
+  }
+  linkCredentials() { return this.linked().credentials(); }
+  setLinkCredentials(cred: LinkCredentials | null) { return this.linked().setCredentials(cred); }
+  async saveRemote(loginId: string, remote: Omit<RemoteLogin, "createdAt">) {
+    await this.linked().saveRemote(loginId, remote);
+  }
+  remote(loginId: string) { return this.linked().remote(loginId); }
+  dropRemote(loginId: string) { return this.linked().dropRemote(loginId); }
+  rememberUser(user: PublicUser) { return this.linked().rememberUser(user); }
+  isBanned(userId: string) { return this.linked().isBanned(userId); }
+  setBanned(userId: string, banned: boolean) { return this.linked().setBanned(userId, banned); }
+  knownUsers() { return this.linked().users(); }
 
   /** 오래된 로그인 시도와 만료된 세션을 치운다. */
   async alarm(): Promise<void> {
@@ -72,6 +111,8 @@ export class AuthStore extends DurableObject {
     for (const [key, value] of logins) if (now - value.createdAt > PENDING_LOGIN_MS) await this.ctx.storage.delete(key);
     const sessions = await this.ctx.storage.list<GameSession>({ prefix: "session:" });
     for (const [key, value] of sessions) if (value.expiresAt <= now) await this.ctx.storage.delete(key);
+    await this.hub().sweep(now);
+    await this.linked().sweep(now);
   }
 }
 

@@ -320,6 +320,6 @@ describe("/api/server 에 규칙 묶음과 팩이 나온다", () => {
     apply(pack());
     const info = serverInfo({ AUTH_MODE: "hybrid", EDITION: "expert" });
     expect(info.ruleset).toMatch(/^custom-/);
-    expect(info.packs).toEqual([{ id: "demo", name: "시험 팩", version: "1.0.0" }]);
+    expect(info.packs).toEqual([{ id: "demo", name: "시험 팩", version: "1.0.0", kind: "plugin" }]);
   });
 });

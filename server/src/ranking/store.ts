@@ -252,6 +252,8 @@ export interface RankingStore {
   getRecentMatches(userId: string, limit: number): Promise<MatchSummary[]>;
   saveReplay(id: string, data: string, now?: number): Promise<void>;
   getReplay(id: string): Promise<string | null>;
+  /** 랭킹을 처음부터 (선수 표와 판 기록을 백업하고 비운다). 로컬 저장소만 */
+  resetRanking?(): Promise<string | null>;
 }
 
 export function d1RankingStore(db: D1Database): RankingStore {

@@ -1,7 +1,8 @@
 #!/bin/bash
 # 에뮬레이터에서 서버 고르기 화면과 게임 화면(로컬 서버의 웹 화면)을 찍는다. (CI 확인용)
 #   android/scripts/screenshots.sh <api 레벨>   ->  android/build/screenshots/api<레벨>-*.png
-# 에뮬레이터가 켜져 있고 app/build/outputs/apk/debug/app-debug.apk 가 만들어져 있어야 한다.
+# 에뮬레이터가 켜져 있고 apks/ 에 디버그 APK(app-debug.apk, server-debug.apk)가 있어야 한다.
+# 서버 앱은 에뮬레이터 안에서 켜고(단계 시간 0.08배), 포트를 이 머신으로 이어서 smoke 점검(봇과 한 판, 두 사람)을 돌린다.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 api="${1:-0}"
@@ -15,7 +16,10 @@ shot() { sleep "$2"; adb exec-out screencap -p > "$out/api${api}-$1.png"; echo "
 for i in $(seq 1 30); do curl -sf localhost:8801/health >/dev/null && break; sleep 1; done
 curl -sf localhost:8801/health >/dev/null || { echo "로컬 서버가 켜지지 않았다"; cat "${RUNNER_TEMP:-/tmp}/server.log"; exit 1; }
 
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+app_apk=$(find apks -name app-debug.apk | head -1)
+server_apk=$(find apks -name server-debug.apk | head -1)
+adb install -r "$app_apk"
+adb install -r "$server_apk"
 echo "WebView: $(adb shell dumpsys webviewupdate | grep -m1 -i 'current webview package' | tr -d '\r')"
 adb logcat -c
 
@@ -34,7 +38,21 @@ adb shell am force-stop $pkg
 adb shell am start -a android.intent.action.VIEW -d "'commander://connect?url=http%3A%2F%2F10.0.2.2%3A8801&name=CI'" >/dev/null
 shot link 12
 
-adb logcat -d -s CommanderWeb:* ServerDiscovery:* AndroidRuntime:E > "$out/api${api}-logcat.txt" || true
+# 5) 서버 앱: 에뮬레이터 안에서 켜고, 이 머신에서 접속해 점검한다 (오래된 WebView 인 8.0 은 화면만)
+spkg=com.officialgl.commander.server
+adb shell pm grant $spkg android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+adb shell am start -n $spkg/.ServerActivity --ez autostart true --es phaseScale 0.08 >/dev/null
+sleep 12
+adb exec-out screencap -p > "$out/api${api}-server.png"; echo "찍음: api${api}-server.png"
+server_ok=0
+if [ "$api" -ge 30 ]; then
+  adb forward tcp:8790 tcp:8787
+  for i in $(seq 1 30); do curl -sf localhost:8790/health >/dev/null && break; sleep 1; done
+  if (cd ../local-server && timeout 300 bun scripts/smoke.ts http://localhost:8790 ADMN); then server_ok=1; fi
+  adb exec-out screencap -p > "$out/api${api}-server-after.png"
+fi
+adb logcat -d -s CommanderWeb:* ServerDiscovery:* CommanderServer:* AndroidRuntime:E > "$out/api${api}-logcat.txt" || true
 grep -q "FATAL EXCEPTION" "$out/api${api}-logcat.txt" && { echo "앱이 죽었다"; cat "$out/api${api}-logcat.txt"; exit 1; }
 pkill -f "src/main.ts --port 8801" || true
+if [ "$api" -ge 30 ] && [ "$server_ok" != 1 ]; then echo "서버 앱 점검 실패"; exit 1; fi
 exit 0

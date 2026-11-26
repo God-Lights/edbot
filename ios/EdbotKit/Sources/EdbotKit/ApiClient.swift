@@ -6,7 +6,7 @@ import FoundationNetworking
 /// 서버의 HTTP API (방 만들기, 방 정보). 방을 만들려면 로그인 토큰이 필요하다.
 public struct ApiClient: Sendable {
     public let baseURL: URL
-    private let http: HTTPTransport
+    let http: HTTPTransport
     private let authToken: String?
 
     public init(baseURL: URL, authToken: String? = nil, http: HTTPTransport = URLSessionTransport()) {

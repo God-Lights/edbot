@@ -1,4 +1,4 @@
-package com.officialgl.commander
+package com.officialgl.commander.common
 
 import android.app.Activity
 import android.content.Context
@@ -119,3 +119,24 @@ fun View.padForSystemBars(extra: Int = 0) {
 }
 
 fun Activity.toast(text: String) = android.widget.Toast.makeText(this, text, android.widget.Toast.LENGTH_SHORT).show()
+
+/** 새 버전이 나왔을 때 화면 맨 위에 보이는 띠 (iPad 앱과 같다) */
+fun Context.updateBanner(version: String, current: String, onUpdate: () -> Unit, onDismiss: () -> Unit): LinearLayout = LinearLayout(this).apply {
+    orientation = LinearLayout.HORIZONTAL
+    gravity = Gravity.CENTER_VERTICAL
+    background = GradientDrawable().apply {
+        cornerRadius = dp(12).toFloat()
+        setColor(Color.argb(40, Color.red(Palette.gold), Color.green(Palette.gold), Color.blue(Palette.gold)))
+        setStroke(dp(1), Color.argb(140, Color.red(Palette.gold), Color.green(Palette.gold), Color.blue(Palette.gold)))
+    }
+    setPadding(dp(12), dp(10), dp(12), dp(10))
+    addView(LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        addView(label("새 버전 ${version}이 나왔어요", 15f, Palette.goldHi, bold = true))
+        addView(label("지금 $current · 업데이트하면 새 기능을 쓸 수 있어요", 12f, Palette.dim))
+    }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+    addView(plainButton("나중에") { onDismiss() }.apply { setPadding(dp(12), dp(8), dp(12), dp(8)) },
+        LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(6) })
+    addView(goldButton("업데이트") { onUpdate() }.apply { setPadding(dp(12), dp(8), dp(12), dp(8)) })
+    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(8) }
+}

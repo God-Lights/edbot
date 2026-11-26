@@ -21,8 +21,13 @@ export const COST_COLOR = { 1: "#9ea3b3", 2: "#2fbf6b", 3: "#338ff2", 4: "#b852f
 export const ENERGY_MAX = { 1: 60, 2: 80, 3: 100, 4: 120 };
 export const RARITY_COLOR = { common: "#b8b8b8", uncommon: "#6bd98c", rare: "#6194ff", legendary: "#f2c74d" };
 export const RARITY_NAME = { common: "흔함", uncommon: "보통", rare: "희귀", legendary: "전설" };
-export const MINE = "#6194ff";
-export const THEIRS = "#ff7566";
+export let MINE = "#6194ff";
+export let THEIRS = "#ff7566";
+/** 리소스 팩이 편 색을 바꾼다 (없으면 기본으로) */
+export function setTeamColors(mine, theirs) {
+  MINE = mine || "#6194ff";
+  THEIRS = theirs || "#ff7566";
+}
 
 export const PHASE_NAME = { lobby: "로비", prep: "준비", combat: "전투", result: "결과" };
 

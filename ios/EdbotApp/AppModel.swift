@@ -114,6 +114,12 @@ final class AppModel {
     private var tokens: TokenStore { tokenFactory(serverURL ?? URL(string: "https://edgame-api.officialgl.com")!) }
     /// 이 서버의 이름·환경·로그인 방식. 아직 모르거나 오래된 서버면 nil.
     private(set) var serverInfo: ServerInfo?
+    /// 이 서버의 팩 (엑스퍼트 서버). iPad 는 목록과 설명서만 보여 주고, 색·그림·소리는 아직 적용하지 않는다.
+    private(set) var packs: [PackDetail] = []
+    /// 로비의 팩 목록 창
+    var showPacks = false
+    /// 가이드의 팩 탭에서 맨 위에 보일 팩
+    var guidePack: String?
     private var serverInfoTask: Task<Void, Never>?
     private var connection: RoomConnection?
     private var eventTask: Task<Void, Never>?
@@ -188,6 +194,7 @@ final class AppModel {
         user = nil
         authToken = tokens.load()
         serverInfo = nil
+        packs = []
         clearChessCatalog()
         refreshServerInfo(after: 0.6)
     }
@@ -203,6 +210,14 @@ final class AppModel {
             if Task.isCancelled { return }
             guard let self, self.serverURL == url else { return }
             self.serverInfo = info
+            if let info, !info.packs.isEmpty {
+                let list = (try? await ApiClient(baseURL: url).packs()) ?? []
+                if Task.isCancelled || self.serverURL != url { return }
+                self.packs = list
+            } else {
+                self.packs = []
+                if self.guideTab == .packs { self.guideTab = .flow }
+            }
             if let info, !info.isCompatible { self.message = "서버가 더 새로운 버전이에요. 앱을 업데이트해 주세요." }
             if self.authToken != nil, self.user == nil { await self.restoreLogin() }
         }
@@ -487,6 +502,13 @@ final class AppModel {
     func synergy(_ id: String) -> SynergyInfo? { synergies.first { $0.id == id } }
 
     /// 가이드를 열 때 서버 데이터(캐릭터, 시너지, 무기)가 아직 없으면 불러온다. 방에 들어가기 전에도 볼 수 있다.
+    /// 팩 목록에서 한 팩의 설명서를 연다
+    func openPackGuide(_ id: String) {
+        showPacks = false
+        guidePack = id
+        openGuide(.packs)
+    }
+
     func openGuide(_ tab: GuideTab = .flow) {
         guideTab = tab
         showGuide = true

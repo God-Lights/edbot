@@ -10,6 +10,7 @@
   client/Assets/Resources/CommanderLogo.png                       (Unity 로비용)
   android/app/src/main/res/drawable-nodpi/ic_launcher_{bg,fg}.png (안드로이드 적응형 아이콘)
   android/app/src/main/res/drawable-nodpi/logo.png                (안드로이드 서버 고르기 화면)
+  android/server/src/main/res/drawable-nodpi/*                    (안드로이드 서버 앱 아이콘·로고)
 """
 import json
 from pathlib import Path
@@ -118,6 +119,14 @@ def main() -> None:
     save(gradient_background(432), android / "ic_launcher_bg.png")
     save(fit_square(logo, 432, 0.22), android / "ic_launcher_fg.png")
     save(logo.resize((720, round(logo.height * 720 / logo.width)), Image.LANCZOS), android / "logo.png")
+
+    # 안드로이드 서버 앱: 같은 로고, 배경은 청록빛으로 (게임 앱과 구분)
+    server = ROOT / "android/server/src/main/res/drawable-nodpi"
+    teal = gradient_background(432).convert("RGB")
+    tint = Image.new("RGB", teal.size, (10, 70, 80))
+    save(Image.blend(teal, tint, 0.55), server / "ic_launcher_bg.png")
+    save(fit_square(logo, 432, 0.22), server / "ic_launcher_fg.png")
+    save(logo.resize((720, round(logo.height * 720 / logo.width)), Image.LANCZOS), server / "logo.png")
 
     # 미리보기(저장소에는 넣지 않는다)
     print("logo size", logo.size)

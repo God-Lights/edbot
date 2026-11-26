@@ -66,3 +66,22 @@ final class DataFilesTests: XCTestCase {
         XCTAssertEqual(Mime.type(forPath: "a.unknown"), "application/octet-stream")
     }
 }
+
+final class PackFilesTests: XCTestCase {
+    func testServesOnlyMediaInsidePackFolder() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let pack = root.appendingPathComponent("plugins/night")
+        try FileManager.default.createDirectory(at: pack.appendingPathComponent("assets"), withIntermediateDirectories: true)
+        try Data([0x89, 0x50, 0x4e, 0x47]).write(to: pack.appendingPathComponent("assets/logo.png"))
+        try Data("{}".utf8).write(to: pack.appendingPathComponent("pack.json"))
+        try Data("secret".utf8).write(to: root.appendingPathComponent("secret.png"))
+        let files = PackFiles(dirs: ["night": pack])
+        let logo = files.load(path: "/packs/night/assets/logo.png")
+        XCTAssertEqual(logo?.mime, "image/png")
+        XCTAssertEqual(logo?.data, Data([0x89, 0x50, 0x4e, 0x47]))
+        XCTAssertNil(files.load(path: "/packs/night/pack.json"))       // 문서는 내주지 않는다
+        XCTAssertNil(files.load(path: "/packs/night/../../secret.png")) // 폴더 밖
+        XCTAssertNil(files.load(path: "/packs/nope/assets/logo.png"))
+        XCTAssertNil(files.load(path: "/api/chess"))
+    }
+}

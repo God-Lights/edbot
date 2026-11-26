@@ -16,6 +16,7 @@ export interface ServerEnv extends AuthEnv {
   EDITION?: string;
   SERVER_VERSION?: string;
   RECORD_ANONYMOUS?: string;
+  LINK_OWNER?: string;
 }
 
 export interface ServerInfo {
@@ -30,12 +31,14 @@ export interface ServerInfo {
   version: string;
   /** 규칙 묶음의 이름: 공식이면 "official", 콘텐츠 팩이 있으면 "custom-<해시>" */
   ruleset: string;
-  /** 적용된 콘텐츠 팩(없으면 빈 목록). 엑스퍼트 서버에서만 있을 수 있다. */
-  packs: PackInfo[];
+  /** 적용된 콘텐츠 팩(없으면 빈 목록). 엑스퍼트 서버에서만 있을 수 있다. 설명서·리소스는 /api/packs 에서 */
+  packs: Array<Pick<PackInfo, "id" | "name" | "version" | "kind">>;
   /** 판이 끝나면 전적과 랭킹이 남는 서버인가 */
   ranking: boolean;
   /** 게스트(학번과 이름) 방을 쓸 수 있는가: GL 로그인이 있는 서버에서만 의미가 있다 */
   guestRooms: boolean;
+  /** GL 연결 서버: 로그인은 GL 계정(공식 서버가 확인), 전적은 이 서버. 이때 authMode 는 gl(GL 계정만) 또는 hybrid(이름도 됨) */
+  linked?: { owner: string | null };
 }
 
 const ENVIRONMENTS: readonly string[] = ["production", "development", "local"];
@@ -55,8 +58,9 @@ export function serverInfo(env: ServerEnv): ServerInfo {
     edition: env.EDITION === "expert" ? "expert" : "vanilla",
     version: env.SERVER_VERSION ?? "0.0.0",
     ruleset: currentRuleset(),
-    packs: [...(activeContent()?.packs ?? [])],
+    packs: (activeContent()?.packs ?? []).map(({ id, name, version, kind }) => ({ id, name, version, kind })),
     ranking: mode === "open" ? env.RECORD_ANONYMOUS === "true" : true,
     guestRooms: mode !== "open",
+    ...(String(env.AUTH_MODE) === "linked" ? { linked: { owner: (env.LINK_OWNER ?? "").trim() || null } } : {}),
   };
 }

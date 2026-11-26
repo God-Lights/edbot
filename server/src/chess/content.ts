@@ -51,10 +51,52 @@ export interface WeaponStats {
   energy?: number;
 }
 
+/** 팩 종류: plugin(규칙·캐릭터), resource(화면·소리만, 규칙은 공식 그대로), bundle(둘 다) */
+export type PackKind = "plugin" | "resource" | "bundle";
+
+/** 팩 설명서의 한 꼭지 (게임 가이드의 "팩" 탭에 나온다) */
+export interface PackGuideSection {
+  title: string;
+  body: string;
+}
+
+/**
+ * 리소스(화면·소리). 파일 경로는 서버 주소(/packs/<팩id>/<경로>)로 바꿔 둔다.
+ * 웹·안드로이드가 적용한다. (iPad 앱은 아직 목록·설명서만)
+ */
+export interface PackResources {
+  /** CSS 색 (#rrggbb). 키: bgTop, bgBottom, panel, gold, goldHi, accent, text, mine, theirs, cost1~cost5 */
+  colors?: Record<string, string>;
+  logo?: string;
+  lobbyBackground?: string;
+  boardBackground?: string;
+  /** 캐릭터 id -> 그림 (토큰에 기물 모양 대신 그린다) */
+  units?: Record<string, string>;
+  /** 효과음 이름 -> 소리 파일 */
+  sounds?: Record<string, string>;
+  /** 배경 음악: prep(로비·준비) / combat(전투) / finale(마지막 라운드·결과) */
+  music?: Record<string, string>;
+}
+
+/** 팩이 바꾼 것 요약 (가이드의 자동 설명에 쓴다) */
+export interface PackSummary {
+  units: string[];
+  overrides: string[];
+  materials: string[];
+  weapons: string[];
+  rules: string[];
+}
+
 export interface PackInfo {
   id: string;
   name: string;
   version: string;
+  kind: PackKind;
+  description?: string;
+  author?: string;
+  guide?: PackGuideSection[];
+  resources?: PackResources;
+  summary?: PackSummary;
 }
 
 export interface Content {

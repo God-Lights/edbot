@@ -8,6 +8,8 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <!-- QR 찍기는 카메라가 없어도 앱은 설치된다 -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- 게임 화면의 짧은 진동 (사기, ★2, 라운드 결과 등. 효과음을 끄면 진동도 꺼진다) -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:allowBackup="true"

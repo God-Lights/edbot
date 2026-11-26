@@ -3,7 +3,19 @@
   "id": "example",
   "name": "예시 팩",
   "version": "1.0.0",
+  "kind": "plugin",
+  "author": "COMMANDER",
   "description": "콘텐츠 팩 형식을 보여 주는 예시: 새 캐릭터 2명, 캐릭터 값 조정, 새 재료와 무기, 규칙 값 하나.",
+  "guide": [
+    {
+      "title": "새 캐릭터",
+      "body": "· 달빛 수호병 (2골드, 룩, 탱커): 자신과 옆 아군에게 보호막을 줘요. 체험판에도 나와요.\n· 별 사냥꾼 (3골드, 나이트, 암살): 가장 약한 적에게 뛰어들어 기절시켜요."
+    },
+    {
+      "title": "바뀐 것",
+      "body": "· 드워곤의 체력 +10%\n· 새 재료 달돌과 무기 달돌 활 (공격 +20%, 에너지 충전 +20%)\n· 상점 새로고침 비용 2골드"
+    }
+  ],
   "units": [
     {
       "id": "moon-guard",
@@ -29,10 +41,17 @@
     }
   ],
   "unitOverrides": {
-    "dwargon": { "hpMult": 1.1 }
+    "dwargon": {
+      "hpMult": 1.1
+    }
   },
   "materials": [
-    { "id": "moonstone", "nameKo": "달돌", "rarity": "common", "weapon": "moon-bow" }
+    {
+      "id": "moonstone",
+      "nameKo": "달돌",
+      "rarity": "common",
+      "weapon": "moon-bow"
+    }
   ],
   "weapons": [
     {
@@ -41,8 +60,13 @@
       "material": "moonstone",
       "rarity": "common",
       "text": "공격 +20%, 에너지 충전 +20%",
-      "stats": { "atk": 1.2, "energy": 1.2 }
+      "stats": {
+        "atk": 1.2,
+        "energy": 1.2
+      }
     }
   ],
-  "rules": { "rerollCost": 2 }
+  "rules": {
+    "rerollCost": 2
+  }
 }

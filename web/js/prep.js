@@ -1,5 +1,6 @@
 // 준비 단계 화면: 판, 대기석, 상점, 자원 패널. HTML 문자열을 만들고, 클릭/드래그는 main.js가 한꺼번에 처리한다.
 
+import { unitArt } from "./packs.js";
 import { ic } from "./icons.js";
 import { itemName } from "./crafting.js";
 import { S, conn, materialInfo, mySeat, synergyInfo, unitInfo, weaponInfo } from "./state.js";
@@ -22,7 +23,7 @@ export function token(defId, star, opts = {}) {
     else if (opts.armed && S.fx.weapons[opts.uid] !== opts.weapon) fx += " equipflash";
   }
   return `<div class="token${opts.selected ? " sel" : ""}${fx}${opts.tint ? " sided" : ""}" style="--pc:${PIECE_COLOR[piece]};--bc:${border}${opts.tint ? `;--tc:${opts.tint}` : ""}"${drag}>
-    <span class="icon" style="--img:url(assets/pieces/${piece}.png)"></span>
+    ${unitArt(defId) ? `<span class="uart" style="background-image:url('${unitArt(defId)}')"></span>` : `<span class="icon" style="--img:url(assets/pieces/${piece}.png)"></span>`}
     <span class="nm">${esc(info?.nameKo ?? defId)}</span>
     <span class="star">${starText(star)}</span>${opts.armed ? '<span class="armed" title="무기">${ic("shield")}</span>' : ""}</div>`;
 }
@@ -122,7 +123,7 @@ function shopHtml(chess, me) {
       const off = me.gold < cost ? " dim" : "";
       const tag = owned >= 2 ? `<span class="own star2">★2 가능</span>` : owned ? `<span class="own">보유 ${owned}</span>` : "";
       return `<button class="shopcard${off}${deal}${owned >= 2 ? " ready" : ""}" data-act="buy" data-slot="${slot}" style="--bc:${COST_COLOR[cost]};--pc:${PIECE_COLOR[piece]};--i:${slot}" title="${esc((info?.nameKo ?? id) + " · " + PIECE_NAME[piece] + " · " + cost + "골드\n" + (info?.abilityText ?? ""))}">
-        <span class="art" style="--img:url(assets/pieces/${piece}.png)"></span>
+        ${unitArt(id) ? `<span class="art uart" style="background-image:url('${unitArt(id)}')"></span>` : `<span class="art" style="--img:url(assets/pieces/${piece}.png)"></span>`}
         <span class="ptag">${PIECE_NAME[piece]}</span>${tag}
         <span class="foot"><b>${esc(info?.nameKo ?? id)}</b><span class="cost">${ic("coin")}${cost}</span></span></button>`;
     })

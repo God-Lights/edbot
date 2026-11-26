@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.Commander" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@color/bg</item>
+        <!-- 시작 화면: 앱이 뜨기 전에 남색 바탕에 로고 (안드로이드 12+ 는 시스템 시작 화면) -->
+        <item name="android:windowBackground">@drawable/splash</item>
         <item name="android:colorAccent">@color/gold</item>
         <item name="android:colorPrimary">@color/bg</item>
         <item name="android:colorPrimaryDark">@color/bg</item>

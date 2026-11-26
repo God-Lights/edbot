@@ -29,6 +29,14 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.officialgl.commander.common.Palette
+import com.officialgl.commander.common.dp
+import com.officialgl.commander.common.goldButton
+import com.officialgl.commander.common.label
+import com.officialgl.commander.common.padForSystemBars
+import com.officialgl.commander.common.plainButton
+import com.officialgl.commander.common.screenBackground
+import com.officialgl.commander.common.toast
 
 /**
  * 게임 화면: 고른 서버의 웹 화면을 그대로 연다. (웹 화면이 로비·준비·전투·도감까지 전부 그린다)
@@ -61,6 +69,10 @@ class GameActivity : Activity() {
     private fun createWebView(state: Bundle?) {
         val web = WebView(this)
         web.setBackgroundColor(Palette.bgBottom)
+        // 길게 누르면 글자 선택·진동이 나오지 않게 (게임의 길게 누르기는 웹 화면이 따로 처리한다), 끝에서 당겨도 빛이 번지지 않게
+        web.setOnLongClickListener { true }
+        web.isHapticFeedbackEnabled = false
+        web.overScrollMode = View.OVER_SCROLL_NEVER
         web.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true // 이름·로그인 등 웹 화면의 localStorage
@@ -236,6 +248,12 @@ class GameActivity : Activity() {
     override fun onResume() {
         super.onResume()
         webView?.onResume()
+    }
+
+    override fun finish() {
+        super.finish()
+        @Suppress("DEPRECATION")
+        overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
     }
 
     override fun onDestroy() {

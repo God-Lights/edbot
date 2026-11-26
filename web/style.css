@@ -333,6 +333,8 @@ small { font-size: .8em; color: var(--muted); }
 .srvband { flex: none; display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; padding: .3rem .8rem; margin: .3rem .8rem 0; border-radius: .8rem; border: 1px solid rgba(255,255,255,.14); background: rgba(97,148,255,.14); color: var(--silver); font-size: .95em; }
 .srvband.development { background: rgba(255,184,77,.14); border-color: rgba(255,184,77,.4); }
 .srvband.local { background: rgba(107,217,140,.12); border-color: rgba(107,217,140,.4); }
+.srvband.linked { background: rgba(97,148,255,.14); border-color: rgba(97,148,255,.45); }
+.srvband a.badge { text-decoration: none; }
 .srvband .sub { margin-left: auto; }
 
 /* 데도키온 진화 진행도 */
@@ -444,3 +446,30 @@ body {
 .mini.gene { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-height: 2.4rem; padding: 4px 8px; white-space: normal; text-align: left; }
 .mini.gene small { font-size: .72em; color: var(--gold, #c8aa6e); font-weight: 500; }
 .mini.gene.locked { opacity: .45; cursor: not-allowed; }
+
+/* 폰·태블릿: 눌렀을 때 회색 번쩍임, 길게 눌렀을 때 글자 선택·메뉴가 게임을 가리지 않게 (입력칸은 그대로) */
+body { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+input, textarea, select, [contenteditable], .selectable, .code-big, .mono { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+
+/* ---- 콘텐츠 팩 ---- */
+/* 리소스 팩의 로비 배경과 판 배경 (없으면 none) */
+body.in-lobby { background: var(--pack-lobby-bg, none) center / cover no-repeat fixed, linear-gradient(var(--bg-top), var(--bg-bottom)) fixed; }
+body.pack-board .board, body.pack-board .arena { background: var(--pack-board-bg) center / cover no-repeat; }
+body.pack-board .cell { background: color-mix(in srgb, var(--board-l) 45%, transparent); }
+body.pack-board .cell.dark { background: color-mix(in srgb, var(--board-d) 45%, transparent); }
+body.pack-board .acell { background: color-mix(in srgb, var(--board-l) 45%, transparent); }
+body.pack-board .acell.dark { background: color-mix(in srgb, var(--board-d) 45%, transparent); }
+body.pack-board .acell.theirs { background: color-mix(in srgb, var(--board-el) 45%, transparent); }
+body.pack-board .acell.theirs.dark { background: color-mix(in srgb, var(--board-ed) 45%, transparent); }
+/* 리소스 팩의 캐릭터 그림: 기물 모양 대신 */
+.token .uart { width: 74%; aspect-ratio: 1; border-radius: 18%; background: center / cover no-repeat; pointer-events: none; box-shadow: 0 1px 3px rgba(0,0,0,.5); }
+.shopcard .art.uart { background: center / cover no-repeat; -webkit-mask: none; mask: none; border-radius: 12%; filter: none; }
+/* 팩 목록·설명서 */
+.pkind { display: inline-block; font-size: .7rem; font-weight: 700; padding: 1px 7px; border-radius: 99px; margin-left: 6px; border: 1px solid currentColor; vertical-align: middle; }
+.pkind.k-bundle { color: var(--gold-hi, #f0d9a0); } .pkind.k-resource { color: #8fd3ff; } .pkind.k-plugin { color: #c9a7ff; }
+.packrow { margin-bottom: 8px; }
+.packhead { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.packsum { margin: 6px 0 0; padding-left: 1.2em; font-size: .88rem; color: var(--muted); }
+.packguide h5 { margin: 10px 0 4px; color: var(--gold-hi, #f0d9a0); }
+.packguide .pre { white-space: pre-wrap; margin: 0 0 6px; }
+.packguide.focus { outline: 2px solid var(--gold, #c8aa6e); }

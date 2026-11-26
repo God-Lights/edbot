@@ -17,6 +17,8 @@ import { upgradeTarget } from "../../../local-server/src/runtime/websocket";
 import type { ServerSocket } from "../../../local-server/src/runtime/websocket";
 import { loadPlugins } from "../../../local-server/src/plugins";
 import { MemFs } from "./memfs";
+import { installHostTimers } from "./host-timers";
+import type { HostTimers } from "./host-timers";
 import type { FsOp } from "./memfs";
 import worker, { Room, AuthStore, Matchmaker, LiveRegistry, SupportDesk } from "../../../server/src/index";
 
@@ -33,6 +35,13 @@ export interface StartOptions {
   version?: string;
   /** 단계 시간 배율(시험용). 기본 "1" */
   phaseScale?: string;
+  /**
+   * 로그인 방식. 없으면 open(이름만).
+   * linked: GL 연결 서버 — 로그인은 GL 계정(공식 서버가 확인, 인터넷 필요), 전적·랭킹은 이 기기. 주인 관리는 /server-admin.html
+   */
+  auth?: { mode: "open" | "linked"; owner?: string; guests?: boolean; linkOrigin?: string };
+  /** 앱이 타이머를 대신 돌린다(안드로이드: 숨은 웹뷰의 타이머가 늦어지지 않게). 없으면 웹뷰 타이머를 쓴다. */
+  timers?: HostTimers;
 }
 
 export interface EngineRequest {
@@ -71,6 +80,7 @@ class HostSocket {
 
 export function start(options: StartOptions) {
   const { host } = options;
+  if (options.timers) installHostTimers(options.timers);
   const fs = new MemFs(options.files, (ops: FsOp[]) => host.post({ t: "fs", ops }));
   for (const level of ["log", "warn", "error"] as const) {
     console[level] = (...args: unknown[]) => host.post({ t: "log", level, text: args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ") });
@@ -83,15 +93,20 @@ export function start(options: StartOptions) {
   let plugins: ReturnType<typeof loadPlugins> | null = null;
   if (options.edition === "expert") plugins = loadPlugins(".", fs);
 
+  const linked = options.auth?.mode === "linked";
   const env: Record<string, unknown> = {
     STORE: store,
     PHASE_SCALE: options.phaseScale ?? "1",
-    AUTH_MODE: "open",
+    AUTH_MODE: linked ? "linked" : "open",
+    ...(linked
+      ? { LINK_OWNER: options.auth?.owner ?? "", LINK_GUESTS: options.auth?.guests ? "true" : "false", LINK_ORIGIN: options.auth?.linkOrigin ?? "" }
+      : {}),
     SERVER_ENV: "local",
     SERVER_NAME: options.name,
     EDITION: options.edition,
     SERVER_VERSION: options.version ?? "0.1.0",
-    RECORD_ANONYMOUS: "true",
+    // open 은 이름으로 전적을 남기고, linked 는 GL 계정끼리만
+    RECORD_ANONYMOUS: linked ? "false" : "true",
   };
   const envOf = () => env;
   const namespaces = {
@@ -113,7 +128,13 @@ export function start(options: StartOptions) {
 
     async fetch(req: EngineRequest): Promise<EngineResponse> {
       const hasBody = req.method !== "GET" && req.method !== "HEAD" && req.body;
-      const request = new Request(req.url, { method: req.method, headers: req.headers, body: hasBody ? fromBase64(req.body!) : undefined });
+      // 웹뷰의 Request 는 cookie·origin 헤더를 조용히 버린다. 서버가 읽는 다른 이름(x-commander-*)으로 바꿔 넘긴다.
+      // (GL 연결 서버의 웹 로그인 쿠키, 주인 관리의 출처 확인에 필요하다. auth.ts 의 cookieHeader·originHeader)
+      const headers = req.headers.map(([k, v]): [string, string] => {
+        const name = k.toLowerCase();
+        return name === "cookie" || name === "origin" ? [`x-commander-${name}`, v] : [k, v];
+      });
+      const request = new Request(req.url, { method: req.method, headers, body: hasBody ? fromBase64(req.body!) : undefined });
       let response: Response;
       try {
         response = await (worker as { fetch(r: Request, e: unknown): Promise<Response> }).fetch(request, env);

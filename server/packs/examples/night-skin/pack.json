@@ -1,0 +1,43 @@
+{
+  "apiVersion": 1,
+  "id": "night-skin",
+  "name": "밤하늘 스킨",
+  "version": "1.0.0",
+  "kind": "resource",
+  "author": "COMMANDER",
+  "description": "밤하늘 색과 별 배경, 몇몇 캐릭터의 그림과 효과음을 바꾸는 리소스 팩 예시예요. 규칙은 공식 그대로예요.",
+  "guide": [
+    {
+      "title": "이 팩은",
+      "body": "화면과 소리만 바꿔요. 캐릭터 능력치나 규칙은 그대로라서 공식 서버와 똑같이 즐길 수 있어요."
+    },
+    {
+      "title": "바뀌는 것",
+      "body": "· 금색 대신 푸른 은색\n· 로비와 판에 별이 뜬 밤하늘\n· 렐릭·넛울프·펠리스·마샬 베르그·오벨리온의 그림\n· 사기, ★2 합치기, 라운드 승리 소리"
+    }
+  ],
+  "resources": {
+    "colors": {
+      "gold": "#8fb8ff",
+      "goldHi": "#d6e6ff",
+      "accent": "#5b8cff",
+      "bgTop": "#070b22",
+      "bgBottom": "#02030c"
+    },
+    "logo": "assets/logo.png",
+    "lobbyBackground": "assets/lobby.jpg",
+    "boardBackground": "assets/board.jpg",
+    "units": {
+      "relic": "assets/units/relic.jpg",
+      "nut-wolf": "assets/units/nut-wolf.jpg",
+      "felis": "assets/units/felis.jpg",
+      "marshal-berg": "assets/units/marshal-berg.jpg",
+      "obelion": "assets/units/obelion.jpg"
+    },
+    "sounds": {
+      "buy": "sfx/buy.wav",
+      "merge": "sfx/merge.wav",
+      "roundWin": "sfx/roundWin.wav"
+    }
+  }
+}

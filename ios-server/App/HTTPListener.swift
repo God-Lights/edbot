@@ -119,6 +119,8 @@ final class LocalServer {
     private var sockets: [Int: ClientConnection] = [:]
     private let engine: EngineBridge
     private let webFiles: StaticFiles?
+    /// 팩의 그림·소리 (/packs/<id>/...). 엔진을 켠 뒤 ServerModel 이 채운다
+    var packFiles = PackFiles(dirs: [:])
 
     /// 연결 번호가 등록되기 전에 엔진이 보낸 것(WebSocket을 받자마자 보내는 첫 상태 등). 등록되면 순서대로 보낸다.
     private enum Outgoing {
@@ -195,6 +197,16 @@ final class LocalServer {
     // ---- 요청 처리 ----
 
     func handle(_ request: HTTPRequest, from client: ClientConnection, leftover: Data) {
+        // 팩의 그림·소리
+        if request.method == "GET" || request.method == "HEAD", request.path.hasPrefix("/packs/") {
+            if let file = packFiles.load(path: request.path) {
+                let headers = [HTTPHeader("Content-Type", file.mime), HTTPHeader("Cache-Control", "public, max-age=3600"), HTTPHeader("X-Content-Type-Options", "nosniff")]
+                client.send(HTTPResponse.serialize(status: 200, headers: headers, body: file.data, includeBody: request.method == "GET"), thenClose: true)
+            } else {
+                client.send(HTTPResponse.text(404, "없다"), thenClose: true)
+            }
+            return
+        }
         // 웹 화면: API가 아닌 GET/HEAD 는 앱에 담긴 파일에서
         if (request.method == "GET" || request.method == "HEAD"), !request.isWebSocketUpgrade,
            !apiPrefixes.contains(where: { request.path.hasPrefix($0) }),

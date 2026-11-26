@@ -6,12 +6,12 @@ export function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
-function page(title: string, body: string): Response {
+export function page(title: string, body: string, head = ""): Response {
   const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title>${head}
 <style>body{font-family:system-ui,sans-serif;max-width:420px;margin:18vh auto;padding:0 20px;text-align:center}
 a.btn,button{display:inline-block;padding:12px 28px;border:0;border-radius:8px;background:#3b5bdb;color:#fff;font-size:16px;text-decoration:none;cursor:pointer}
-p{color:#555}</style></head><body>${body}</body></html>`;
+p{color:#555}.sub{font-size:14px;color:#777}.warn{font-size:14px;color:#a15c00;background:#fff4e0;border-radius:8px;padding:10px}code{font-size:15px}</style></head><body>${body}</body></html>`;
   return new Response(html, {
     headers: {
       "content-type": "text/html; charset=utf-8",

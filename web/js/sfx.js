@@ -81,7 +81,8 @@ const SOUNDS = {
 // finale = Final Checkmate   : 마지막 라운드(끝 두 라운드), 체력이 위태로울 때, 결과 화면
 // 곡마다 재생 위치를 기억해서, 준비 ↔ 전투로 바뀌어도 이어서 들린다. 바뀔 때는 서로 겹치며 부드럽게 넘어간다.
 
-const TRACKS = { prep: "/assets/music/prep.mp3", combat: "/assets/music/combat.mp3", finale: "/assets/music/finale.mp3" };
+const DEFAULT_TRACKS = { prep: "/assets/music/prep.mp3", combat: "/assets/music/combat.mp3", finale: "/assets/music/finale.mp3" };
+const TRACKS = { ...DEFAULT_TRACKS };
 const MUSIC_VOL = 0.5;
 let bgmOn = true; // 처음에는 켜져 있고, 끄면 기억한다.
 try { bgmOn = localStorage.getItem("edbot.bgm") !== "0"; } catch { bgmOn = true; }
@@ -146,6 +147,17 @@ export const bgm = {
     syncBgm();
     return bgmOn;
   },
+  /** 리소스 팩의 음악 { prep, combat, finale } (없는 곡은 기본). 이미 틀던 곡이면 새 곡으로 바꿔 튼다. */
+  setTracks(map) {
+    for (const name of Object.keys(DEFAULT_TRACKS)) {
+      const url = map?.[name] ?? DEFAULT_TRACKS[name];
+      if (TRACKS[name] === url) continue;
+      TRACKS[name] = url;
+      const p = players[name];
+      if (p) { p.el.src = url; p.el.load(); }
+    }
+    syncBgm();
+  },
   /** 지금 상황에 맞는 곡으로 바꾼다. (같은 곡이면 아무 일도 없다) */
   scene(name) {
     if (!TRACKS[name] || name === scene) return;
@@ -154,14 +166,54 @@ export const bgm = {
   },
 };
 
+/**
+ * 폰 진동 (안드로이드 Chrome·앱. iOS Safari 는 진동 API 가 없어 조용히 넘어간다).
+ * 손가락으로 하는 행동과 라운드 결과에만, 짧게. 효과음을 끄면 진동도 끈다. 전투 중 맞는 소리 같은 잦은 것은 뺀다.
+ */
+const HAPTICS = {
+  buy: 12, sell: 12, place: 10, drop: 10, pickup: 8, ready: 15, equip: 18, smelt: 20, combatStart: 20,
+  merge: [20, 40, 30], combine: [15, 30, 25], promote: [15, 30, 15],
+  roundWin: [25, 50, 25], roundLose: 60, win: [40, 60, 40, 60, 80], lose: [80, 80, 120],
+};
+const touchDevice = (() => { try { return matchMedia("(pointer: coarse)").matches; } catch { return false; } })();
+function haptic(name) {
+  const pattern = HAPTICS[name];
+  if (!pattern || !touchDevice || typeof navigator.vibrate !== "function") return;
+  try { navigator.vibrate(pattern); } catch { /* 진동이 안 돼도 게임은 된다 */ }
+}
+
+// ---- 리소스 팩의 효과음: 이름 -> 소리 파일. 있으면 합성음 대신 튼다 ----
+let overrides = {};
+const clips = {};
+function playClip(name) {
+  const url = overrides[name];
+  if (!url) return false;
+  let el = clips[url];
+  if (!el) { el = new Audio(url); el.preload = "auto"; clips[url] = el; }
+  try {
+    const one = el.paused ? el : el.cloneNode(); // 겹쳐 나도 되게
+    one.volume = 0.8;
+    one.currentTime = 0;
+    one.play().catch(() => {});
+  } catch { return false; }
+  return true;
+}
+
 export const sfx = {
-  /** 이름의 소리를 낸다. 같은 소리는 60ms 안에 두 번 나지 않는다. */
+  /** 이름의 소리를 낸다(폰이면 짧은 진동도). 같은 소리는 60ms 안에 두 번 나지 않는다. */
   play(name) {
     if (muted || !SOUNDS[name]) return;
     const now = performance.now();
     if (now - (lastPlayed[name] ?? -1e9) < 60) return;
     lastPlayed[name] = now;
+    haptic(name);
+    if (playClip(name)) return;
     try { SOUNDS[name](); } catch { /* 소리가 안 나도 게임은 된다 */ }
+  },
+  /** 리소스 팩의 효과음 { 이름: 주소 } (빈 객체면 기본 합성음) */
+  override(map) {
+    overrides = { ...(map ?? {}) };
+    for (const url of Object.values(overrides)) if (!clips[url]) { clips[url] = new Audio(url); clips[url].preload = "auto"; }
   },
   get muted() { return muted; },
   toggle() {

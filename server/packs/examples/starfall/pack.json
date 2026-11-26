@@ -1,0 +1,41 @@
+{
+  "apiVersion": 1,
+  "id": "starfall",
+  "name": "별똥별",
+  "version": "1.0.0",
+  "kind": "bundle",
+  "author": "COMMANDER",
+  "description": "새 캐릭터 '혜성 기사'와 그 그림, 조금 빨라진 규칙을 담은 종합 팩 예시예요.",
+  "guide": [
+    {
+      "title": "혜성 기사",
+      "body": "3골드 나이트 · 암살. 적이 가장 많은 곳으로 도약해 주변을 쳐요.\n상점에 새로 나와요."
+    },
+    {
+      "title": "규칙 변경",
+      "body": "· 새로고침 1골드\n· 준비 시간 20초 (첫 라운드 30초)"
+    }
+  ],
+  "units": [
+    {
+      "id": "comet-knight",
+      "nameKo": "혜성 기사",
+      "piece": "knight",
+      "faction": "별",
+      "cost": 3,
+      "role": "암살",
+      "ability": "dimension-leap",
+      "abilityText": "적이 가장 많은 곳으로 도약해 주변 적에게 피해를 준다"
+    }
+  ],
+  "rules": {
+    "rerollCost": 1,
+    "prepSeconds": 20,
+    "firstPrepSeconds": 30
+  },
+  "resources": {
+    "units": {
+      "comet-knight": "assets/comet.jpg"
+    }
+  }
+}

@@ -32,7 +32,7 @@ function boot() {
   const context = vm.createContext(sandbox);
   vm.runInContext(code, context);
   const engineApi = (sandbox as { CommanderEngine: { start(o: unknown): any } }).CommanderEngine;
-  return { engineApi, posts };
+  return { engineApi, posts, sandbox };
 }
 
 const b64 = (text: string) => btoa(unescape(encodeURIComponent(text)));
@@ -124,3 +124,64 @@ test("두 사람이 한 판 하면 전적이 파일 변경으로 넘어가고, �
   const board2 = (await json(again, "GET", "/api/leaderboard?limit=10")).data.entries as Array<{ nickname: string }>;
   expect(board2.map((e) => e.nickname).sort()).toEqual(["가나", "다라"]);
 }, 30000);
+
+test("앱이 돌리는 타이머 (안드로이드): setTimeout 이 앱에 맡겨지고, 앱이 부르면 실행된다", async () => {
+  const { engineApi, sandbox } = boot();
+  const scheduled: Array<[number, number]> = [];
+  const cancelled: number[] = [];
+  const engine = engineApi.start({
+    host: { post() {} }, files: {}, name: "타이머", edition: "vanilla",
+    timers: { schedule: (id: number, ms: number) => scheduled.push([id, ms]), cancel: (id: number) => cancelled.push(id) },
+  });
+  // 방을 만들면 단계 타이머(알람)가 앱에 맡겨진다
+  const res = await engine.fetch({ method: "POST", url: "http://x/api/rooms", headers: [], body: null });
+  expect(res.status).toBeLessThan(300);
+  // 저장 미루기(0.15초)나 방 알람이 앱에 맡겨진다. 앱이 부르면(__hostTimer) 실행되고, 지운 타이머는 cancel 로 알린다.
+  expect(scheduled.length).toBeGreaterThan(0);
+  const ids = scheduled.map(([id]) => id);
+  // 앱이 시간이 되어 부르는 것처럼 실행해 본다 (오류 없이 돈다)
+  for (const id of ids) (sandbox.__hostTimer as (id: number) => void)(id);
+  expect(scheduled.every(([id, ms]) => Number.isInteger(id) && ms >= 0)).toBe(true);
+});
+
+test("GL 연결 서버: 공식 서버에 묻고, 웹 로그인 쿠키가 웹뷰 Request 를 지나 세션이 된다", async () => {
+  const { engineApi, sandbox } = boot();
+  // 공식 서버 흉내: 등록·요청·결과 (요청을 만들자마자 승인된 것으로)
+  const calls: string[] = [];
+  sandbox.fetch = async (url: string, init: RequestInit) => {
+    const path = new URL(url).pathname;
+    calls.push(path);
+    const body = JSON.parse(String(init.body ?? "{}"));
+    if (path === "/api/link/register") return new Response(JSON.stringify({ serverId: "abcdef012345", secret: "a".repeat(64) }), { status: 201 });
+    if (path === "/api/link/start") {
+      expect(body.returnTo).toBe("http://app/auth/done");
+      return new Response(JSON.stringify({ linkId: "b".repeat(32), pollSecret: "c".repeat(48), linkUrl: "https://edgame-api.officialgl.com/link?id=" + "b".repeat(32) }));
+    }
+    if (path === "/api/link/poll") return new Response(JSON.stringify({ status: "approved", user: { id: "gl-1", username: "ed", nickname: "에드", emailVerified: true } }));
+    return new Response("{}", { status: 404 });
+  };
+  const engine = engineApi.start({ host: { post() {} }, files: {}, name: "폰 서버", edition: "vanilla", auth: { mode: "linked", owner: "ed" } });
+  const info = await json(engine, "GET", "/api/server");
+  expect(info.data.authMode).toBe("gl");
+  expect(info.data.linked).toEqual({ owner: "ed" });
+  const header = (res: { headers: string[][] }, name: string) => res.headers.filter(([k]) => k.toLowerCase() === name).map(([, v]) => v);
+  const login = await engine.fetch({ method: "GET", url: "http://app/auth/login", headers: [], body: null });
+  expect(login.status).toBe(302);
+  expect(header(login, "location")[0]).toContain("/link?id=");
+  const loginCookie = header(login, "set-cookie")[0]!.split(";")[0]!;
+  const done = await engine.fetch({ method: "GET", url: "http://app/auth/done", headers: [["cookie", loginCookie]], body: null });
+  expect(done.status).toBe(302);
+  const cookies = header(done, "set-cookie");
+  expect(cookies).toHaveLength(1);
+  const session = cookies[0]!.split(";")[0]!;
+  const me = await engine.fetch({ method: "GET", url: "http://app/api/auth/me", headers: [["cookie", session]], body: null });
+  expect(JSON.parse(unb64(me.body)).user.username).toBe("ed");
+  expect(calls).toEqual(["/api/link/register", "/api/link/start", "/api/link/poll"]);
+  // 주인 관리: 같은 출처에서 보낸 것만
+  const players = await engine.fetch({ method: "GET", url: "http://app/api/admin/players", headers: [["cookie", session]], body: null });
+  expect(players.status).toBe(200);
+  const cross = await engine.fetch({ method: "POST", url: "http://app/api/admin/reset-ranking", headers: [["cookie", session], ["origin", "https://evil.example"]], body: null });
+  expect(cross.status).toBe(403);
+  const same = await engine.fetch({ method: "POST", url: "http://app/api/admin/reset-ranking", headers: [["cookie", session], ["origin", "http://app"]], body: null });
+  expect(same.status).toBe(200);
+});

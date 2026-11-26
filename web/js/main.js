@@ -10,6 +10,7 @@ import { openMatchReplay, openReplay, replayAction, replayModal, replayScrub, st
 import { openRanking, rankingModal } from "./ranking.js";
 import { combineItems, itemName } from "./crafting.js";
 import { bgm, sfx } from "./sfx.js";
+import { loadPacks, logoUrl, packsModal } from "./packs.js";
 import { PHASE_NAME, PROTOCOL_VERSION, REASON_TEXT, countdown, esc } from "./util.js";
 
 const app = document.getElementById("app");
@@ -22,7 +23,11 @@ function serverBand() {
   const server = S.server;
   if (!server || server.env === "production") return "";
   const local = server.env === "local";
-  const note = local
+  // GL 연결 서버: 로그인은 GL 계정(공식 서버가 확인), 전적은 이 서버
+  const linked = !!server.linked;
+  const note = linked
+    ? `로그인은 GL 계정, 전적은 이 서버에만 남아요.${server.authMode === "hybrid" ? " 로그인하지 않으면 이름으로 놀 수 있어요(전적 없음)." : ""}`
+    : local
     ? "이름이 곧 계정이에요. 전적은 이 서버에만 남아요."
     : "시험용 서버예요. 전적은 개발용 데이터예요.";
   const packs = server.packs ?? [];
@@ -30,7 +35,11 @@ function serverBand() {
   const expert = server.edition === "expert"
     ? ` <span class="badge mob" title="${esc(packs.length ? `적용된 팩: ${packNames}` : "플러그인으로 규칙이 달라질 수 있어요")}">엑스퍼트${packs.length ? ` · 팩 ${packs.length}개` : ""}</span>`
     : "";
-  return `<div class="srvband ${esc(server.env)}">${ic(local ? "server" : "flask")} <b>${local ? "로컬 서버" : "개발 서버"} · ${esc(server.name)}</b>${expert}<span class="sub tiny">${note}</span></div>`;
+  const kind = linked ? "GL 연결 서버" : local ? "로컬 서버" : "개발 서버";
+  const owner = linked && server.linked.owner && S.user && S.user.username?.toLowerCase() === server.linked.owner.toLowerCase()
+    ? ` <a class="badge mob" href="/server-admin.html">서버 관리</a>`
+    : "";
+  return `<div class="srvband ${esc(server.env)}${linked ? " linked" : ""}">${ic(local ? "server" : "flask")} <b>${kind} · ${esc(server.name)}</b>${expert}${owner}<span class="sub tiny">${note}</span></div>`;
 }
 
 function lobbyView() {
@@ -42,7 +51,7 @@ function lobbyView() {
   const nameHint = mode === "open" ? "이름 (이 서버에서 쓸 이름)" : mode === "hybrid" ? "이름 (로그인하지 않으면 이 이름으로 놀아요)" : "이름 (로그인하지 않은 개발 서버용)";
   const nameInput = mode !== "gl" ? `<input id="name" class="input" maxlength="16" placeholder="${nameHint}" value="${esc(S.name)}">` : "";
   const account = loggedIn
-    ? `<div class="panel"><div class="row tight"><div><div class="sub">로그인됨</div><b class="big">${esc(S.user.nickname)}</b></div><span class="grow"></span><button class="btn sec" data-act="logout">새로고침</button></div></div>`
+    ? `<div class="panel"><div class="row tight"><div><div class="sub">로그인됨</div><b class="big">${esc(S.user.nickname)}</b></div><span class="grow"></span>${S.server?.linked ? `<button class="btn sec" data-act="linked-logout">로그아웃</button>` : `<button class="btn sec" data-act="logout">새로고침</button>`}</div></div>`
     : `<div class="panel stack tight">${loginButton}${nameInput}</div>`;
   const guestCard = guestRooms ? `
         <div class="panel stack tight">
@@ -55,7 +64,7 @@ function lobbyView() {
           </form>
         </div>` : "";
   return `${serverBand()}<div class="lobby">
-    <div class="hero"><img class="logo" src="assets/logo.png" alt="COMMANDER"><div class="sub herotext">체스판 자동 전투 · 2인 실시간 대전</div></div>
+    <div class="hero"><img class="logo" src="${esc(logoUrl())}" alt="COMMANDER"><div class="sub herotext">체스판 자동 전투 · 2인 실시간 대전</div></div>
     <div class="menu">
       <div class="mgroup">
         ${account}
@@ -84,6 +93,7 @@ function lobbyView() {
           <button class="modecard" data-act="join-code" data-code="ADMX" title="봇, 앞면·밑면과 이음매가 있는 무한 모드"><span class="mi">${ic("infinity")}</span><span><b>무한 대전</b><small>봇과 · 뫼비우스 규칙</small></span></button>
         </div>
         <div class="panel two tight"><button class="btn sec" data-act="ranking">${ic("trophy")} 랭킹</button><button class="btn sec" data-act="guide" data-tab="flow">${ic("book")} 가이드</button></div>
+        ${S.packs.length ? `<button class="btn sec wide" data-act="packs">${ic("list")} 이 서버의 팩 ${S.packs.length}개</button>` : ""}
         <a class="btn sec wide" href="install.html">${ic("link")} 앱 설치 안내</a>
       </div>
     </div></div>`;
@@ -283,7 +293,7 @@ function roomShell(room) {
   const reconnect = S.status === "reconnecting" ? `<div class="reconnect">다시 연결하는 중...</div>` : "";
   if (S.spectating) {
     if (room.phase === "combat" && room.chess?.combat) return spectatorCombat(room) + reconnect;
-    return `<div class="topbar"><img class="mini-logo" src="assets/logo.png" alt=""><b class="mono">${esc(room.code)}</b><span class="grow"></span>
+    return `<div class="topbar"><img class="mini-logo" src="${esc(logoUrl())}" alt=""><b class="mono">${esc(room.code)}</b><span class="grow"></span>
       <button class="ibtn" data-act="mute" title="효과음">${ic(sfx.muted ? "volume-off" : "volume")}</button><button class="btn sec" data-act="leave">관전 끝내기</button></div>
       ${reconnect}<div class="room">${spectatorBody(room)}</div>`;
   }
@@ -297,7 +307,7 @@ function roomShell(room) {
     case "result": body = resultView(room); break;
     default: body = `<div class="center-msg">이 웹 버전은 체스판 자동 전투만 지원해요. (${esc(PHASE_NAME[room.phase] ?? room.phase)})</div>`;
   }
-  return `<div class="topbar"><img class="mini-logo" src="assets/logo.png" alt=""><b class="mono">${esc(room.code)}</b><span class="grow"></span>${players}
+  return `<div class="topbar"><img class="mini-logo" src="${esc(logoUrl())}" alt=""><b class="mono">${esc(room.code)}</b><span class="grow"></span>${players}
     <button class="ibtn" data-act="mute" title="효과음">${ic(sfx.muted ? "volume-off" : "volume")}</button><button class="ibtn" data-act="bgm" title="배경 음악">${ic(bgm.on ? "music" : "music-off")}</button><button class="ibtn" data-act="guide" data-tab="flow" title="가이드">${ic("book")}</button>
     ${room.isHost ? `<button class="ibtn" data-act="room-close" data-code="${esc(room.code)}" data-from="room" title="방 닫기">${ic("trash")}</button>` : ""}<button class="btn sec" data-act="leave">나가기</button></div>
     ${reconnect}<div class="room">${body}</div>`;
@@ -364,6 +374,7 @@ function render() {
   const keepFocus = active && active.id ? { id: active.id, start: active.selectionStart, end: active.selectionEnd } : null;
   const room = S.room;
   const inRoom = !!room && S.status !== "idle";
+  document.body.classList.toggle("in-lobby", !inRoom); // 리소스 팩의 로비 배경
   bgm.scene(musicScene(room, inRoom));
   // 전투가 시작되면 열려 있던 다시 보기는 닫는다. (판이 두 개 겹치지 않게)
   if (S.modal === "replay" && room?.phase === "combat") S.modal = null;
@@ -371,7 +382,7 @@ function render() {
   stopPlayback();
   const modalScroll = document.querySelector(".modal-body")?.scrollTop ?? 0;
   app.innerHTML = (inRoom ? roomShell(room) : S.quick ? quickView() : S.status === "connecting" ? `<div class="center-msg">접속하는 중...</div>` : lobbyView())
-    + (S.modal === "guestroom" && S.guestRoom ? guestRoomModal() : S.modal === "live" ? liveModal() : S.modal === "myrooms" ? myRoomsModal() : S.modal === "guide" ? guideModal() : S.modal === "ranking" ? rankingModal() : S.modal === "replay" && S.replay ? replayModal() : "");
+    + (S.modal === "guestroom" && S.guestRoom ? guestRoomModal() : S.modal === "live" ? liveModal() : S.modal === "myrooms" ? myRoomsModal() : S.modal === "guide" ? guideModal() : S.modal === "packs" ? packsModal() : S.modal === "ranking" ? rankingModal() : S.modal === "replay" && S.replay ? replayModal() : "");
   const modalBody = document.querySelector(".modal-body");
   if (modalBody) modalBody.scrollTop = modalScroll;
   if (S.modal === "replay") startReplay();
@@ -545,9 +556,18 @@ document.addEventListener("click", (event) => {
     case "join-code": join(d.code, S.botLevel); break;
     case "ranking": openRanking(); break;
     case "guide": openGuide(d.tab); break;
+    case "packs": update({ modal: "packs" }); break;
+    case "pack-guide":
+      update({ modal: "guide", guideTab: "packs", guidePack: d.id });
+      requestAnimationFrame(() => document.getElementById(`pack-${d.id}`)?.scrollIntoView({ block: "start", behavior: "smooth" }));
+      break;
     case "guide-tab": update({ guideTab: d.tab }); break;
     case "close-modal": update({ modal: null }); break;
     case "logout": refreshUser(); break;
+    case "linked-logout":
+      // GL 연결 서버: 이 서버의 세션 쿠키만 지운다 (GL 계정 로그아웃은 account.officialgl.com)
+      fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).finally(refreshUser);
+      break;
     case "leave": leave(); break;
     case "ready": act.ready(!me()?.ready); break;
     case "buy": act.buy(num(d.slot)); break;
@@ -772,6 +792,8 @@ async function refreshServer() {
     S.server = null;
   }
   if (S.server && S.server.protocol > PROTOCOL_VERSION) toast("서버가 더 새로운 버전이에요. 페이지를 새로고침해 주세요.");
+  await loadPacks(); // 엑스퍼트 서버의 팩: 로비 목록, 가이드 "팩" 탭, 리소스(색·그림·소리)
+  render();
   document.title = S.server && S.server.env !== "production" ? `${S.server.name} · COMMANDER` : document.title;
 }
 
