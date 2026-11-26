@@ -149,7 +149,11 @@ export function start(options: StartOptions) {
         peer.attach(new HostSocket(id, host) as never);
         return { status: 101, headers: [], body: "", ws: id };
       }
-      return { status: response.status, headers: [...response.headers.entries()], body: toBase64(new Uint8Array(await response.arrayBuffer())) };
+      // 웹뷰의 Response 는 set-cookie 를 지운다: 서버가 같이 보낸 x-commander-set-cookie 를 set-cookie 로 되돌린다 (link-routes.ts)
+      const outHeaders = [...response.headers.entries()]
+        .filter(([k]) => k.toLowerCase() !== "set-cookie")
+        .map(([k, v]): [string, string] => (k.toLowerCase() === "x-commander-set-cookie" ? ["set-cookie", v] : [k, v]));
+      return { status: response.status, headers: outHeaders, body: toBase64(new Uint8Array(await response.arrayBuffer())) };
     },
 
     wsMessage(id: number, data: string, binary = false): void {

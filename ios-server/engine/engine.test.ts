@@ -20,11 +20,25 @@ class BrowserLikeRequest extends Request {
   }
 }
 
+// 브라우저의 Response 처럼 set-cookie 를 지우는 Response. (웹뷰 엔진에서 쿠키가 사라지던 문제를 시험에서 재현한다)
+class BrowserLikeResponse extends Response {
+  constructor(body?: BodyInit | null, init?: ResponseInit) {
+    const kept = new Headers();
+    new Headers(init?.headers).forEach((value, name) => {
+      if (!["set-cookie", "set-cookie2"].includes(name.toLowerCase())) kept.append(name, value);
+    });
+    super(body, { ...init, headers: kept });
+  }
+  static override redirect(url: string | URL, status = 302): Response {
+    return new BrowserLikeResponse(null, { status, headers: { location: String(url) } });
+  }
+}
+
 function boot() {
   const posts: Msg[] = [];
   // 웹뷰에 있는 것만 준다. process, Buffer, require 는 없다.
   const sandbox: Record<string, unknown> = {
-    Request: BrowserLikeRequest, Response, Headers, URL, URLSearchParams, TextEncoder, TextDecoder, crypto, atob, btoa,
+    Request: BrowserLikeRequest, Response: BrowserLikeResponse, Headers, URL, URLSearchParams, TextEncoder, TextDecoder, crypto, atob, btoa,
     setTimeout, clearTimeout, setInterval, clearInterval, queueMicrotask, structuredClone, console: { log() {}, warn() {}, error() {} },
     Uint8Array, ArrayBuffer, Promise, JSON, Math, Date, Map, Set,
   };
