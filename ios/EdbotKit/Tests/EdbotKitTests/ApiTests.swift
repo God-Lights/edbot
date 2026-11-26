@@ -191,7 +191,7 @@ final class ApiTests: XCTestCase {
     }
 
     func testPacksDecodeKindsGuideAndResources() async throws {
-        let json = #"{"packs":[{"id":"night-skin","name":"밤하늘","version":"1.0.0","kind":"resource","author":"GL","resources":{"colors":{"gold":"#88aaff","accent":"#5566ff"},"logo":"/packs/night-skin/assets/logo.png","units":{"swordsman":"/packs/night-skin/a.png"}},"summary":{"units":[],"overrides":[],"materials":[],"weapons":[],"rules":[]}},{"id":"starfall","name":"별똥별","version":"0.2.0","kind":"bundle","guide":[{"title":"혜성 기사","body":"새 캐릭터"}],"summary":{"units":["혜성 기사"],"rules":["rerollCost"]}},{"id":"old","name":"옛 팩","version":"1"}]}"#
+        let json = ##"{"packs":[{"id":"night-skin","name":"밤하늘","version":"1.0.0","kind":"resource","author":"GL","resources":{"colors":{"gold":"#88aaff","accent":"#5566ff"},"logo":"/packs/night-skin/assets/logo.png","units":{"swordsman":"/packs/night-skin/a.png"}},"summary":{"units":[],"overrides":[],"materials":[],"weapons":[],"rules":[]}},{"id":"starfall","name":"별똥별","version":"0.2.0","kind":"bundle","guide":[{"title":"혜성 기사","body":"새 캐릭터"}],"summary":{"units":["혜성 기사"],"rules":["rerollCost"]}},{"id":"old","name":"옛 팩","version":"1"}]}"##
         let http = StubHTTP { _ in (json, 200) }
         let packs = try await ApiClient(baseURL: base, http: http).packs()
         XCTAssertEqual(http.last?.url?.path, "/api/packs")
