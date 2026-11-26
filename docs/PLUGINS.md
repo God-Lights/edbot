@@ -5,6 +5,7 @@
 
 ## 어디에 두나
 - **로컬 서버(엑스퍼트)**: exe 옆 `commander-data/plugins/` 에 `이름.json` 또는 `폴더/pack.json`. 처음 켜면 폴더와 설명서(`README.txt`), 예시(`example-pack.json.sample`, 확장자를 `.json`으로 바꾸면 적용)를 만든다. 서버를 다시 켜면 적용된다.
+- **안드로이드 서버 앱(엑스퍼트)**: 앱의 **플러그인** 칸에서 **팩 추가**로 `.json` 파일을 고른다(내려받기·드라이브 등). 켜기/끄기·삭제도 거기서. 서버를 다시 켜면 적용된다.
 - **개발 서버(Cloudflare)**: `server/packs/` 에 파일을 넣고 `server/packs/index.ts`에 등록한 뒤 배포한다. 개발 서버는 `EDITION=expert`.
 - 개발 중: `cd local-server && COMMANDER_EDITION=expert bun run dev`
 

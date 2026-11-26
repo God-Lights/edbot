@@ -25,6 +25,8 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import org.json.JSONObject
+import java.io.File
 import com.officialgl.commander.common.AppUpdater
 import com.officialgl.commander.common.Palette
 import com.officialgl.commander.common.dp
@@ -69,6 +71,7 @@ class ServerActivity : Activity() {
         super.onStart()
         ServerState.observe(renderListener)
         render()
+        showPlugins()
     }
 
     override fun onStop() {
@@ -77,6 +80,107 @@ class ServerActivity : Activity() {
     }
 
     private lateinit var column: LinearLayout
+    private lateinit var pluginBox: LinearLayout
+    private lateinit var pluginNote: TextView
+    private val plugins by lazy { PluginStore(File(filesDir, "commander-data")) }
+
+    // ---- 플러그인 ----
+
+    private fun showPlugins() {
+        pluginBox.removeAllViews()
+        val list = plugins.list()
+        pluginNote.text = when {
+            edition != "expert" -> "바닐라 서버는 팩을 읽지 않아요. 위에서 '엑스퍼트'를 고르고 켜면 켜진 팩이 적용돼요."
+            list.isEmpty() -> "넣은 팩이 없어요. 엑스퍼트로 한 번 켜면 예시 팩(꺼진 상태)이 생겨요."
+            else -> "켜진 팩은 서버를 켤 때 적용돼요. 바꾼 뒤에는 서버를 껐다 켜 주세요."
+        }
+        for (entry in list) {
+            val info = runCatching { JSONObject(entry.file.readText()) }.getOrNull()
+            val title = info?.optString("name")?.takeIf { it.isNotEmpty() } ?: entry.baseName
+            val detail = listOfNotNull(
+                info?.optString("id")?.takeIf { it.isNotEmpty() },
+                info?.optString("version")?.takeIf { it.isNotEmpty() }?.let { "v$it" },
+                if (info == null) "읽을 수 없는 파일" else null,
+            ).joinToString(" · ")
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                background = panelBackground()
+                setPadding(dp(12), dp(8), dp(8), dp(8))
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(label(title, 15f, if (entry.enabled) Palette.silver else Palette.dim, bold = true))
+                    addView(label(if (detail.isEmpty()) entry.file.name else detail, 12f, Palette.dim))
+                }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                val toggleButton = if (entry.enabled) goldButton("켜짐") { togglePack(entry) } else plainButton("꺼짐") { togglePack(entry) }
+                addView(toggleButton.apply { setPadding(dp(12), dp(6), dp(12), dp(6)) }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = dp(6) })
+                addView(plainButton("삭제") { deletePack(entry, title) }.apply { setPadding(dp(12), dp(6), dp(12), dp(6)) })
+            }
+            pluginBox.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp(6) })
+        }
+    }
+
+    private fun changedPacks(message: String) {
+        showPlugins()
+        toast(if (ServerState.status == ServerState.Status.RUNNING) "$message 서버를 껐다 켜면 적용돼요." else message)
+    }
+
+    private fun togglePack(entry: PluginStore.Entry) {
+        runCatching { plugins.setEnabled(entry, !entry.enabled) }
+            .onSuccess { changedPacks(if (it.enabled) "팩을 켰어요." else "팩을 껐어요.") }
+            .onFailure { toast("바꾸지 못했어요: ${it.message}") }
+    }
+
+    private fun deletePack(entry: PluginStore.Entry, title: String) {
+        AlertDialog.Builder(this)
+            .setMessage("'$title' 팩을 지울까요?")
+            .setPositiveButton("지우기") { _, _ -> plugins.remove(entry); changedPacks("팩을 지웠어요.") }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    /** 안드로이드 파일 고르기(내려받기·드라이브 등)로 팩 JSON 을 고른다 */
+    private fun pickPack() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
+            .putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/json", "text/plain", "application/octet-stream"))
+        try {
+            startActivityForResult(intent, PICK_PACK)
+        } catch (_: ActivityNotFoundException) {
+            toast("파일을 고를 수 있는 앱이 없어요")
+        }
+    }
+
+    @Deprecated("Activity 결과 API (안드로이드 8에서도 되는 방식)")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != PICK_PACK || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        val text = runCatching {
+            contentResolver.openInputStream(uri)?.use { input ->
+                val bytes = input.readBytes()
+                require(bytes.size <= 2_000_000) { "파일이 너무 커요 (2MB 까지)" }
+                String(bytes, Charsets.UTF_8)
+            }
+        }.getOrElse { toast("파일을 읽지 못했어요: ${it.message}"); return } ?: return
+        val pack = runCatching { JSONObject(text) }.getOrElse { toast("JSON 파일이 아니에요"); return }
+        val id = pack.optString("id")
+        when {
+            pack.optInt("apiVersion", 0) != 1 -> toast("팩 형식이 아니에요 (apiVersion 1 이 필요해요)")
+            !PluginStore.validId(id) -> toast("팩 id 가 올바르지 않아요 (영문 소문자·숫자·-)")
+            plugins.has(id) -> AlertDialog.Builder(this)
+                .setMessage("'$id' 팩이 이미 있어요. 새 파일로 바꿀까요?")
+                .setPositiveButton("바꾸기") { _, _ -> savePack(id, text) }
+                .setNegativeButton("취소", null)
+                .show()
+            else -> savePack(id, text)
+        }
+    }
+
+    private fun savePack(id: String, text: String) {
+        runCatching { plugins.add(id, text) }
+            .onSuccess { changedPacks("'$id' 팩을 넣었어요.") }
+            .onFailure { toast("넣지 못했어요: ${it.message}") }
+    }
 
     /** GitHub 릴리스에 새 버전이 있으면 맨 위에 띠를 띄운다 */
     private fun checkForUpdate() {
@@ -126,6 +230,15 @@ class ServerActivity : Activity() {
         pluginsText = label("", 13f, Palette.dim).apply { visibility = View.GONE; setPadding(dp(4), dp(8), dp(4), 0) }
         column.addView(pluginsText)
 
+        // 콘텐츠 팩(플러그인): 앱 안 폴더라 여기서 넣고 뺀다
+        column.addView(sectionTitle("플러그인 (엑스퍼트)"))
+        pluginNote = label("", 12.5f, Palette.dim).apply { setPadding(dp(4), 0, dp(4), dp(6)) }
+        column.addView(pluginNote)
+        pluginBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        column.addView(pluginBox)
+        column.addView(plainButton("팩 추가 (.json 파일 고르기)") { pickPack() }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(4) })
+        column.addView(label("팩 만드는 법: docs/PLUGINS.md (GitHub). 틀린 팩은 서버를 켤 때 거절되고 기록에 이유가 나와요.", 11.5f, Palette.dim).apply { setPadding(dp(4), dp(6), dp(4), 0) })
+
         column.addView(sectionTitle("안내"))
         column.addView(label(
             "• 접속하는 기기는 이 폰과 같은 와이파이(또는 이 폰의 핫스팟)에 있어야 해요.\n" +
@@ -165,8 +278,12 @@ class ServerActivity : Activity() {
         setPadding(dp(14), dp(12), dp(14), dp(12))
     }
 
+    private var lastStatus: ServerState.Status? = null
+
     private fun render() {
         val state = ServerState
+        // 엑스퍼트로 처음 켜면 서버가 예시 팩을 만든다: 상태가 바뀔 때 팩 목록도 다시 읽는다
+        if (lastStatus != state.status) { lastStatus = state.status; if (::pluginBox.isInitialized) showPlugins() }
         val running = state.status == ServerState.Status.RUNNING
         val busy = state.status == ServerState.Status.STARTING
         status.text = when (state.status) {
@@ -188,7 +305,7 @@ class ServerActivity : Activity() {
         editionRow.removeAllViews()
         for ((key, title) in listOf("vanilla" to "바닐라", "expert" to "엑스퍼트")) {
             val selected = edition == key
-            val button = if (selected) goldButton(title) {} else plainButton(title) { if (!running && !busy) { edition = key; render() } }
+            val button = if (selected) goldButton(title) {} else plainButton(title) { if (!running && !busy) { edition = key; render(); showPlugins() } }
             button.isEnabled = !running && !busy
             editionRow.addView(button, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { if (key == "vanilla") marginEnd = dp(8) })
         }
@@ -279,6 +396,7 @@ class ServerActivity : Activity() {
     }
 
     companion object {
+        private const val PICK_PACK = 7
         /** 엔진(engine.js)이 쓰는 문법(?. ?? 등)이 도는 WebView */
         const val MIN_WEBVIEW_MAJOR = 100
     }

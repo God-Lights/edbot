@@ -31,6 +31,7 @@ server/src/main/java/com/officialgl/commander/server/
   Engine.kt          숨은 WebView 에서 서버 엔진(engine.js)을 돌린다. 요청·소켓·파일 저장을 주고받는다
   HttpServer.kt      HTTP + WebSocket (NanoHTTPD). 웹 화면은 APK 의 assets/web, 나머지는 엔진으로
   DataStore.kt       데이터 폴더(전적·방). 엔진이 알려 주는 파일 변경을 순서대로 쓴다
+  PluginStore.kt     plugins/ (엑스퍼트 팩): 화면의 "팩 추가"(안드로이드 파일 고르기)로 넣고, 켜기(.json)/끄기(.json.off)/삭제
 ```
 - 엔진은 `ios-server/engine` 의 `engine.js`(서버 코드 전체를 한 파일로 묶은 것)를 그대로 쓴다. 빌드 전에 `cd ios-server/engine && bun build.ts`.
 - **타이머는 앱이 돌린다**: 화면에 안 보이는 WebView 는 setTimeout 을 늦추므로, 엔진의 `timers` 옵션으로 Kotlin(Handler)이 시간을 잰다.
