@@ -124,6 +124,14 @@ function cookie(name: string, value: string, maxAge: number): string {
   return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
 }
 
+/**
+ * 쿠키 헤더. 서버 앱(안드로이드·iPad)의 엔진은 웹뷰 안에서 돌아서, 브라우저 규칙대로 Response 의 set-cookie 가 지워진다.
+ * 그래서 x-commander-set-cookie 로도 보내고, 엔진이 그것을 set-cookie 로 되돌린다. (응답마다 쿠키는 하나만)
+ */
+function cookieHeaders(value: string): Record<string, string> {
+  return { "set-cookie": value, "x-commander-set-cookie": value };
+}
+
 /** /auth/login?return= 의 돌아갈 곳: 이 서버 안의 경로만 */
 function safeReturnPath(raw: string | null): string {
   return raw && raw.startsWith("/") && !raw.startsWith("//") && !raw.includes("\\") && raw.length < 200 ? raw : "/";
@@ -213,7 +221,7 @@ export async function handleLinkedServer(request: Request, env: LinkEnv, url: UR
       const { loginId, linkUrl } = await begin(true);
       const back = safeReturnPath(url.searchParams.get("return"));
       const headers = new Headers({ location: linkUrl, "cache-control": "no-store" });
-      headers.append("set-cookie", cookie(LINK_LOGIN_COOKIE, `${loginId}|${back}`, 600));
+      for (const [k, v] of Object.entries(cookieHeaders(cookie(LINK_LOGIN_COOKIE, `${loginId}|${back}`, 600)))) headers.set(k, v);
       return new Response(null, { status: 302, headers });
     }
     if (request.method === "GET" && path === "/auth/done") {
@@ -231,14 +239,14 @@ export async function handleLinkedServer(request: Request, env: LinkEnv, url: UR
       }
       const headers = new Headers({ location: safeReturnPath(back), "cache-control": "no-store" });
       // 쿠키는 응답마다 하나만 (안드로이드 서버의 NanoHTTPD 는 같은 이름의 헤더를 하나만 남긴다). cmd_login 은 10분 뒤 저절로 없어진다.
-      headers.append("set-cookie", cookie(LINK_SESSION_COOKIE, result.token, 7 * 24 * 3600));
+      for (const [k, v] of Object.entries(cookieHeaders(cookie(LINK_SESSION_COOKIE, result.token, 7 * 24 * 3600)))) headers.set(k, v);
       return new Response(null, { status: 302, headers });
     }
     if (request.method === "POST" && path === "/auth/approve") return json({ error: "not_found" }, 404);
     if (request.method === "POST" && path === "/api/auth/logout") {
       const token = bearerToken(request) ?? readCookie(cookieHeader(request), LINK_SESSION_COOKIE);
       if (token) await store.logout(token);
-      return json({ ok: true }, 200, { "set-cookie": cookie(LINK_SESSION_COOKIE, "", 0) });
+      return json({ ok: true }, 200, cookieHeaders(cookie(LINK_SESSION_COOKIE, "", 0)));
     }
   } catch (error) {
     if (error instanceof LinkClientFailure) {
