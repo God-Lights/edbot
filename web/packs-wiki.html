@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0c26">
+<title>COMMANDER 팩 개발 위키</title>
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<style>
+  :root {
+    --bg-top: #0e0c26; --bg-bottom: #08071f;
+    --panel-top: rgba(23,33,64,.88); --panel-bot: rgba(14,20,43,.88);
+    --gold: #c8aa6e; --gold-hi: #f0d9a0; --silver: #d1d1d6; --dim: #9a9ab0;
+    --line: rgba(200,170,110,.35); --ok: #6bd98c; --warn: #ff9f5a; --bad: #ff7a6b; --accent: #b040be;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; }
+  html { background: var(--bg-bottom); scroll-padding-top: 12px; }
+  body {
+    min-height: 100vh; color: var(--silver); line-height: 1.65;
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+    background: radial-gradient(ellipse at 50% -10%, rgba(176,64,190,.18), transparent 60%) no-repeat, linear-gradient(var(--bg-top), var(--bg-bottom) 900px) no-repeat, var(--bg-bottom);
+    -webkit-text-size-adjust: 100%;
+  }
+  a { color: var(--gold-hi); }
+  .layout { max-width: 1180px; margin: 0 auto; padding: max(16px, env(safe-area-inset-top)) 16px 48px; display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 20px; }
+  header { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; padding: 8px 0 4px; }
+  header img { width: 60px; height: auto; }
+  header h1 { margin: 0; font-size: 1.5rem; color: var(--gold-hi); }
+  header p { margin: 0; color: var(--dim); font-size: .92rem; }
+  .back { margin-left: auto; white-space: nowrap; font-size: .9rem; }
+  /* 목차 */
+  .toc { position: sticky; top: 12px; align-self: start; max-height: calc(100vh - 24px); overflow-y: auto;
+    background: linear-gradient(var(--panel-top), var(--panel-bot)); border: 1px solid var(--line); border-radius: 14px; padding: 10px 8px; }
+  .toc b { display: block; color: var(--gold); font-size: .78rem; letter-spacing: .06em; margin: 8px 10px 4px; }
+  .toc a { display: block; text-decoration: none; color: var(--silver); font-size: .9rem; padding: 5px 10px; border-radius: 8px; }
+  .toc a:hover, .toc a.on { background: rgba(200,170,110,.14); color: var(--gold-hi); }
+  main { min-width: 0; }
+  section { background: linear-gradient(var(--panel-top), var(--panel-bot)); border: 1px solid var(--line); border-radius: 14px; padding: 16px 20px; margin: 0 0 16px; }
+  h2 { margin: 0 0 6px; font-size: 1.25rem; color: var(--gold-hi); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  h3 { margin: 20px 0 6px; font-size: 1.02rem; color: var(--silver); }
+  .lead { margin: 0 0 10px; color: var(--dim); }
+  .tag { font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; border: 1px solid currentColor; white-space: nowrap; }
+  .tag.ok { color: var(--ok); } .tag.warn { color: var(--warn); } .tag.dim { color: var(--dim); } .tag.acc { color: #d78ae0; }
+  ol, ul { margin: 6px 0; padding-left: 1.3em; } li { margin: 3px 0; }
+  code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .86em; background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.1); border-radius: 6px; padding: 1px 6px; word-break: break-word; }
+  pre { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .82rem; line-height: 1.5; background: rgba(0,0,0,.4); border: 1px solid rgba(255,255,255,.1); border-radius: 10px; padding: 12px 14px; overflow-x: auto; margin: 8px 0; color: #e6e6ea; }
+  pre .c { color: #8c8ca8; } pre .k { color: var(--gold-hi); } pre .s { color: #9fd3a8; }
+  .table { overflow-x: auto; margin: 8px 0; border: 1px solid rgba(255,255,255,.08); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid rgba(255,255,255,.07); vertical-align: top; }
+  th { color: var(--gold); font-weight: 600; background: rgba(0,0,0,.25); white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .note { font-size: .88rem; color: var(--dim); border-left: 3px solid var(--gold); padding: 2px 0 2px 10px; margin: 10px 0 0; }
+  .warnbox { font-size: .9rem; border-left: 3px solid var(--warn); padding: 4px 0 4px 10px; margin: 10px 0; color: var(--silver); }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 10px 0; }
+  .card { background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.08); border-radius: 12px; padding: 12px 14px; }
+  .card b { color: var(--gold-hi); display: block; font-size: 1rem; }
+  .card small { color: var(--dim); display: block; margin-top: 4px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 8px 16px; border-radius: 9px; font-weight: 700;
+    text-decoration: none; cursor: pointer; font-size: .92rem; font-family: inherit; background: linear-gradient(var(--gold-hi), var(--gold)); color: #1a1205; border: 1px solid rgba(255,255,255,.35); }
+  .btn.sec { background: rgba(255,255,255,.06); color: var(--silver); border-color: var(--line); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+  .calc { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; align-items: end; margin: 8px 0; }
+  .calc label { font-size: .8rem; color: var(--dim); display: grid; gap: 3px; }
+  select, input[type=number], textarea { font: inherit; color: var(--silver); background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.15); border-radius: 8px; padding: 6px 8px; width: 100%; }
+  textarea { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .82rem; min-height: 180px; resize: vertical; }
+  .out { background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 10px 12px; margin-top: 8px; }
+  .out .big { font-size: 1.15rem; font-weight: 800; color: var(--gold-hi); }
+  .result { margin-top: 10px; border-radius: 10px; padding: 10px 14px; border: 1px solid rgba(255,255,255,.1); background: rgba(0,0,0,.3); }
+  .result.ok { border-color: rgba(107,217,140,.5); } .result.bad { border-color: rgba(255,122,107,.5); }
+  .result h4 { margin: 0 0 6px; font-size: 1rem; } .result.ok h4 { color: var(--ok); } .result.bad h4 { color: var(--bad); }
+  .result li { font-size: .88rem; }
+  .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 6px; border: 1px solid rgba(255,255,255,.3); }
+  .pill { display: inline-block; font-size: .76rem; padding: 1px 8px; border-radius: 99px; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12); margin: 2px 3px 2px 0; }
+  .muted { color: var(--dim); }
+  .live { font-size: .72rem; color: var(--ok); }
+  footer { text-align: center; color: var(--dim); font-size: .82rem; margin-top: 18px; grid-column: 1 / -1; }
+  @media (max-width: 960px) {
+    .layout { grid-template-columns: 1fr; }
+    .toc { position: static; max-height: none; display: flex; flex-wrap: wrap; gap: 4px; }
+    .toc b { display: none; }
+    .toc a { font-size: .82rem; padding: 4px 10px; border: 1px solid rgba(255,255,255,.1); border-radius: 99px; }
+    .cards { grid-template-columns: 1fr; }
+    .calc { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 640px) { header img { width: 46px; } header h1 { font-size: 1.2rem; } section { padding: 14px; } }
+</style>
+</head>
+<body>
+<div class="layout">
+  <header>
+    <img src="assets/logo.png" alt="">
+    <div><h1>팩 개발 위키</h1><p>COMMANDER 콘텐츠 팩 만들기 · 형식 버전 <span id="api-version">1</span></p></div>
+    <a class="back" href="/">← 게임으로</a>
+  </header>
+
+  <nav class="toc" id="toc">
+    <b>시작</b>
+    <a href="#intro">팩이란</a>
+    <a href="#quick">빠른 시작</a>
+    <a href="#manifest">pack.json 기본</a>
+    <b>게임 내용 (플러그인)</b>
+    <a href="#units">새 캐릭터</a>
+    <a href="#abilities">능력 목록</a>
+    <a href="#overrides">공식 캐릭터 조정</a>
+    <a href="#items">재료·무기·조합</a>
+    <a href="#rules">규칙 값</a>
+    <b>화면·소리 (리소스)</b>
+    <a href="#resources">리소스</a>
+    <a href="#guide">팩 설명서</a>
+    <b>내보내기</b>
+    <a href="#zip">zip 과 서버에 넣기</a>
+    <a href="#check">팩 검사기</a>
+    <a href="#errors">자주 나는 오류</a>
+    <a href="#compat">버전과 호환</a>
+  </nav>
+
+  <main>
+    <section id="intro">
+      <h2>팩이란</h2>
+      <p class="lead">팩은 코드가 없는 <b>데이터 묶음</b>이에요. 엑스퍼트 서버가 켤 때 읽어서 게임에 얹어요. 코드를 넣을 수 없으니 서버도 안전하고, 같은 팩이면 어디서나 같은 결과가 나와요(대전·다시 보기가 어긋나지 않아요).</p>
+      <div class="cards">
+        <div class="card"><b>플러그인 <span class="tag ok">plugin</span></b><small>캐릭터·재료·무기·규칙 (게임 내용). <code>.json</code> 하나로 돼요.</small></div>
+        <div class="card"><b>리소스 <span class="tag acc">resource</span></b><small>색·로고·배경·캐릭터 그림·효과음·음악. 그림·소리 파일과 함께 <code>.zip</code>.</small></div>
+        <div class="card"><b>종합 <span class="tag warn">bundle</span></b><small>둘 다. <code>.zip</code>.</small></div>
+      </div>
+      <ul>
+        <li><b>엑스퍼트 서버에서만</b> 읽어요. 바닐라 서버는 <code>plugins/</code> 폴더를 무시해요.</li>
+        <li>게임 내용을 바꾸면 그 서버의 규칙 이름(ruleset)이 <code>custom-해시</code>가 돼요. 리소스만 바꾸면 <code>official</code> 그대로예요.</li>
+        <li>능력은 <b>이미 있는 능력 중에서</b> 골라요(새 능력 코드는 못 넣어요). 무기는 <b>숫자 배율</b>만 줄 수 있어요.</li>
+        <li>팩이 틀리면 <b>팩 전체를 거절</b>해요(일부만 적용하지 않아요). 이유는 서버 기록과 이 위키의 <a href="#check">검사기</a>에 나와요.</li>
+      </ul>
+    </section>
+
+    <section id="quick">
+      <h2>빠른 시작</h2>
+      <ol>
+        <li><b>예시 팩 받기</b>:
+          <a href="https://raw.githubusercontent.com/God-Lights/edbot/main/server/packs/example-pack.json" target="_blank" rel="noopener">example-pack.json</a> (플러그인),
+          <a href="https://github.com/God-Lights/edbot/tree/main/server/packs/examples/night-skin" target="_blank" rel="noopener">night-skin</a> (리소스),
+          <a href="https://github.com/God-Lights/edbot/tree/main/server/packs/examples/starfall" target="_blank" rel="noopener">starfall</a> (종합)</li>
+        <li><b>고치기</b>: <code>id</code> 를 내 팩 이름(영소문자·숫자·<code>-</code>)으로 바꾸고 내용을 바꿔요.</li>
+        <li><b>검사하기</b>: 아래 <a href="#check">팩 검사기</a>에 붙여 넣거나 파일(.json/.zip)을 골라요.</li>
+        <li><b>서버에 넣기</b>: 엑스퍼트 서버의 <code>plugins/</code> 에 넣고 서버를 다시 켜요 (<a href="#zip">서버별 방법</a>).</li>
+        <li><b>확인</b>: 로비의 <b>이 서버의 팩</b> 단추와 가이드의 <b>팩</b> 탭에 나와요. 새 캐릭터는 도감·상점에 바로 나와요.</li>
+      </ol>
+      <h3>가장 작은 팩</h3>
+<pre>{
+  <span class="k">"apiVersion"</span>: 1,
+  <span class="k">"id"</span>: <span class="s">"my-first"</span>,
+  <span class="k">"name"</span>: <span class="s">"첫 팩"</span>,
+  <span class="k">"version"</span>: <span class="s">"1.0.0"</span>,
+  <span class="k">"rules"</span>: { <span class="k">"rerollCost"</span>: 1 }   <span class="c">// 새로고침 1골드</span>
+}</pre>
+      <p class="note">PC 에서 바로 시험해 보려면 엑스퍼트 로컬 서버(<code>commander-server-expert-…</code>)를 받아 켜고, 옆의 <code>commander-data/plugins/</code> 에 넣으면 돼요.</p>
+    </section>
+
+    <section id="manifest">
+      <h2>pack.json 기본</h2>
+      <p class="lead">맨 위에 올 수 있는 이름은 아래뿐이에요. 다른 이름이 있으면 거절해요(오타를 잡기 위해서예요).</p>
+      <div class="table"><table>
+        <tr><th>이름</th><th>필수</th><th>내용</th></tr>
+        <tr><td><code>apiVersion</code></td><td>필수</td><td>팩 형식 버전. 지금은 <code id="api-version-2">1</code></td></tr>
+        <tr><td><code>id</code></td><td>필수</td><td>팩 이름표. 영소문자로 시작, 영소문자·숫자·<code>-</code> 2~31자. 다른 팩과 겹치면 안 돼요. 팩 안의 캐릭터·재료·무기는 <code>팩id:이름</code> 으로 불려요.</td></tr>
+        <tr><td><code>name</code></td><td>필수</td><td>보여 줄 이름</td></tr>
+        <tr><td><code>version</code></td><td>필수</td><td>팩 버전 글 (예: <code>1.0.0</code>)</td></tr>
+        <tr><td><code>kind</code></td><td></td><td><code>plugin</code> | <code>resource</code> | <code>bundle</code>. 안 쓰면 내용을 보고 정해요 (리소스만 → resource, 둘 다 → bundle, 나머지 → plugin). 리소스 팩에 게임 내용, 플러그인 팩에 <code>resources</code> 가 있으면 거절.</td></tr>
+        <tr><td><code>description</code></td><td></td><td>한두 줄 설명 (로비 팩 목록)</td></tr>
+        <tr><td><code>author</code></td><td></td><td>만든 사람</td></tr>
+        <tr><td><code>guide</code></td><td></td><td>가이드 "팩" 탭에 나올 설명서 → <a href="#guide">팩 설명서</a></td></tr>
+        <tr><td><code>units</code></td><td></td><td>새 캐릭터 → <a href="#units">새 캐릭터</a></td></tr>
+        <tr><td><code>unitOverrides</code></td><td></td><td>공식(또는 앞선 팩) 캐릭터 조정 → <a href="#overrides">조정</a></td></tr>
+        <tr><td><code>materials</code>, <code>weapons</code>, <code>fusions</code></td><td></td><td>재료·무기·조합 → <a href="#items">재료·무기</a></td></tr>
+        <tr><td><code>rules</code></td><td></td><td>규칙 값 → <a href="#rules">규칙</a></td></tr>
+        <tr><td><code>resources</code></td><td></td><td>화면·소리 → <a href="#resources">리소스</a> (리소스·종합 팩만)</td></tr>
+      </table></div>
+      <p class="note">여러 팩은 <b>id 순서</b>로 차례대로 얹어요. 뒤의 팩은 앞의 팩이 만든 캐릭터를 <code>unitOverrides</code> 로 조정할 수 있어요.</p>
+    </section>
+
+    <section id="units">
+      <h2>새 캐릭터 <code>units</code> <span class="tag dim" id="limit-units">팩마다 40명</span></h2>
+<pre>{
+  <span class="k">"id"</span>: <span class="s">"moon-guard"</span>,        <span class="c">// 팩 안의 이름 → 게임에서는 "팩id:moon-guard"</span>
+  <span class="k">"nameKo"</span>: <span class="s">"달빛 수호병"</span>,     <span class="c">// 24자까지</span>
+  <span class="k">"piece"</span>: <span class="s">"rook"</span>,             <span class="c">// king · queen · rook · bishop · knight · pawn</span>
+  <span class="k">"faction"</span>: <span class="s">"달"</span>,             <span class="c">// 계열 이름표 (이야기용, 규칙에는 안 씀) 16자까지</span>
+  <span class="k">"cost"</span>: 2,                    <span class="c">// 1~4 골드</span>
+  <span class="k">"role"</span>: <span class="s">"탱커"</span>,              <span class="c">// 역할 (아래 표)</span>
+  <span class="k">"ability"</span>: <span class="s">"shield-wall"</span>,    <span class="c">// 능력 목록 중 하나</span>
+  <span class="k">"abilityText"</span>: <span class="s">"자신과 인접 아군에게 보호막"</span>,  <span class="c">// 80자까지</span>
+  <span class="k">"hpMult"</span>: 1.1, <span class="k">"atkMult"</span>: 1.0,  <span class="c">// 선택: 배율 0.3~3</span>
+  <span class="k">"lite"</span>: true                   <span class="c">// 선택: 체험판(연습 대전)에도 나옴</span>
+}</pre>
+      <h3>능력치 계산</h3>
+      <p>능력치는 공식 캐릭터와 같은 공식으로 계산하고 배율만 곱해요. 숫자를 직접 줄 수는 없어요(밸런스를 지키려고요).</p>
+      <p><code>체력 = 가격 기본 체력 × 역할 체력 × 기물 체력 × hpMult</code> (5 단위로 반올림)<br>
+         <code>공격 = 가격 기본 공격 × 역할 공격 × <span id="atk-scale">2.5</span> × 기물 공격 × atkMult</code></p>
+      <div class="calc" id="calc">
+        <label>가격<select id="c-cost"></select></label>
+        <label>역할<select id="c-role"></select></label>
+        <label>기물<select id="c-piece"></select></label>
+        <label>hpMult<input type="number" id="c-hp" value="1" min="0.3" max="3" step="0.05"></label>
+        <label>atkMult<input type="number" id="c-atk" value="1" min="0.3" max="3" step="0.05"></label>
+      </div>
+      <div class="out" id="calc-out">값을 고르면 능력치가 나와요.</div>
+      <div class="row" id="stat-tables"></div>
+      <h3>제한</h3>
+      <ul>
+        <li>한 팩에 <span id="lim-pack">40</span>명, 모든 팩을 합쳐 캐릭터 <span id="lim-total">120</span>명까지.</li>
+        <li>가격마다 상점에 나올 캐릭터가 한 명 이상 있어야 해요.</li>
+        <li>캐릭터의 별 등급(★2, ★3), 상점 확률, 진화는 공식과 같은 규칙을 따라요.</li>
+      </ul>
+    </section>
+
+    <section id="abilities">
+      <h2>능력 목록 <span class="live" id="live-1"></span></h2>
+      <p class="lead"><code>ability</code> 에 쓸 수 있는 이름이에요. 같은 능력을 쓰는 공식 캐릭터의 설명을 같이 보여 줘요. <span class="tag warn">패시브</span>는 에너지가 아니라 조건(쓰러질 때 등)으로 발동해요.</p>
+      <div class="table"><table id="ability-table"><tr><th>ability</th><th>공식 캐릭터 예</th></tr><tr><td colspan="2" class="muted">불러오는 중…</td></tr></table></div>
+    </section>
+
+    <section id="overrides">
+      <h2>공식 캐릭터 조정 <code>unitOverrides</code></h2>
+<pre>{
+  <span class="k">"unitOverrides"</span>: {
+    <span class="k">"dwargon"</span>: { <span class="k">"hpMult"</span>: 1.1 },                 <span class="c">// 공식 캐릭터는 id 그대로</span>
+    <span class="k">"other-pack:comet"</span>: { <span class="k">"atkMult"</span>: 0.9 },       <span class="c">// 앞선 팩의 캐릭터는 전체 id</span>
+    <span class="k">"relic"</span>: { <span class="k">"nameKo"</span>: <span class="s">"고대 유물"</span>, <span class="k">"abilityText"</span>: <span class="s">"..."</span>, <span class="k">"lite"</span>: false }
+  }
+}</pre>
+      <p>바꿀 수 있는 것: <code>hpMult</code>·<code>atkMult</code> (0.3~3, 지금 값에 곱해요), <code>nameKo</code>, <code>abilityText</code>, <code>lite</code>. 기물·가격·능력은 못 바꿔요.</p>
+      <h3>공식 캐릭터 id <span class="live" id="live-2"></span></h3>
+      <div class="table"><table id="unit-table"><tr><th>id</th><th>이름</th><th>기물</th><th>가격</th><th>역할</th><th>능력</th></tr><tr><td colspan="6" class="muted">불러오는 중…</td></tr></table></div>
+    </section>
+
+    <section id="items">
+      <h2>재료·무기·조합</h2>
+      <p class="lead">재료를 <b>재련</b>하면 무기가 나와요. 그래서 새 재료와 새 무기는 <b>서로를 가리켜야</b> 하고 희귀도도 같아야 해요.</p>
+<pre>{
+  <span class="k">"materials"</span>: [ { <span class="k">"id"</span>: <span class="s">"moonstone"</span>, <span class="k">"nameKo"</span>: <span class="s">"달돌"</span>, <span class="k">"rarity"</span>: <span class="s">"common"</span>, <span class="k">"weapon"</span>: <span class="s">"moon-bow"</span> } ],
+  <span class="k">"weapons"</span>: [ { <span class="k">"id"</span>: <span class="s">"moon-bow"</span>, <span class="k">"nameKo"</span>: <span class="s">"달돌 활"</span>, <span class="k">"material"</span>: <span class="s">"moonstone"</span>, <span class="k">"rarity"</span>: <span class="s">"common"</span>,
+                  <span class="k">"text"</span>: <span class="s">"공격 +20%, 에너지 충전 +20%"</span>, <span class="k">"stats"</span>: { <span class="k">"atk"</span>: 1.2, <span class="k">"energy"</span>: 1.2 } } ],
+  <span class="k">"fusions"</span>: [ { <span class="k">"a"</span>: <span class="s">"moonstone"</span>, <span class="k">"b"</span>: <span class="s">"clawstone"</span>, <span class="k">"result"</span>: <span class="s">"titanium"</span> } ]
+}</pre>
+      <ul>
+        <li><b>희귀도</b>: <code>common</code> → <code>uncommon</code> → <code>rare</code> → <code>legendary</code></li>
+        <li><b>무기 <code>stats</code></b> (배율, 1 이 기본, 하나 이상): <span id="weapon-ranges"><code>atk</code> 0.5~2, <code>hp</code> 0.5~2, <code>dmgTaken</code> 0.5~1.5, <code>energy</code> 0.5~2</span>. <code>text</code> 는 보여 줄 설명(100자)이에요. 확률 효과(출혈 등)는 코드라서 팩이 만들 수 없어요.</li>
+        <li><b>조합 <code>fusions</code></b>: 같은 희귀도의 서로 다른 재료 둘 → 한 단계 위 재료. 이 팩의 재료는 짧은 id, 공식·다른 팩 재료는 전체 id 로 써요. 안 정한 짝은 서버가 알아서 채워요.</li>
+        <li>제한: 모든 팩을 합쳐 재료 <span id="lim-mat">40</span>개, 무기 <span id="lim-weapon">60</span>개.</li>
+      </ul>
+      <h3>공식 재료와 무기 <span class="live" id="live-3"></span></h3>
+      <div class="table"><table id="material-table"><tr><th>재료 id</th><th>이름</th><th>희귀도</th><th>무기</th></tr><tr><td colspan="4" class="muted">불러오는 중…</td></tr></table></div>
+    </section>
+
+    <section id="rules">
+      <h2>규칙 값 <code>rules</code> <span class="live" id="live-4"></span></h2>
+      <p class="lead">필요한 것만 써요. 범위를 벗어나면 팩 전체를 거절해요. 모두 정수예요.</p>
+      <div class="table"><table id="rule-table"><tr><th>이름</th><th>뜻</th><th>공식</th><th>범위</th></tr><tr><td colspan="4" class="muted">불러오는 중…</td></tr></table></div>
+      <p><code>poolCopies</code>: 가격별 상점 풀의 장수 <code>{ "1": 9, "2": 8, "3": 6, "4": 5 }</code> 중 바꿀 것만, 각각 1~30.</p>
+    </section>
+
+    <section id="resources">
+      <h2>리소스 <code>resources</code> <span class="tag acc">리소스·종합 팩</span></h2>
+      <p class="lead">경로는 모두 <b>pack.json 이 있는 폴더 기준</b>이에요 (예: <code>assets/logo.png</code>). 웹과 안드로이드 앱이 바로 적용해요. iPad 앱은 아직 목록과 설명서만 보여 줘요.</p>
+<pre>{
+  <span class="k">"resources"</span>: {
+    <span class="k">"colors"</span>: { <span class="k">"gold"</span>: <span class="s">"#8fb8ff"</span>, <span class="k">"accent"</span>: <span class="s">"#5b8cff"</span> },
+    <span class="k">"logo"</span>: <span class="s">"assets/logo.png"</span>,
+    <span class="k">"lobbyBackground"</span>: <span class="s">"assets/lobby.jpg"</span>,
+    <span class="k">"boardBackground"</span>: <span class="s">"assets/board.jpg"</span>,
+    <span class="k">"units"</span>: { <span class="k">"relic"</span>: <span class="s">"assets/units/relic.jpg"</span>, <span class="k">"comet-knight"</span>: <span class="s">"assets/units/comet.png"</span> },
+    <span class="k">"sounds"</span>: { <span class="k">"buy"</span>: <span class="s">"sfx/buy.wav"</span> },
+    <span class="k">"music"</span>: { <span class="k">"prep"</span>: <span class="s">"music/prep.mp3"</span> }
+  }
+}</pre>
+      <h3>색 <code>colors</code> (<code>#rrggbb</code>)</h3>
+      <div class="table"><table id="color-table"></table></div>
+      <h3>그림</h3>
+      <div class="table"><table>
+        <tr><th>이름</th><th>쓰이는 곳</th><th>권장</th></tr>
+        <tr><td><code>logo</code></td><td>로비 로고</td><td>투명 배경 PNG·WebP, 가로 1200px 안팎</td></tr>
+        <tr><td><code>lobbyBackground</code></td><td>로비 배경 (화면을 꽉 채움)</td><td>JPG·WebP 1920×1080, 500KB 안팎</td></tr>
+        <tr><td><code>boardBackground</code></td><td>체스판 배경 (칸이 반투명해져요)</td><td>정사각형 1024px</td></tr>
+        <tr><td><code>units</code></td><td>캐릭터 그림 <code>{ 캐릭터 id: 파일 }</code>, <span id="lim-art">150</span>개까지</td><td>정사각형 256~512px. 공식 캐릭터는 공식 id, 이 팩의 캐릭터는 짧은 id</td></tr>
+      </table></div>
+      <p>그림 파일: <span id="image-types"><code>png</code> <code>jpg</code> <code>jpeg</code> <code>webp</code> <code>gif</code></span> · 소리 파일: <span id="audio-types"><code>mp3</code> <code>ogg</code> <code>m4a</code> <code>wav</code></span>. SVG·HTML·스크립트는 안 돼요.</p>
+      <h3>효과음 <code>sounds</code> <span class="live" id="live-5"></span></h3>
+      <div class="table"><table id="sound-table"></table></div>
+      <h3>음악 <code>music</code></h3>
+      <div class="table"><table>
+        <tr><th>이름</th><th>나오는 때</th></tr>
+        <tr><td><code>prep</code></td><td>로비·준비 단계</td></tr>
+        <tr><td><code>combat</code></td><td>전투</td></tr>
+        <tr><td><code>finale</code></td><td>마지막 라운드(끝 두 라운드), 체력이 위태로울 때, 결과 화면</td></tr>
+      </table></div>
+      <p class="note">경로 규칙: 영문·숫자·<code>_-./</code> 로 120자까지, <code>..</code> 나 <code>//</code> 는 안 돼요. 서버는 그림·소리만 <code>/packs/팩id/경로</code> 로 내보내고, <code>pack.json</code> 같은 다른 파일은 내보내지 않아요.</p>
+    </section>
+
+    <section id="guide">
+      <h2>팩 설명서 <code>guide</code></h2>
+<pre>{
+  <span class="k">"guide"</span>: [
+    { <span class="k">"title"</span>: <span class="s">"혜성 기사"</span>, <span class="k">"body"</span>: <span class="s">"새 3골드 나이트예요.\n· 도약해서 뒷줄을 노려요"</span> },
+    { <span class="k">"title"</span>: <span class="s">"바뀐 규칙"</span>, <span class="k">"body"</span>: <span class="s">"새로고침이 1골드예요."</span> }
+  ]
+}</pre>
+      <ul>
+        <li><span id="lim-guide">12</span>칸까지. <code>title</code> 40자, <code>body</code> 4000자까지. 그냥 글자예요(HTML 은 안 돼요). 줄바꿈은 <code>\n</code>.</li>
+        <li>안 써도 가이드의 "팩" 탭에는 자동 요약(새 캐릭터, 바뀐 캐릭터, 재료, 무기, 규칙, 화면·소리)이 나와요.</li>
+      </ul>
+    </section>
+
+    <section id="zip">
+      <h2>zip 과 서버에 넣기</h2>
+      <p class="lead">그림·소리가 있으면 <code>pack.json</code> 과 파일을 <b>zip 하나</b>로 묶어요. pack.json 이 맨 위에 있어도, 폴더째 압축해도 돼요(pack.json 이 있는 폴더를 기준으로 봐요). 맥의 <code>__MACOSX</code> 같은 숨김 파일은 무시해요.</p>
+<pre>night-skin.zip
+├─ pack.json
+├─ assets/logo.png
+├─ assets/units/relic.jpg
+└─ sfx/buy.wav</pre>
+<pre><span class="c"># 터미널에서</span>
+cd night-skin &amp;&amp; zip -r ../night-skin.zip .</pre>
+      <p>zip 하나를 풀면 <span id="lim-zip">40MB</span>, 파일 <span id="lim-zip-files">600</span>개까지예요.</p>
+      <div class="table"><table>
+        <tr><th>서버</th><th>넣는 곳</th></tr>
+        <tr><td>로컬 서버 (PC, 엑스퍼트)</td><td>실행파일 옆 <code>commander-data/plugins/</code> 에 <code>이름.json</code>, <code>이름.zip</code>, <code>폴더/pack.json</code>. zip 은 켤 때 풀려요. 끄려면 이름 끝에 <code>.off</code>. 서버를 다시 켜면 적용.</td></tr>
+        <tr><td>안드로이드 서버 앱</td><td><b>플러그인</b> 칸 → <b>팩 추가</b> 에서 .json·.zip 고르기. 켜기/끄기·삭제도 거기서. 엑스퍼트로 다시 켜면 적용.</td></tr>
+        <tr><td>iPhone·iPad 서버 앱</td><td>파일 앱 → 이 앱 → <code>commander-data/plugins/</code> 에 .json, 또는 zip 을 풀어 폴더 이름을 팩 id 로 바꿔 넣기.</td></tr>
+        <tr><td>개발 서버 (Cloudflare)</td><td><code>server/packs/</code> 에 넣고 <code>server/packs/index.ts</code> 에 등록, 배포. 그림·소리는 내보내지 않아요.</td></tr>
+      </table></div>
+    </section>
+
+    <section id="check">
+      <h2>팩 검사기</h2>
+      <p class="lead">서버가 켤 때와 <b>같은 규칙</b>으로 검사해요 (이 서버에 적용하지는 않아요). zip 을 고르면 pack.json 이 가리키는 그림·소리 파일이 zip 안에 있는지도 봐요.</p>
+      <div class="row">
+        <label class="btn sec" for="file">파일 고르기 (.json · .zip)</label>
+        <input type="file" id="file" accept=".json,.zip,application/json,application/zip" hidden>
+        <button class="btn" id="check-btn" type="button">검사하기</button>
+        <span class="muted" id="file-name"></span>
+      </div>
+      <textarea id="pack-text" spellcheck="false" placeholder='여기에 pack.json 을 붙여 넣거나, 위에서 파일을 고르세요.'></textarea>
+      <div id="check-out"></div>
+    </section>
+
+    <section id="errors">
+      <h2>자주 나는 오류</h2>
+      <div class="table"><table>
+        <tr><th>메시지</th><th>고치는 법</th></tr>
+        <tr><td>알 수 없는 이름 …</td><td>오타예요. 위의 표에 있는 이름만 쓸 수 있어요 (대소문자도 맞춰요).</td></tr>
+        <tr><td><code>apiVersion</code>: 1 이어야 한다</td><td>맨 위에 <code>"apiVersion": 1</code> 을 넣어요.</td></tr>
+        <tr><td><code>units[0].ability</code>: … 중 하나여야 한다</td><td><a href="#abilities">능력 목록</a>의 이름을 그대로 써요.</td></tr>
+        <tr><td><code>units[0].cost</code>: 1~4</td><td>가격은 1~4 골드예요.</td></tr>
+        <tr><td>재련하면 나오는 무기 … 이(가) 없다</td><td>재료의 <code>weapon</code> 과 무기의 <code>id</code>, 무기의 <code>material</code> 과 재료의 <code>id</code> 를 서로 맞춰요. 희귀도도 같게.</td></tr>
+        <tr><td>리소스 팩에는 게임 내용을 넣을 수 없다</td><td><code>kind</code> 를 <code>bundle</code> 로 바꾸거나 게임 내용을 빼요.</td></tr>
+        <tr><td>팩 안의 파일 경로여야 한다</td><td>영문·숫자·<code>_-./</code> 만, 상대 경로로. 한글·빈칸이 든 파일 이름은 바꿔요.</td></tr>
+        <tr><td>같은 id 의 팩이 둘이다</td><td>서버의 plugins 폴더에 같은 팩이 두 번(예: .json 과 .zip) 들어 있어요.</td></tr>
+        <tr><td>(서버가 팩을 안 읽어요)</td><td>바닐라 서버예요. 엑스퍼트 서버로 켜요. 또는 이름 끝이 <code>.off</code>·<code>.sample</code> 이에요.</td></tr>
+      </table></div>
+    </section>
+
+    <section id="compat">
+      <h2>버전과 호환</h2>
+      <ul>
+        <li><code>apiVersion</code> 은 형식이 호환되지 않게 바뀔 때만 올라가요. 지금 서버가 아는 버전은 <code id="api-version-3">1</code> 이에요.</li>
+        <li>팩을 바꾸면 그 서버의 규칙 이름(ruleset)이 바뀌고, 진행 중이던 방은 버려져요(규칙이 도중에 달라지는 일이 없어요).</li>
+        <li>캐릭터 id 는 전적·다시 보기에 남으니까, 한 번 내보낸 팩에서는 id 를 바꾸지 않는 게 좋아요. 이름(<code>nameKo</code>)은 바꿔도 돼요.</li>
+        <li>앱과 웹은 접속한 서버의 목록을 읽으니까, 새 캐릭터가 따로 업데이트 없이 도감·상점에 나와요.</li>
+      </ul>
+      <p class="note">이 위키의 표(능력·캐릭터·재료·규칙·소리)는 지금 접속한 서버(<span id="server-name">이 서버</span>)에서 바로 읽은 값이에요. 문서 원본: <a href="https://github.com/God-Lights/edbot/blob/main/docs/PLUGINS.md" target="_blank" rel="noopener">docs/PLUGINS.md</a></p>
+    </section>
+  </main>
+
+  <footer>COMMANDER · 팩 개발 위키 · <a href="/install.html">설치 안내</a></footer>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+  const PIECE = { king: "킹", queen: "퀸", rook: "룩", bishop: "비숍", knight: "나이트", pawn: "폰" };
+  const RARITY = { common: "일반", uncommon: "고급", rare: "희귀", legendary: "전설" };
+  const RULE_NAME = {
+    startHp: "시작 체력", startGold: "시작 골드", baseIncome: "라운드 기본 수입", maxInterest: "최대 이자", maxRounds: "최대 라운드",
+    maxDeploy: "판에 올릴 수 있는 최대 기물 수", rerollCost: "상점 새로고침 비용", prepSeconds: "준비 시간(초)", firstPrepSeconds: "첫 라운드 준비 시간(초)",
+  };
+  const COLOR_INFO = {
+    bgTop: ["배경 위쪽", "#0e0c26"], bgBottom: ["배경 아래쪽", "#08071f"], panel: ["칸·패널 (반투명으로 칠해요)", "#172140"], gold: ["금색 (테두리·강조)", "#c8aa6e"],
+    goldHi: ["밝은 금색 (제목·단추)", "#f0d9a0"], accent: ["보라 강조", "#b040be"], text: ["글자", "#f2f2f7"], mine: ["내 편", "#6194ff"],
+    theirs: ["상대 편", "#ff7566"], cost1: ["1골드 테두리", "#9ea3b3"], cost2: ["2골드 테두리", "#2fbf6b"], cost3: ["3골드 테두리", "#338ff2"],
+    cost4: ["4골드 테두리", "#b852f2"], cost5: ["진화 캐릭터 테두리", "#f7ba38"],
+  };
+  const SOUND_INFO = {
+    click: "단추 누르기", buy: "사기", sell: "팔기", place: "기물 놓기", ready: "준비 끝", hit: "공격 맞음", ability: "능력 발동", death: "기물 쓰러짐",
+    promote: "★ 승급", mine: "전투 중 자원 칸 캐기", roundWin: "라운드 승리", roundLose: "라운드 패배", win: "게임 승리", lose: "게임 패배", pickup: "아이템 집기",
+    drop: "아이템 놓기", equip: "무기 끼기", smelt: "재련", combine: "조합", merge: "같은 캐릭터 3장 합치기(★2)", full: "판이 가득 참", roundStart: "라운드 시작",
+    combatStart: "전투 시작", ghost: "무한 모드: 뒷면(고스트)으로", surface: "무한 모드: 웜홀로 앞면에 올라옴", tick: "준비 5초 남음 똑딱", suddenDeath: "서든데스",
+  };
+
+  // ---- 서버에서 값 읽기 ----
+  let schema = null;
+  fetch("/api/server").then((r) => r.json()).then((s) => { $("server-name").textContent = s.name || "이 서버"; }).catch(() => {});
+  fetch("/api/packs/schema").then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); }).then((s) => {
+    schema = s;
+    for (const id of ["api-version", "api-version-2", "api-version-3"]) $(id).textContent = s.apiVersion;
+    for (let i = 1; i <= 5; i++) $(`live-${i}`).textContent = "● 이 서버에서 읽음";
+    const L = s.limits;
+    $("limit-units").textContent = `팩마다 ${L.unitsPerPack}명`;
+    $("lim-pack").textContent = L.unitsPerPack; $("lim-total").textContent = L.totalUnits;
+    $("lim-mat").textContent = L.totalMaterials; $("lim-weapon").textContent = L.totalWeapons;
+    $("lim-art").textContent = L.unitArt; $("lim-guide").textContent = L.guideSections;
+    $("lim-zip").textContent = `${Math.round(L.zipBytes / 1024 / 1024)}MB`; $("lim-zip-files").textContent = L.zipFiles;
+    $("atk-scale").textContent = s.atkScale;
+    $("weapon-ranges").innerHTML = Object.entries(s.weaponStats).map(([k, [a, b]]) => `<code>${esc(k)}</code> ${a}~${b}`).join(", ");
+    $("image-types").innerHTML = s.imageTypes.map((t) => `<code>${esc(t)}</code>`).join(" ");
+    $("audio-types").innerHTML = s.audioTypes.map((t) => `<code>${esc(t)}</code>`).join(" ");
+    renderAbilities(s); renderUnits(s); renderMaterials(s); renderRules(s); renderColors(s.colors); renderSounds(s.sounds); renderCalc(s);
+  }).catch(() => {
+    const msg = "이 서버에서 값을 읽지 못했어요. (오래된 서버이거나 파일로 열었어요) 게임 서버 주소/packs-wiki.html 로 열어 주세요.";
+    for (const id of ["ability-table", "unit-table", "material-table", "rule-table"]) $(id).insertAdjacentHTML("beforeend", `<tr><td colspan="6" class="muted">${msg}</td></tr>`);
+    renderColors(Object.keys(COLOR_INFO)); renderSounds(Object.keys(SOUND_INFO));
+  });
+
+  const rows = (table, head, body) => { $(table).innerHTML = `<tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr>` + body.join(""); };
+
+  function renderAbilities(s) {
+    rows("ability-table", ["ability", "공식 캐릭터 예"], s.abilities.map((a) => `<tr><td><code>${esc(a.id)}</code>${a.passive ? ' <span class="tag warn">패시브</span>' : ""}</td>
+      <td>${a.examples.length ? a.examples.map((e) => `<b>${esc(e.nameKo)}</b> <span class="muted">(${esc(e.id)})</span>: ${esc(e.text)}`).join("<br>") : '<span class="muted">공식 캐릭터 중에는 쓰는 캐릭터가 없어요</span>'}</td></tr>`));
+  }
+  function renderUnits(s) {
+    rows("unit-table", ["id", "이름", "기물", "가격", "역할", "능력"], s.units.map((u) => `<tr><td><code>${esc(u.id)}</code></td><td>${esc(u.nameKo)}${u.evolveOnly ? ' <span class="tag dim">진화 전용</span>' : ""}</td>
+      <td>${esc(PIECE[u.piece] || u.piece)}</td><td class="num">${u.cost}</td><td>${esc(u.role)}</td><td><code>${esc(u.ability)}</code></td></tr>`));
+  }
+  function renderMaterials(s) {
+    const weapon = Object.fromEntries(s.weapons.map((w) => [w.id, w]));
+    rows("material-table", ["재료 id", "이름", "희귀도", "무기 (재련)"], s.materials.map((m) => {
+      const w = weapon[m.weapon];
+      return `<tr><td><code>${esc(m.id)}</code></td><td>${esc(m.nameKo)}${m.special ? ' <span class="tag dim">조합 전용</span>' : ""}</td><td>${esc(RARITY[m.rarity] || m.rarity)}</td>
+        <td>${w ? `<b>${esc(w.nameKo)}</b> <code>${esc(w.id)}</code><br><span class="muted">${esc(w.text)}</span>` : esc(m.weapon)}</td></tr>`;
+    }));
+  }
+  function renderRules(s) {
+    rows("rule-table", ["이름", "뜻", "공식", "범위"], s.rules.map((r) => `<tr><td><code>${esc(r.key)}</code></td><td>${esc(RULE_NAME[r.key] || "")}</td><td class="num">${r.official}</td><td class="num">${r.min}~${r.max}</td></tr>`));
+  }
+  function renderColors(keys) {
+    rows("color-table", ["이름", "쓰이는 곳", "기본 색"], keys.map((k) => {
+      const [what, color] = COLOR_INFO[k] || ["", ""];
+      return `<tr><td><code>${esc(k)}</code></td><td>${esc(what)}</td><td>${color ? `<span class="swatch" style="background:${color}"></span><code>${color}</code>` : ""}</td></tr>`;
+    }));
+  }
+  function renderSounds(names) {
+    const cells = names.map((n) => `<span class="pill"><code>${esc(n)}</code> ${esc(SOUND_INFO[n] || "")}</span>`).join("");
+    $("sound-table").innerHTML = `<tr><td>${cells}</td></tr>`;
+  }
+
+  // ---- 능력치 계산기 ----
+  function renderCalc(s) {
+    $("c-cost").innerHTML = s.base.map((b) => `<option value="${b.cost}">${b.cost}골드</option>`).join("");
+    $("c-role").innerHTML = s.roles.map((r) => `<option>${esc(r.id)}</option>`).join("");
+    $("c-piece").innerHTML = s.pieces.map((p) => `<option value="${p.id}">${esc(PIECE[p.id] || p.id)}</option>`).join("");
+    $("stat-tables").innerHTML = `
+      <div class="table" style="flex:1;min-width:200px;margin:0"><table><tr><th>가격</th><th>체력</th><th>공격</th><th>에너지</th></tr>${s.base.map((b) => `<tr><td>${b.cost}골드</td><td class="num">${b.hp}</td><td class="num">${b.atk}</td><td class="num">${b.energy}</td></tr>`).join("")}</table></div>
+      <div class="table" style="flex:1;min-width:200px;margin:0"><table><tr><th>역할</th><th>체력</th><th>공격</th></tr>${s.roles.map((r) => `<tr><td>${esc(r.id)}</td><td class="num">×${r.hp}</td><td class="num">×${r.atk}</td></tr>`).join("")}</table></div>
+      <div class="table" style="flex:1;min-width:200px;margin:0"><table><tr><th>기물</th><th>체력</th><th>공격</th></tr>${s.pieces.map((p) => `<tr><td>${esc(PIECE[p.id] || p.id)}</td><td class="num">×${p.hp}</td><td class="num">×${p.atk}</td></tr>`).join("")}</table></div>`;
+    const update = () => {
+      const b = s.base.find((x) => String(x.cost) === $("c-cost").value);
+      const r = s.roles.find((x) => x.id === $("c-role").value);
+      const p = s.pieces.find((x) => x.id === $("c-piece").value);
+      const [lo, hi] = s.unitMult;
+      const hm = Number($("c-hp").value), am = Number($("c-atk").value);
+      if (!b || !r || !p) return;
+      if (!(hm >= lo && hm <= hi && am >= lo && am <= hi)) { $("calc-out").innerHTML = `<span style="color:var(--bad)">배율은 ${lo}~${hi} 사이여야 해요.</span>`; return; }
+      const hp = Math.round((b.hp * r.hp * p.hp * hm) / 5) * 5;
+      const atk = Math.round(b.atk * r.atk * s.atkScale * p.atk * am);
+      $("calc-out").innerHTML = `<span class="big">체력 ${hp} · 공격 ${atk}</span> <span class="muted">· 에너지 ${b.energy} (★1 기준. ★2·★3 은 공식 캐릭터와 같은 비율로 올라가요)</span>`;
+    };
+    for (const id of ["c-cost", "c-role", "c-piece", "c-hp", "c-atk"]) $(id).addEventListener("input", update);
+    update();
+  }
+
+  // ---- 팩 검사기 ----
+  let zipInfo = null; // { files: Map(경로 → 크기), root, total }
+
+  $("file").addEventListener("change", async () => {
+    const file = $("file").files[0];
+    zipInfo = null;
+    if (!file) return;
+    $("file-name").textContent = `${file.name} (${(file.size / 1024).toFixed(0)}KB)`;
+    try {
+      if (/\.zip$/i.test(file.name) || file.type.includes("zip")) {
+        const z = await readZip(await file.arrayBuffer());
+        zipInfo = z;
+        $("pack-text").value = z.packJson;
+      } else {
+        $("pack-text").value = await file.text();
+      }
+      check();
+    } catch (e) {
+      showResult(false, [String(e.message || e)]);
+    }
+  });
+  $("check-btn").addEventListener("click", check);
+  $("pack-text").addEventListener("input", () => { zipInfo = null; $("file-name").textContent = ""; });
+
+  async function check() {
+    const text = $("pack-text").value.trim();
+    if (!text) { showResult(false, ["pack.json 을 붙여 넣거나 파일을 골라 주세요."]); return; }
+    let res;
+    try {
+      res = await (await fetch("/api/packs/validate", { method: "POST", headers: { "content-type": "application/json" }, body: text })).json();
+    } catch {
+      showResult(false, ["서버에 검사를 부탁하지 못했어요. 게임 서버 주소/packs-wiki.html 로 열었는지 확인해 주세요."]);
+      return;
+    }
+    const extra = [];
+    if (res.ok && zipInfo) extra.push(...zipProblems(res.pack, zipInfo));
+    if (!res.ok) { showResult(false, res.errors || ["알 수 없는 오류"]); return; }
+    if (extra.length) { showResult(false, extra, res); return; }
+    showResult(true, [], res);
+  }
+
+  function zipProblems(pack, z) {
+    const out = [];
+    const r = pack.resources || {};
+    // 서버가 돌려준 주소(/packs/id/경로)에서 경로를 꺼내 zip 안에 있는지 본다
+    const paths = [];
+    const add = (label, url) => { if (url) paths.push([label, String(url).replace(/^\/packs\/[^/]+\//, "")]); };
+    add("logo", r.logo); add("lobbyBackground", r.lobbyBackground); add("boardBackground", r.boardBackground);
+    for (const [k, v] of Object.entries(r.units || {})) add(`units.${k}`, v);
+    for (const [k, v] of Object.entries(r.sounds || {})) add(`sounds.${k}`, v);
+    for (const [k, v] of Object.entries(r.music || {})) add(`music.${k}`, v);
+    for (const [label, path] of paths) if (!z.files.has(path)) out.push(`resources.${label}: zip 안에 "${path}" 파일이 없어요.`);
+    if (z.total > (schema?.limits.zipBytes ?? 40 * 1024 * 1024)) out.push(`zip 을 풀면 ${(z.total / 1024 / 1024).toFixed(1)}MB 예요. 40MB 까지예요.`);
+    if (z.files.size > (schema?.limits.zipFiles ?? 600)) out.push(`zip 안의 파일이 ${z.files.size}개예요. 600개까지예요.`);
+    return out;
+  }
+
+  function showResult(ok, errors, res) {
+    let html;
+    if (ok && res) {
+      const p = res.pack, s = p.summary || {};
+      const lines = [
+        s.units?.length ? `새 캐릭터 ${s.units.length}명: ${s.units.map(esc).join(", ")}` : "",
+        s.overrides?.length ? `바뀐 캐릭터: ${s.overrides.map(esc).join(", ")}` : "",
+        s.materials?.length ? `새 재료: ${s.materials.map(esc).join(", ")}` : "",
+        s.weapons?.length ? `새 무기: ${s.weapons.map(esc).join(", ")}` : "",
+        s.rules?.length ? `바뀐 규칙: ${s.rules.map((k) => esc(RULE_NAME[k] || k)).join(", ")}` : "",
+        p.resources ? `리소스: ${Object.keys(p.resources).map(esc).join(", ")}` : "",
+        p.guide?.length ? `설명서 ${p.guide.length}칸` : "",
+      ].filter(Boolean);
+      html = `<div class="result ok"><h4>통과 · ${esc(p.name)} ${esc(p.version)} <span class="tag ok">${esc(p.kind)}</span></h4>
+        <ul>${lines.map((l) => `<li>${l}</li>`).join("") || "<li>바꾸는 것이 없어요</li>"}</ul>
+        <p class="muted" style="margin:6px 0 0;font-size:.85rem">이 팩만 넣으면 규칙 이름: <code>${esc(res.ruleset)}</code> · 전체 캐릭터 ${res.units}명, 재료 ${res.materials}개, 무기 ${res.weapons}개${zipInfo ? ` · zip 파일 ${zipInfo.files.size}개 확인` : ""}</p></div>`;
+    } else {
+      html = `<div class="result bad"><h4>고칠 곳 ${errors.length}개</h4><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join("")}</ul></div>`;
+    }
+    $("check-out").innerHTML = html;
+  }
+
+  // ---- zip 읽기 (브라우저 안에서, pack.json 만 풀고 나머지는 이름·크기만) ----
+  async function readZip(buffer) {
+    const view = new DataView(buffer);
+    const bytes = new Uint8Array(buffer);
+    let eocd = -1;
+    for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) if (view.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    if (eocd < 0) throw new Error("zip 파일이 아니에요 (끝 표시를 찾지 못했어요).");
+    const count = view.getUint16(eocd + 10, true);
+    let p = view.getUint32(eocd + 16, true);
+    const decoder = new TextDecoder();
+    const entries = [];
+    for (let n = 0; n < count; n++) {
+      if (view.getUint32(p, true) !== 0x02014b50) throw new Error("zip 목록이 깨져 있어요.");
+      const method = view.getUint16(p + 10, true), csize = view.getUint32(p + 20, true), usize = view.getUint32(p + 24, true);
+      const nameLen = view.getUint16(p + 28, true), extraLen = view.getUint16(p + 30, true), commentLen = view.getUint16(p + 32, true);
+      const local = view.getUint32(p + 42, true);
+      const name = decoder.decode(bytes.subarray(p + 46, p + 46 + nameLen)).replace(/\\/g, "/");
+      p += 46 + nameLen + extraLen + commentLen;
+      if (name.endsWith("/") || name.startsWith("__MACOSX/") || name.split("/").pop().startsWith(".")) continue;
+      if (name.startsWith("/") || name.split("/").includes("..")) throw new Error(`위험한 경로가 있어요: ${name}`);
+      entries.push({ name, method, csize, usize, local });
+    }
+    const manifest = entries.filter((e) => e.name === "pack.json" || e.name.endsWith("/pack.json")).sort((a, b) => a.name.length - b.name.length)[0];
+    if (!manifest) throw new Error("zip 안에 pack.json 이 없어요.");
+    const root = manifest.name.slice(0, -"pack.json".length);
+    const lh = manifest.local;
+    const start = lh + 30 + view.getUint16(lh + 26, true) + view.getUint16(lh + 28, true);
+    const raw = bytes.subarray(start, start + manifest.csize);
+    let data;
+    if (manifest.method === 0) data = raw;
+    else if (manifest.method === 8) {
+      if (typeof DecompressionStream === "undefined") throw new Error("이 브라우저는 zip 을 풀 수 없어요. pack.json 을 붙여 넣어 주세요.");
+      data = new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer());
+    } else throw new Error("지원하지 않는 압축 방식이에요.");
+    const files = new Map();
+    let total = 0;
+    for (const e of entries) if (e.name.startsWith(root)) { files.set(e.name.slice(root.length), e.usize); total += e.usize; }
+    return { packJson: decoder.decode(data), files, root, total };
+  }
+
+  // ---- 목차: 지금 보는 곳 표시 ----
+  const links = [...document.querySelectorAll(".toc a")];
+  const observer = new IntersectionObserver((list) => {
+    for (const e of list) if (e.isIntersecting) links.forEach((a) => a.classList.toggle("on", a.getAttribute("href") === `#${e.target.id}`));
+  }, { rootMargin: "-20% 0px -70% 0px" });
+  document.querySelectorAll("main section").forEach((s) => observer.observe(s));
+})();
+</script>
+</body>
+</html>

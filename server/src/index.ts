@@ -1,5 +1,6 @@
 import { handleSupport } from "./support";
 import { handleLinkHub, handleLinkedServer } from "./link-routes";
+import { MAX_VALIDATE_BYTES, packSchema, validatePack } from "./chess/pack-schema";
 import { SupportDesk } from "./support-desk";
 import { roster } from "./chess/roster";
 import { MARKET_PRICE, materials, weapons as chessWeapons } from "./chess/weapons";
@@ -117,6 +118,22 @@ export default {
     if (request.method === "GET" && url.pathname === "/api/server") return json(serverInfo(env));
     // GET /api/packs -> 적용된 팩 전체(설명, 설명서, 리소스 주소, 바꾼 것 요약). 로비의 팩 목록과 가이드의 "팩" 탭, 리소스 적용에 쓴다.
     if (request.method === "GET" && url.pathname === "/api/packs") return json({ packs: activeContent()?.packs ?? [] });
+    // GET /api/packs/schema -> 팩을 만들 때 쓸 수 있는 값 (팩 개발 위키 /packs-wiki.html 이 읽는다)
+    if (request.method === "GET" && url.pathname === "/api/packs/schema") return json(packSchema());
+    // POST /api/packs/validate -> 팩 JSON 하나를 검사만 한다 (적용하지 않는다). 어느 서버에서나 된다.
+    if (request.method === "POST" && url.pathname === "/api/packs/validate") {
+      const length = Number(request.headers.get("content-length") ?? "0");
+      if (length > MAX_VALIDATE_BYTES) return json({ ok: false, errors: [`팩 JSON 이 너무 커요. (${MAX_VALIDATE_BYTES / 1024}KB 까지)`] }, 413);
+      const text = await request.text();
+      if (text.length > MAX_VALIDATE_BYTES) return json({ ok: false, errors: [`팩 JSON 이 너무 커요. (${MAX_VALIDATE_BYTES / 1024}KB 까지)`] }, 413);
+      let raw: unknown;
+      try {
+        raw = JSON.parse(text);
+      } catch (error) {
+        return json({ ok: false, errors: [`JSON 형식이 틀렸어요: ${(error as Error).message}`] });
+      }
+      return json(validatePack(raw));
+    }
 
     // GET / -> 현재 로그인 상태. 자동으로 로그인 화면으로 보내지 않고, 버튼을 눌러야 간다.
     if (request.method === "GET" && url.pathname === "/") {
