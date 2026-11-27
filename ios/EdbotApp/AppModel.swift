@@ -109,6 +109,16 @@ final class AppModel {
     /// 준비 단계에서 고른 내 기물(대기석 또는 판 위). 칸을 누르면 거기에 놓는다.
     var selectedUid: String?
 
+    // 게임 컨트롤러 (PadRouting.swift)
+    /// 연결된 컨트롤러 이름. 있으면 화면에 고른 칸 테두리와 버튼 안내가 보인다.
+    var padName: String?
+    /// 준비 단계에서 컨트롤러가 가리키는 칸
+    var padSpot = PadSpot(row: PadSpot.shopRow, index: 1)
+    /// 로비에서 컨트롤러가 가리키는 메뉴
+    var lobbyPadIndex = 0
+    /// 판이 빈 채로 ☰(준비 끝)을 한 번 눌렀다: 한 번 더 누르면 준비 끝
+    var padEmptyDoneArmed = false
+
     /// 서버 주소(호스트와 포트)마다 따로 토큰을 둔다.
     private let tokenFactory: (URL) -> TokenStore
     private var tokens: TokenStore { tokenFactory(serverURL ?? URL(string: "https://edgame-api.officialgl.com")!) }
@@ -905,7 +915,7 @@ final class AppModel {
     }
 
     /// 게임 안에서 잠깐 보여 주는 알림: 4초 뒤에(그사이 다른 알림이 오지 않았으면) 지운다.
-    private func flash(_ text: String) {
+    func flash(_ text: String) {
         message = text
         flashToken &+= 1
         let token = flashToken

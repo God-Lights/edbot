@@ -41,6 +41,7 @@ struct LobbyView: View {
             updateBand
             serverBand
             lobbyColumns
+            if !model.padHints.isEmpty { PadHintBar(items: model.padHints) }
         }
         .padding(compact ? 10 : 28)
         .onChange(of: model.loginURLToOpen) { _, url in
@@ -216,23 +217,33 @@ struct LobbyView: View {
         .panel(padding: compact ? 8 : 16)
     }
 
+    /// 컨트롤러가 이 메뉴를 가리키는가 (PadRouting.swift 의 LobbyPadItem 순서)
+    private func padOn(_ item: LobbyPadItem) -> Bool {
+        model.padName != nil && model.room == nil && model.lobbyPadIndex == item.rawValue
+    }
+
     /// 오른쪽: 롤토체스처럼 큰 "게임 찾기" 버튼, 그 아래 모드 카드, 맨 아래 작은 메뉴와 방 코드.
     private var roomCard: some View {
         @Bindable var model = model
         let modeCols: [GridItem] = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
         return VStack(spacing: compact ? 6 : 12) {
             findMatchButton
+                .padFocus(padOn(.findMatch), cornerRadius: 10)
 
             LazyVGrid(columns: modeCols, spacing: 8) {
                 modeCard(title: "연습 대전", detail: "봇과 · 쉬운 캐릭터", icon: "cpu") { model.joinTestMatch() }
+                    .padFocus(padOn(.practice), cornerRadius: 10)
                 modeCard(title: "전체 대전", detail: "봇과 · 모든 캐릭터", icon: "cpu.fill") { model.join(code: "ADMF") }
+                    .padFocus(padOn(.full), cornerRadius: 10)
                 modeCard(title: "무한 대전", detail: "봇과 · 뫼비우스 규칙", icon: "infinity") { model.join(code: "ADMX") }
+                    .padFocus(padOn(.mobius), cornerRadius: 10)
                 modeCard(
                     title: model.isCreatingRoom ? "만드는 중..." : "방 만들기",
                     detail: model.createMobius ? "친구와 · 무한 모드" : "친구와 · 방 코드로",
                     icon: "person.2.fill"
                 ) { model.createRoomAndJoin() }
                 .disabled(model.isCreatingRoom)
+                .padFocus(padOn(.createRoom), cornerRadius: 10)
             }
             Toggle(isOn: $model.createMobius) { Label("방을 무한 모드로", systemImage: "infinity").font(.caption) }
                 .tint(Theme.gold)
@@ -241,7 +252,9 @@ struct LobbyView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     smallButton("랭킹", icon: "trophy") { model.openRanking() }
+                        .padFocus(padOn(.ranking))
                     smallButton("가이드", icon: "book") { model.openGuide() }
+                        .padFocus(padOn(.guide))
                     if model.user != nil {
                         smallButton("관전", icon: "eye") { model.showLive = true }
                         smallButton(model.isCreatingGuestRoom ? "만드는 중..." : "게스트 방", icon: "graduationcap") { model.createGuestRoom() }
@@ -382,6 +395,8 @@ struct RoomView: View {
                     // 단계가 바뀔 때(준비 → 전투 → 결과) 부드럽게 바뀐다.
                     .id(room.phase)
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                // 게임 컨트롤러가 연결되어 있으면 버튼 안내 (Controller.swift)
+                if !model.padHints.isEmpty { PadHintBar(items: model.padHints) }
                 if model.status == .reconnecting { Text("다시 연결하는 중...").foregroundStyle(Theme.warn) }
                 if let message = model.message { Text(message).foregroundStyle(Theme.warn) }
             }
