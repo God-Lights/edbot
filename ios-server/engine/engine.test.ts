@@ -199,3 +199,32 @@ test("GL 연결 서버: 공식 서버에 묻고, 웹 로그인 쿠키가 웹뷰 
   const same = await engine.fetch({ method: "POST", url: "http://app/api/admin/reset-ranking", headers: [["cookie", session], ["origin", "http://app"]], body: null });
   expect(same.status).toBe(200);
 });
+
+test("앱이 대신 보내는 fetch (net 옵션, 안드로이드): 웹뷰 fetch 없이 공식 서버에 묻는다", async () => {
+  const { engineApi } = boot(); // sandbox 에 fetch 가 없다: net 이 없으면 실패한다
+  const sent: Array<{ url: string; method: string; headers: string[][]; body: string | null }> = [];
+  let engine: any;
+  const net = {
+    request(id: number, raw: string) {
+      const req = JSON.parse(raw);
+      sent.push(req);
+      const path = new URL(req.url).pathname;
+      const reply = (status: number, body: unknown) =>
+        queueMicrotask(() => engine.netReply(id, JSON.stringify({ ok: true, status, headers: [["content-type", "application/json"]], body: b64(JSON.stringify(body)) })));
+      if (path === "/api/link/register") return reply(201, { serverId: "abcdef012345", secret: "a".repeat(64) });
+      if (path === "/api/link/start") return reply(200, { linkId: "b".repeat(32), pollSecret: "c".repeat(48), linkUrl: "https://edgame-api.officialgl.com/link?id=" + "b".repeat(32) });
+      queueMicrotask(() => engine.netReply(id, JSON.stringify({ ok: false, error: "UnknownHostException" })));
+    },
+  };
+  engine = engineApi.start({ host: { post() {} }, files: {}, name: "폰", edition: "vanilla", auth: { mode: "linked", owner: "ed" }, net });
+  const start = await json(engine, "POST", "/api/auth/start");
+  expect(start.status).toBe(200);
+  expect(start.data.loginUrl).toContain("/link?id=");
+  expect(sent.map((r) => [r.method, new URL(r.url).pathname])).toEqual([["POST", "/api/link/register"], ["POST", "/api/link/start"]]);
+  expect(sent[0]!.headers).toContainEqual(["content-type", "application/json"]);
+  expect(JSON.parse(unb64(sent[0]!.body!)).name).toBe("폰");
+  // 앱이 보내지 못하면(인터넷 없음) 그 이유가 오류 응답에 나온다
+  const poll = await json(engine, "GET", `/api/auth/poll?id=${start.data.loginId}`);
+  expect(poll.status).toBe(503);
+  expect(poll.data.detail).toContain("UnknownHostException");
+});

@@ -42,6 +42,12 @@ export interface StartOptions {
   auth?: { mode: "open" | "linked"; owner?: string; guests?: boolean; linkOrigin?: string };
   /** 앱이 타이머를 대신 돌린다(안드로이드: 숨은 웹뷰의 타이머가 늦어지지 않게). 없으면 웹뷰 타이머를 쓴다. */
   timers?: HostTimers;
+  /**
+   * 밖으로 나가는 HTTP 요청(GL 연결 서버의 공식 서버 확인)을 앱이 대신 한다. 없으면 웹뷰의 fetch 를 쓴다.
+   * 안드로이드는 숨은 웹뷰의 fetch 가 막혀서("Failed to fetch") 앱(Kotlin)이 보낸다.
+   * request(id, JSON {url, method, headers: [[이름, 값]], body: base64|null}) → 앱이 netReply(id, JSON) 로 답한다.
+   */
+  net?: { request(id: number, req: string): void };
 }
 
 export interface EngineRequest {
@@ -81,6 +87,26 @@ class HostSocket {
 export function start(options: StartOptions) {
   const { host } = options;
   if (options.timers) installHostTimers(options.timers);
+
+  // 앱이 대신 보내는 fetch (net 옵션)
+  const pendingNet = new Map<number, { resolve(r: Response): void; reject(e: unknown): void }>();
+  let nextNet = 1;
+  if (options.net) {
+    const net = options.net;
+    (globalThis as { fetch: unknown }).fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const source = typeof input === "object" && !(input instanceof URL) ? (input as Request) : null;
+      const url = source ? source.url : String(input);
+      const method = (init?.method ?? source?.method ?? "GET").toUpperCase();
+      const headers = [...new Headers(init?.headers ?? source?.headers).entries()];
+      const rawBody = init?.body ?? null;
+      const body = rawBody === null ? null : toBase64(new Uint8Array(await new Response(rawBody as BodyInit).arrayBuffer()));
+      return new Promise<Response>((resolve, reject) => {
+        const id = nextNet++;
+        pendingNet.set(id, { resolve, reject });
+        net.request(id, JSON.stringify({ url, method, headers, body }));
+      });
+    };
+  }
   const fs = new MemFs(options.files, (ops: FsOp[]) => host.post({ t: "fs", ops }));
   for (const level of ["log", "warn", "error"] as const) {
     console[level] = (...args: unknown[]) => host.post({ t: "log", level, text: args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ") });
@@ -168,6 +194,25 @@ export function start(options: StartOptions) {
       sockets.delete(id);
       peer.detached();
       void peer.owner?.webSocketClose(peer, code, reason, true);
+    },
+
+    /** 앱이 대신 보낸 HTTP 요청의 답: {ok: true, status, headers, body(base64)} 또는 {ok: false, error} */
+    netReply(id: number, json: string): void {
+      const waiting = pendingNet.get(id);
+      if (!waiting) return;
+      pendingNet.delete(id);
+      try {
+        const r = JSON.parse(json) as { ok: boolean; status?: number; headers?: Array<[string, string]>; body?: string; error?: string };
+        if (!r.ok) {
+          waiting.reject(new TypeError(r.error || "network error"));
+          return;
+        }
+        const status = r.status && r.status >= 200 && r.status <= 599 ? r.status : 502;
+        const empty = status === 204 || status === 205 || status === 304;
+        waiting.resolve(new Response(empty ? null : fromBase64(r.body ?? ""), { status, headers: r.headers ?? [] }));
+      } catch (error) {
+        waiting.reject(error);
+      }
     },
 
     /** 앱이 곧 멈출 때: 모아 둔 저장을 지금 하게 한다. */

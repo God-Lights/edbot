@@ -40,11 +40,22 @@ public struct AuthClient: Sendable {
 
     public func start() async throws -> LoginStart {
         let (data, status) = try await http.send(Http.request(baseURL, "/api/auth/start", method: "POST"))
-        guard (200..<300).contains(status) else { throw ApiError.status(status) }
+        guard (200..<300).contains(status) else {
+            // 서버가 이유를 알려 주면(GL 연결 서버: 공식 서버에 연결할 수 없음 등) 그 말을 보여 준다
+            if let reason = try? JSONDecoder().decode(ServerReason.self, from: data), let message = reason.message, !message.isEmpty {
+                throw LoginStartError(message: message, detail: reason.detail)
+            }
+            throw ApiError.status(status)
+        }
         guard let start = try? JSONDecoder().decode(LoginStart.self, from: data), !start.loginId.isEmpty else {
             throw ApiError.badResponse
         }
         return start
+    }
+
+    private struct ServerReason: Decodable {
+        let message: String?
+        let detail: String?
     }
 
     private struct PollBody: Decodable {
@@ -75,5 +86,15 @@ public struct AuthClient: Sendable {
 
     public func logout(token: String) async throws {
         _ = try await http.send(Http.request(baseURL, "/api/auth/logout", method: "POST", token: token))
+    }
+}
+
+/// 서버가 로그인을 시작하지 못한 이유 (보여 줄 말과, 원인을 찾을 때 쓰는 자세한 내용)
+public struct LoginStartError: LocalizedError, Equatable, Sendable {
+    public let message: String
+    public let detail: String?
+    public var errorDescription: String? {
+        if let detail, !detail.isEmpty { return "\(message) (\(detail))" }
+        return message
     }
 }

@@ -206,6 +206,19 @@ final class ApiTests: XCTestCase {
         XCTAssertTrue(none.isEmpty)
     }
 
+    func testLoginStartShowsServerReason() async {
+        let http = StubHTTP { _ in (#"{"error":"link_unreachable","message":"공식 서버에 연결할 수 없어요.","detail":"/api/link/register 요청 실패: Failed to fetch"}"#, 503) }
+        do {
+            _ = try await AuthClient(baseURL: base, http: http).start()
+            XCTFail("오류여야 한다")
+        } catch let error as LoginStartError {
+            XCTAssertEqual(error.message, "공식 서버에 연결할 수 없어요.")
+            XCTAssertEqual(error.localizedDescription, "공식 서버에 연결할 수 없어요. (/api/link/register 요청 실패: Failed to fetch)")
+        } catch {
+            XCTFail("\(error)")
+        }
+    }
+
     func testConnectLinkParsesServerAndName() {
         let link = ConnectLink(URL(string: "commander://connect?url=http%3A%2F%2F192.168.0.5%3A8787&name=%EB%82%B4%20%EC%84%9C%EB%B2%84")!)
         XCTAssertEqual(link?.serverURL.absoluteString, "http://192.168.0.5:8787")

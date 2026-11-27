@@ -50,6 +50,14 @@ if [ "$api" -ge 30 ]; then
   for i in $(seq 1 30); do curl -sf localhost:8790/health >/dev/null && break; sleep 1; done
   if (cd ../local-server && timeout 300 bun scripts/smoke.ts http://localhost:8790 ADMN); then server_ok=1; fi
   adb exec-out screencap -p > "$out/api${api}-server-after.png"
+  # GL 연결 서버: 엔진(웹뷰)이 공식 서버에 로그인 요청을 만들 수 있는지 (iPad 앱의 '로그인하기'와 같은 요청)
+  adb shell am force-stop $spkg
+  adb shell am start -n $spkg/.ServerActivity --ez autostart true --es auth linked --es linkOwner ci >/dev/null
+  for i in $(seq 1 40); do curl -sf localhost:8790/health >/dev/null && break; sleep 1; done
+  linked=$(curl -s -m 40 -X POST localhost:8790/api/auth/start || true)
+  echo "GL 연결 로그인 시작: $linked"
+  echo "$linked" > "$out/api${api}-linked-start.json"
+  if echo "$linked" | grep -q '"loginUrl":"https://edgame-api.officialgl.com/link?id='; then echo "GL 연결: 통과"; else echo "GL 연결: 실패"; server_ok=0; fi
 fi
 adb logcat -d -s CommanderWeb:* ServerDiscovery:* CommanderServer:* AndroidRuntime:E > "$out/api${api}-logcat.txt" || true
 grep -q "FATAL EXCEPTION" "$out/api${api}-logcat.txt" && { echo "앱이 죽었다"; cat "$out/api${api}-logcat.txt"; exit 1; }

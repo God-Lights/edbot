@@ -45,6 +45,10 @@ targets:
               - commander
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        # 게임 컨트롤러(엑스박스·플레이스테이션·MFi). 앱이 버튼을 직접 읽는다 (Controller.swift)
+        GCSupportedGameControllers:
+          - ProfileName: ExtendedGamepad
+        GCSupportsControllerUserInteraction: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.officialgl.commander

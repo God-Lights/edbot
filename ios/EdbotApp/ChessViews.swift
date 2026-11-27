@@ -439,6 +439,7 @@ struct ChessPrepView: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.65), value: unit?.uid)
         .aspectRatio(1, contentMode: .fit)
         .contentShape(Rectangle())
+        .padFocus(model.padName != nil && model.padSpot == PadSpot(row: row, index: col), cornerRadius: 2)
         .onTapGesture { tapCell(me, col: col, row: row, occupant: unit) }
         .dropDestination(for: String.self) { items, _ in
             guard let raw = items.first, let item = DragItem(raw), !me.done else { return false }
@@ -497,6 +498,7 @@ struct ChessPrepView: View {
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.white.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
             }
             .buttonStyle(.plain)
+            .padFocus(model.padName != nil && model.padSpot == PadSpot(row: PadSpot.benchRow, index: me.bench.count))
             .disabled(me.done || !me.bench.contains(where: { $0 != nil }) || me.board.count >= chess.deployCap)
             .opacity(me.done || !me.bench.contains(where: { $0 != nil }) || me.board.count >= chess.deployCap ? 0.35 : 1)
         }
@@ -516,6 +518,7 @@ struct ChessPrepView: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.65), value: unit?.uid)
         .aspectRatio(1, contentMode: .fit)
         .contentShape(Rectangle())
+        .padFocus(model.padName != nil && model.padSpot == PadSpot(row: PadSpot.benchRow, index: slot))
         .onTapGesture { tapBench(me, unit: unit) }
         .dropDestination(for: String.self) { items, _ in
             guard let raw = items.first, let item = DragItem(raw), !me.done else { return false }
@@ -622,6 +625,7 @@ struct ChessPrepView: View {
                     .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panelStrong))
                 }
                 .buttonStyle(.plain)
+                .padFocus(model.padName != nil && model.padSpot == PadSpot(row: PadSpot.shopRow, index: 0), cornerRadius: 10)
                 .accessibilityLabel("새로고침 \(me.rerollCost)골드")
                 .disabled(!canReroll)
                 .opacity(canReroll ? 1 : 0.45)
@@ -1253,6 +1257,7 @@ struct ChessPrepView: View {
             .opacity(defId == nil ? 0.35 : (affordable ? 1 : 0.5))
         }
         .buttonStyle(.plain)
+        .padFocus(model.padName != nil && model.padSpot == PadSpot(row: PadSpot.shopRow, index: slot + 1), cornerRadius: 10)
         .disabled(defId == nil || me.done)
         .contextMenu {
             if let info {
