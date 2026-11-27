@@ -1,5 +1,8 @@
 # 콘텐츠 팩 만들기
 
+> 보기 좋은 판(표, 능력 목록, 능력치 계산기, **팩 검사기**)은 게임 서버의 **팩 개발 위키** `/packs-wiki.html` 에 있어요.
+> 예: https://edgame-api.officialgl.com/packs-wiki.html . 위키의 표는 서버의 `GET /api/packs/schema` 에서, 검사는 `POST /api/packs/validate` 에서 해요.
+
 팩은 코드를 넣을 수 없는 **데이터 묶음**이다. 그래서 서버가 안전하다. 팩은 세 종류다.
 
 | 종류 (`kind`) | 바꾸는 것 | 모양 |
@@ -72,14 +75,19 @@
 - 안 써도 가이드에는 자동 요약(새 캐릭터, 바뀐 캐릭터, 재료, 무기, 규칙, 화면·소리)이 나온다.
 
 ### units
-- 필수: `id`, `nameKo`, `piece`(pawn·knight·bishop·rook·queen·king), `faction`, `cost`(1~5), `role`, `ability`(이미 있는 능력 이름만), `abilityText`.
+- 필수: `id`, `nameKo`, `piece`(pawn·knight·bishop·rook·queen·king), `faction`, `cost`(1~4), `role`, `ability`(이미 있는 능력 이름만), `abilityText`.
 - 선택: `hpMult`, `atkMult`, `lite`(체험판에도 나온다).
 - 능력치는 공식 캐릭터와 같은 공식(기본값 × 역할 × 말 종류)으로 계산하고, 배율만 곱한다.
 - 아이디는 `팩id:id` 로 불린다 (예: `example:moon-guard`).
 
+### unitOverrides
+- `{ "캐릭터 id": { ... } }`. 공식 캐릭터는 id 그대로, 앞선 팩의 캐릭터는 전체 id(`팩id:id`).
+- 바꿀 수 있는 것: `hpMult`·`atkMult`(0.3~3, 지금 값에 곱함), `nameKo`, `abilityText`, `lite`.
+
 ### materials / weapons
 - 재료와 무기는 서로를 가리켜야 한다 (`material` ↔ `weapon`).
 - 무기 `stats` 는 배율이고 범위가 있다: `atk` 0.5~2, `hp` 0.5~2, `dmgTaken` 0.5~1.5, `energy` 0.5~2.
+- `fusions`: `[{ "a", "b", "result" }]` 같은 희귀도의 서로 다른 재료 둘 → 한 단계 위 재료. 이 팩의 재료는 짧은 id, 공식·다른 팩 재료는 전체 id.
 
 ### rules
 - 다음 중 필요한 것만 쓴다: `startHp`, `startGold`, `baseIncome`, `maxInterest`, `maxRounds`, `maxDeploy`, `rerollCost`, `prepSeconds`, `firstPrepSeconds`, `poolCopies`.

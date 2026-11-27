@@ -29,7 +29,15 @@ const ROLES = Object.keys(ROLE) as Role[];
 const RARITIES: readonly Rarity[] = ["common", "uncommon", "rare", "legendary"];
 const NEXT_RARITY: Record<Rarity, Rarity | null> = { common: "uncommon", uncommon: "rare", rare: "legendary", legendary: null };
 /** 에너지로 쓰지 않는 패시브 능력 (공식 캐릭터와 같은 규칙) */
-const PASSIVE_ABILITIES: ReadonlySet<string> = new Set(["relic-shield", "spore", "hunger", "royal-ascent"]);
+export const PASSIVE_ABILITIES: ReadonlySet<string> = new Set(["relic-shield", "spore", "hunger", "royal-ascent"]);
+/** 팩이 바꿀 수 있는 규칙 값과 범위 (정수). poolCopies 는 가격별 1~30 */
+export const RULE_RANGES: ReadonlyArray<readonly [keyof Omit<Rules, "poolCopies">, number, number]> = [
+  ["startHp", 5, 200], ["startGold", 0, 50], ["baseIncome", 0, 20], ["maxInterest", 0, 10], ["maxRounds", 1, 20],
+  ["maxDeploy", 3, 10], ["rerollCost", 0, 10], ["prepSeconds", 5, 120], ["firstPrepSeconds", 5, 180],
+];
+/** 캐릭터 배율(hpMult·atkMult) 범위와 무기 배율 범위 */
+export const UNIT_MULT_RANGE = [0.3, 3] as const;
+export const WEAPON_STAT_RANGES = { atk: [0.5, 2], hp: [0.5, 2], dmgTaken: [0.5, 1.5], energy: [0.5, 2] } as const;
 const ID = /^[a-z][a-z0-9-]{0,30}$/;
 const PACK_ID = /^[a-z][a-z0-9-]{1,30}$/;
 const GAMEPLAY_KEYS = ["units", "unitOverrides", "materials", "weapons", "fusions", "rules"] as const;
@@ -370,11 +378,7 @@ function applyPack(base: State, raw: unknown): { state: State; info: PackInfo } 
     else {
       const r = raw.rules;
       c.noExtra(r, "rules", ["startHp", "startGold", "baseIncome", "maxInterest", "maxRounds", "maxDeploy", "rerollCost", "prepSeconds", "firstPrepSeconds", "poolCopies"]);
-      const ranges: Array<[keyof Omit<Rules, "poolCopies">, number, number]> = [
-        ["startHp", 5, 200], ["startGold", 0, 50], ["baseIncome", 0, 20], ["maxInterest", 0, 10], ["maxRounds", 1, 20],
-        ["maxDeploy", 3, 10], ["rerollCost", 0, 10], ["prepSeconds", 5, 120], ["firstPrepSeconds", 5, 180],
-      ];
-      for (const [key, min, max] of ranges) {
+      for (const [key, min, max] of RULE_RANGES) {
         const v = c.num(r, key, "rules", min, max, { int: true, optional: true });
         if (v !== undefined) state.rules[key] = v;
       }

@@ -101,7 +101,7 @@ export function packsModal() {
     : `<div class="sub">이 서버에는 팩이 없어요. 팩은 엑스퍼트 서버에서만 쓸 수 있어요.</div>`;
   const ruleset = S.server?.ruleset && S.server.ruleset !== "official" ? `규칙 묶음 ${esc(S.server.ruleset)}` : "규칙은 공식 그대로";
   return `<div class="modal"><div class="modal-box"><div class="modal-head"><h2>${ic("list")} 이 서버의 팩</h2><button class="btn sec" data-act="close-modal">닫기</button></div>
-    <div class="modal-body"><div class="sub tiny" style="margin-bottom:8px">팩 ${S.packs.length}개 · ${ruleset}</div>${list}</div></div></div>`;
+    <div class="modal-body"><div class="sub tiny" style="margin-bottom:8px">팩 ${S.packs.length}개 · ${ruleset} · <a href="/packs-wiki.html" target="_blank" rel="noopener">팩 만들기 위키</a></div>${list}</div></div></div>`;
 }
 
 /** 가이드의 "팩" 탭: 팩마다 설명, 팩이 쓴 설명서, 바꾼 것 요약 */
