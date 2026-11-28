@@ -1,0 +1,2 @@
+/* 한국어 기기의 홈 화면 이름. 기본(Info.plist)은 영문 "COMMANDER Server" (SideStore 의 Apple App ID 이름은 영문만 된다) */
+"CFBundleDisplayName" = "COMMANDER 서버";

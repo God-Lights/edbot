@@ -98,7 +98,8 @@ export function buildSource(releases: GithubRelease[], sourceURL: string): unkno
       localizedDescription: "상점에서 캐릭터를 사서 체스판에 놓고, 자동으로 싸우는 2인 실시간 대전 게임입니다. 시너지, 무기 재련, 진화, 무한(뫼비우스) 모드가 있습니다.",
     }, versions)] : []),
     ...(server.versions.length ? [app({
-      name: "COMMANDER 서버",
+      // 영문만: SideStore 가 앱 이름으로 Apple App ID 를 만들 때 한글이 있으면 거절된다 (DeveloperPortalError 10)
+      name: "COMMANDER Server",
       bundleIdentifier: SERVER_BUNDLE_ID,
       subtitle: "iPhone·iPad를 COMMANDER 서버로 (시험판)",
       localizedDescription: "이 iPhone·iPad에서 COMMANDER 서버를 켭니다. 같은 와이파이(또는 개인용 핫스팟)의 다른 기기가 QR이나 서버 목록으로 접속해 대전할 수 있고, 서버 앱 안에서 직접 같이 할 수도 있습니다. 전적은 이 기기에 남습니다.",
