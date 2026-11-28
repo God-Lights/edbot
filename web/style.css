@@ -473,3 +473,48 @@ body.pack-board .acell.theirs.dark { background: color-mix(in srgb, var(--board-
 .packguide h5 { margin: 10px 0 4px; color: var(--gold-hi, #f0d9a0); }
 .packguide .pre { white-space: pre-wrap; margin: 0 0 6px; }
 .packguide.focus { outline: 2px solid var(--gold, #c8aa6e); }
+
+/* ---- 8전 5승제: 승수 표시, 데스매치 ---- */
+.hp.wins .wdots { display: flex; gap: 3px; margin-top: .2rem; }
+.hp.wins .wdots i { flex: 1; height: .45rem; border-radius: 99px; background: rgba(255,255,255,.12); }
+.hp.wins .wdots i.on { background: var(--wc); box-shadow: 0 0 6px var(--wc); }
+.dm-label { color: #ff8e84; display: inline-flex; align-items: center; gap: .25rem; animation: dmpulse 1.2s ease-in-out infinite; }
+.gb-last.dm { color: #ffb84d; font-weight: 700; }
+@keyframes dmpulse { 50% { text-shadow: 0 0 12px rgba(255,120,100,.9); } }
+
+/* ---- 이 판의 기록 ---- */
+.modal-box.record { width: min(720px, 100%); }
+.rec-head { text-align: center; } .rec-head.win .rtitle { color: var(--good); } .rec-head.loss .rtitle { color: var(--theirs); }
+.rec-score { display: flex; align-items: center; justify-content: center; gap: 1.2rem; }
+.rec-score > div { display: grid; justify-items: center; } .rec-score small { color: var(--muted); }
+.rec-score b { font: 800 clamp(40px, 9vh, 64px)/1 system-ui, sans-serif; } .rec-score b.mine { color: var(--mine); } .rec-score b.theirs { color: var(--theirs); }
+.rec-score > span { font-size: 2rem; color: var(--muted); }
+.rchips { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
+.rchip { display: grid; justify-items: center; min-width: 3.1rem; padding: .3rem .5rem; border-radius: .6rem; border: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.05); color: var(--text); cursor: pointer; font: inherit; }
+.rchip small { font-size: .7em; color: var(--muted); } .rchip b { font-size: 1.05em; }
+.rchip.win { border-color: rgba(107,217,140,.6); background: rgba(107,217,140,.14); } .rchip.win b { color: var(--good); }
+.rchip.loss { border-color: rgba(255,117,102,.6); background: rgba(255,117,102,.12); } .rchip.loss b { color: var(--theirs); }
+.rchip.dm { box-shadow: 0 0 0 2px rgba(255,184,77,.6); } .rchip[disabled] { cursor: default; opacity: .8; }
+.rec-units { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; } .rec-units .token { width: 56px; height: 56px; }
+
+/* ---- 패배: Checkmate! ---- */
+.checkmate { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; align-content: center; gap: .4rem; pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(60,0,10,.75), rgba(0,0,0,.92)); animation: cm-fade 2.9s ease both; }
+.checkmate .cm-flash { position: absolute; inset: 0; background: #ff2d2d; mix-blend-mode: screen; animation: cm-flash .5s ease-out .35s both; }
+.checkmate .cm-board { position: absolute; inset: 0; opacity: .12;
+  background: conic-gradient(#fff 25%, transparent 0 50%, #fff 0 75%, transparent 0) 0 0 / 80px 80px; animation: cm-zoom 2.9s ease-out both; }
+.checkmate .cm-king { width: clamp(70px, 16vh, 140px); aspect-ratio: 1; background: linear-gradient(#fff3d0, #c8aa6e);
+  -webkit-mask: url(assets/pieces/king.png) center / contain no-repeat; mask: url(assets/pieces/king.png) center / contain no-repeat; filter: drop-shadow(0 6px 24px rgba(0,0,0,.8));
+  transform-origin: 50% 90%; animation: cm-topple 1.1s cubic-bezier(.5,0,.6,1.4) .5s both; }
+.checkmate .cm-text { font: 900 clamp(48px, 13vw, 132px)/1 Georgia, "Times New Roman", serif; font-style: italic; letter-spacing: .02em;
+  color: #fff; -webkit-text-stroke: 2px #ff4d4d; text-shadow: 0 0 24px rgba(255,60,60,.9), 0 8px 0 #5a0010;
+  animation: cm-slam .55s cubic-bezier(.2,1.6,.4,1) .3s both, cm-shake .4s linear .85s 2; }
+.checkmate .cm-sub { font-size: clamp(16px, 2.6vw, 22px); color: #ffc9c2; letter-spacing: .1em; animation: cm-up .5s ease 1s both; }
+@keyframes cm-fade { 0% { opacity: 0; } 8% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes cm-flash { 0% { opacity: .85; } 100% { opacity: 0; } }
+@keyframes cm-zoom { from { transform: scale(1.4); } to { transform: scale(1); } }
+@keyframes cm-slam { 0% { transform: scale(3.2); opacity: 0; filter: blur(10px); } 70% { opacity: 1; filter: blur(0); } 100% { transform: scale(1); } }
+@keyframes cm-shake { 25% { transform: translate(-6px, 2px) rotate(-1deg); } 50% { transform: translate(5px, -3px) rotate(1deg); } 75% { transform: translate(-3px, 1px); } }
+@keyframes cm-topple { 0% { transform: translateY(-40px) rotate(0); opacity: 0; } 40% { transform: translateY(0) rotate(0); opacity: 1; } 100% { transform: rotate(78deg) translateX(10px); } }
+@keyframes cm-up { from { transform: translateY(14px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .checkmate, .checkmate * { animation-duration: .01s !important; animation-delay: 0s !important; } .checkmate { animation: cm-fade 2.9s steps(1) both; } }

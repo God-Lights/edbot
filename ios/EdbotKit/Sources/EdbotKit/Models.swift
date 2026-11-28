@@ -139,6 +139,8 @@ public struct MatchSummary: Codable, Equatable, Sendable, Identifiable {
     public let opponentPicks: [String]
     public let ratingBefore: Int
     public let ratingAfter: Int
+    /// false 면 레이팅에 넣지 않은 게임 기록 (봇과 한 판). 오래된 서버면 nil
+    public var rated: Bool? = nil
 
     public var id: Int64 { endedAt }
     public var ratingDelta: Int { ratingAfter - ratingBefore }

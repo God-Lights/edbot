@@ -336,8 +336,16 @@ export interface ChessRoundSummary {
 export interface ChessSnapshot {
   round: number;
   maxRounds: number;
-  /** 시작 체력(체력 막대의 기준). 오래된 서버면 없다. */
+  /** 시작 체력(체력 막대의 기준). 8전 5승제부터는 winTarget 과 같다(예전 앱용). 오래된 서버면 없다. */
   startHp?: number;
+  /** 이기는 데 필요한 라운드 승수 (8전 5승제: 5). 오래된 서버면 없다. */
+  winTarget?: number;
+  /** 데스매치(결승 라운드)면 몇 번째인지. 정규 라운드면 없다. */
+  deathmatch?: number;
+  /** 데스매치 라운드에 더 받는 골드 */
+  deathmatchGold?: number;
+  /** 지난 라운드들의 승자 (이 판의 기록) */
+  roundResults?: Array<{ round: number; winner: Seat | null; deathmatch?: number }>;
   /** 지금 판에 올릴 수 있는 기물 수 */
   deployCap: number;
   /** 상점의 가격별 등장 확률(%) [1골드, 2골드, 3골드, 4골드] */
@@ -346,7 +354,7 @@ export interface ChessSnapshot {
   lite: boolean;
   /** 무한 모드(뫼비우스 규칙). 기록 프레임의 flags 4는 밑면(유령), 8 이상은 속성 게이지 g(flags>>3). */
   mobius?: boolean;
-  /** seat별 체력. 관전자도 볼 수 있는 공개 정보 */
+  /** seat별 남은 목숨(= winTarget - 상대 승수). 예전 앱은 체력으로 보여 준다. 관전자도 볼 수 있는 공개 정보 */
   hps: [number, number];
   me: ChessSelfSnapshot | null;
   opponent: ChessOpponentSnapshot | null;
@@ -363,7 +371,7 @@ export interface ResultSnapshot {
   /** seat 순서로 레이팅 변화. 로그인하지 않은 판이거나 아직 저장 전이면 null. */
   ratings: Array<{ before: number; after: number } | null>;
   winner: Seat | null;
-  /** towers | time | deathmatch | deathmatchTime */
+  /** 체스: wins(5승) | rounds(정규 라운드 끝, 승수) | deathmatch(결승 라운드) | surrender | forfeit. 옛 레인 게임: towers | time | deathmatch | deathmatchTime */
   reason: string;
   score: [number, number];
   kills: [number, number];

@@ -207,11 +207,15 @@ struct ChessHeader: View {
         let compact: Bool = vSize == .compact
         VStack(spacing: 6) {
             HStack(spacing: compact ? 10 : 18) {
-                HpPill(name: mine, hp: chess.me?.hp ?? 0, color: Theme.mine, width: compact ? 130 : 170, maxHp: chess.startHp ?? chessStartHp)
+                sidePill(mine, seat: seat, hp: chess.me?.hp ?? 0, color: Theme.mine, width: compact ? 130 : 170)
                 VStack(spacing: 2) {
-                    (room.mobius == true
-                         ? Text("라운드 \(chess.round) / \(chess.maxRounds) \(Image(systemName: "infinity"))")
-                         : Text("라운드 \(chess.round) / \(chess.maxRounds)")).font(.headline)
+                    if let dm = chess.deathmatch {
+                        Label(dm > 1 ? "데스매치 \(dm)" : "데스매치", systemImage: "flame.fill").font(.headline).foregroundStyle(Theme.theirs)
+                    } else {
+                        (room.mobius == true
+                             ? Text("라운드 \(chess.round) / \(chess.maxRounds) \(Image(systemName: "infinity"))")
+                             : Text("라운드 \(chess.round) / \(chess.maxRounds)")).font(.headline)
+                    }
                     TimelineView(.periodic(from: .now, by: 0.5)) { context in
                         Text("\(Labels.phaseName(room.phase)) \(Labels.countdown(model.remainingMs(now: context.date)))")
                             .font(.subheadline.monospacedDigit())
@@ -219,12 +223,15 @@ struct ChessHeader: View {
                     }
                 }
                 .frame(minWidth: compact ? 90 : 130)
-                HpPill(name: theirs, hp: chess.opponent?.hp ?? 0, color: Theme.theirs, width: compact ? 130 : 170, maxHp: chess.startHp ?? chessStartHp)
+                sidePill(theirs, seat: 1 - seat, hp: chess.opponent?.hp ?? 0, color: Theme.theirs, width: compact ? 130 : 170)
                 Spacer()
                 Button { confirmSurrender = true } label: { Label("항복", systemImage: "flag") }
                     .buttonStyle(SecondaryButtonStyle())
             }
-            if room.phase == .prep, !compact, let last = chess.lastRound {
+            if room.phase == .prep, let dm = chess.deathmatch {
+                Text("데스매치\(dm > 1 ? " \(dm)" : "")! 이번 판을 이기면 우승 · 골드 +\(chess.deathmatchGold ?? 10) · 준비 시간 넉넉히")
+                    .font(.caption.bold()).foregroundStyle(Theme.warn)
+            } else if room.phase == .prep, !compact, let last = chess.lastRound {
                 Text(lastRoundText(last)).font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -237,9 +244,21 @@ struct ChessHeader: View {
         }
     }
 
+    /// 8전 5승제면 라운드 승수, 오래된 서버면 체력 막대
+    @ViewBuilder private func sidePill(_ name: String, seat side: Int, hp: Int, color: Color, width: CGFloat) -> some View {
+        if let target = chess.winTarget {
+            WinsPill(name: name, wins: chess.roundWins[safe: side] ?? 0, target: target, color: color, width: width)
+        } else {
+            HpPill(name: name, hp: hp, color: color, width: width, maxHp: chess.startHp ?? chessStartHp)
+        }
+    }
+
     private func lastRoundText(_ last: ChessRoundSummary) -> String {
         let outcome: String
         if let winner = last.winner { outcome = winner == seat ? "승리" : "패배" } else { outcome = "무승부" }
+        if let target = chess.winTarget {
+            return "지난 라운드 \(last.round): \(outcome) · 승수 \(chess.roundWins[safe: seat] ?? 0) : \(chess.roundWins[safe: 1 - seat] ?? 0) (\(target)승 먼저)"
+        }
         let mine: Int = last.damage[safe: seat] ?? 0
         let theirs: Int = last.damage[safe: 1 - seat] ?? 0
         return "지난 라운드 \(last.round): \(outcome) · 내 체력 -\(mine), 상대 체력 -\(theirs)"

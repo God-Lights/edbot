@@ -77,7 +77,7 @@ export function replayModal() {
   return `<div class="modal"><div class="modal-box replay"><div class="modal-head"><h2>${esc(r.title)}</h2><button class="btn sec" data-act="close-modal">닫기</button></div>
     <div class="tabs">${tabs}</div>
     <div class="combat">${arenaHtml(combat, r.seat)}<div class="side">${teamPanels(combat, r.seat)}
-      <div class="panel"><div class="sub">이 전투로 잃은 체력: 내 쪽 -${combat.damage?.[r.seat] ?? 0}, 상대 쪽 -${combat.damage?.[1 - r.seat] ?? 0}</div></div></div></div>
+      <div class="panel"><div class="sub">이 라운드: ${combat.winner == null ? "무승부" : combat.winner === r.seat ? "승리" : "패배"}</div></div></div></div>
     <div class="row controls">
       <button class="btn sec" data-act="replay-toggle">${r.playing ? "⏸ 일시정지" : "▶ 재생"}</button>
       <button class="btn sec" data-act="replay-restart">⏮ 처음부터</button>

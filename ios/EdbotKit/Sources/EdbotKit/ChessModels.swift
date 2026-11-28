@@ -288,6 +288,22 @@ public struct ChessSnapshot: Codable, Equatable, Sendable {
     public let combat: ChessCombatSnapshot?
     public let lastRound: ChessRoundSummary?
     public let roundWins: [Int]
+    /// 8전 5승제: 이기는 데 필요한 라운드 승수 (5). 오래된 서버면 nil (예전 체력제)
+    public var winTarget: Int? = nil
+    /// 데스매치(결승 라운드)면 몇 번째인지. 정규 라운드면 nil
+    public var deathmatch: Int? = nil
+    /// 데스매치 라운드에 더 받는 골드
+    public var deathmatchGold: Int? = nil
+    /// 지난 라운드들의 승자 (이 판의 기록)
+    public var roundResults: [ChessRoundResult]? = nil
+}
+
+/// 한 라운드의 승자 (이 판의 기록). 데스매치 라운드면 몇 번째인지
+public struct ChessRoundResult: Codable, Equatable, Sendable {
+    public let round: Int
+    public let winner: Int?
+    public var deathmatch: Int? = nil
+    public init(round: Int, winner: Int?, deathmatch: Int? = nil) { self.round = round; self.winner = winner; self.deathmatch = deathmatch }
 }
 
 // MARK: 도감 (GET /api/chess)
@@ -391,6 +407,8 @@ public struct LiveRoom: Codable, Equatable, Sendable, Identifiable {
     public let round: Int
     public let maxRounds: Int
     public let hps: [Int]?
+    /// seat별 라운드 승수 (8전 5승제). 오래된 서버면 nil
+    public var wins: [Int]? = nil
     public let updatedAt: Int64
     /// 게스트 방인가 (내 방 목록에서만 의미 있다)
     public let guest: Bool?

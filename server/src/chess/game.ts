@@ -47,6 +47,10 @@ export interface BoardUnit extends OwnedUnit {
 
 export interface ChessPlayer {
   seat: Seat;
+  /**
+   * 남은 목숨 = 이기는 데 필요한 승수 - 상대의 라운드 승수 (8전 5승제: 5에서 시작해 라운드를 질 때마다 1씩 준다).
+   * 예전 앱은 이 값을 "체력"으로 보여 준다 (startHp 도 winTarget 으로 보낸다).
+   */
   hp: number;
   gold: number;
   /** 상점 5칸. 산 칸은 null */
@@ -69,7 +73,7 @@ export interface ChessPlayer {
 export interface RoundSummary {
   round: number;
   winner: Seat | null;
-  /** seat별로 잃은 체력 */
+  /** seat별로 잃은 목숨 (진 쪽 1) */
   damage: [number, number];
   survivors: [number, number];
 }
@@ -88,6 +92,8 @@ export interface ReplayRound {
   damage: [number, number];
   beats: number;
   mobius?: boolean;
+  /** 데스매치(결승) 라운드면 몇 번째인지 */
+  deathmatch?: number;
 }
 
 export interface CombatRecord extends CombatRecording {
@@ -119,10 +125,18 @@ export interface ChessGame {
   pool: Record<string, number>;
   players: [ChessPlayer, ChessPlayer];
   roundWins: [number, number];
+  /**
+   * 데스매치(결승 라운드): 정규 라운드(maxRounds)가 끝났는데 승수가 같으면 1, 2, 3...
+   * 이번(또는 다음) 라운드가 몇 번째 데스매치인지. 0 이면 정규 라운드. 예전 판에는 없다.
+   */
+  deathmatch?: number;
   lastRound: RoundSummary | null;
   combat: CombatRecord | null;
-  /** 게임이 끝났다면 이긴 seat(비기면 null)와 이유 */
-  over: { winner: Seat | null; reason: "hp" | "rounds" | "surrender" | "forfeit" } | null;
+  /**
+   * 게임이 끝났다면 이긴 seat(비기면 null)와 이유.
+   * wins: 먼저 목표 승수(5승) / rounds: 정규 라운드가 끝나고 승수가 많은 쪽 / deathmatch: 결승 라운드 / hp: 예전 체력제
+   */
+  over: { winner: Seat | null; reason: "wins" | "rounds" | "deathmatch" | "hp" | "surrender" | "forfeit" } | null;
 }
 
 export type ChessFailureCode =
@@ -161,7 +175,7 @@ function nextRandom(game: ChessGame): number {
 // ---- 만들기 ----
 
 function emptyPlayer(seat: Seat): ChessPlayer {
-  return { seat, hp: rules().startHp, gold: rules().startGold, shop: Array(SHOP_SIZE).fill(null), bench: Array(BENCH_SIZE).fill(null), board: [], done: false,
+  return { seat, hp: winTarget(), gold: rules().startGold, shop: Array(SHOP_SIZE).fill(null), bench: Array(BENCH_SIZE).fill(null), board: [], done: false,
     materials: {}, weapons: {}, smelters: Array(SMELTER_COUNT).fill(null), marketBought: false, evolved: [] };
 }
 
@@ -201,6 +215,13 @@ export function createChessGame(seed: number, lite = false, mobius = false): Che
 
 // ---- 규칙 값 ----
 
+/** 이기는 데 필요한 라운드 승수: 8전 5승제 (정규 라운드의 과반) */
+export const winTarget = (): number => Math.floor(rules().maxRounds / 2) + 1;
+/** 데스매치(결승 라운드): 골드를 더 주고 준비 시간을 길게. 무승부면 다시, 이만큼까지 하고 그래도 비기면 무승부 */
+export const DEATHMATCH_GOLD = 10;
+export const DEATHMATCH_PREP_SECONDS = 60;
+export const MAX_DEATHMATCH = 3;
+
 /** 판에 올릴 수 있는 기물 수: 1라운드 3, 이후 +1, 최대 7 */
 export const deployCap = (round: number): number => Math.min(rules().maxDeploy, Math.max(3, round + 2));
 
@@ -221,7 +242,8 @@ export function rerollCost(player: ChessPlayer): number {
   return Math.max(1, rules().rerollCost - (richmond ? 1 : 0));
 }
 
-export function prepSeconds(round: number): number {
+export function prepSeconds(round: number, deathmatch = 0): number {
+  if (deathmatch > 0) return DEATHMATCH_PREP_SECONDS;
   return round === 1 ? rules().firstPrepSeconds : rules().prepSeconds;
 }
 
@@ -329,7 +351,7 @@ export function startRound(game: ChessGame): void {
       player.marketBought = false;
       evolveReady(player);
     }
-    player.gold += rules().baseIncome + interest(player.gold);
+    player.gold += rules().baseIncome + interest(player.gold) + ((game.deathmatch ?? 0) > 0 ? DEATHMATCH_GOLD : 0);
     player.done = false;
     rollShop(game, player);
   }
@@ -630,22 +652,23 @@ export function boardPlacements(player: ChessPlayer): Placement[] {
 export function runRoundCombat(game: ChessGame): CombatRecord {
   const boards: [Placement[], Placement[]] = [boardPlacements(game.players[0]), boardPlacements(game.players[1])];
   const recording = recordCombat(boards, game.resources ? game.tiles : [], { mobius: game.mobius });
-  const { winner, survivors } = recording.result;
+  const { winner } = recording.result;
   const damage: [number, number] = [0, 0];
-  if (winner !== null) {
-    const loser: Seat = winner === 0 ? 1 : 0;
-    damage[loser] = survivors[winner] * 2 + game.round;
-  }
+  // 라운드를 지면 목숨이 하나 준다 (8전 5승제)
+  if (winner !== null) damage[winner === 0 ? 1 : 0] = 1;
   game.combat = { ...recording, boards, damage };
   return game.combat;
 }
 
-/** 전투 결과를 반영한다: 체력 감소, 라운드 승수, 게임이 끝났는지 판정. */
+/**
+ * 전투 결과를 반영한다: 라운드 승수, 남은 목숨, 게임이 끝났는지 판정 (8전 5승제).
+ * - 먼저 winTarget(5)승 → 승리
+ * - 정규 라운드(maxRounds)가 끝나면 승수가 많은 쪽 승리, 같으면 데스매치(결승 라운드)
+ * - 데스매치에서 이기면 승리, 비기면 다시 (MAX_DEATHMATCH 번까지, 그래도 비기면 무승부)
+ */
 export function finishRound(game: ChessGame): void {
   const combat = game.combat;
   if (!combat) return;
-  game.players[0].hp -= combat.damage[0];
-  game.players[1].hp -= combat.damage[1];
   // 캔 재료와 무기로 번 골드를 받는다
   for (const [, tileIndex, seat] of combat.mines) {
     const material = combat.tiles[tileIndex]?.material;
@@ -656,26 +679,30 @@ export function finishRound(game: ChessGame): void {
   gainEvolution(game.players[0]);
   gainEvolution(game.players[1]);
   if (combat.result.winner !== null) game.roundWins[combat.result.winner] += 1;
+  const target = winTarget();
+  game.players[0].hp = Math.max(0, target - game.roundWins[1]);
+  game.players[1].hp = Math.max(0, target - game.roundWins[0]);
+  const deathmatch = game.deathmatch ?? 0;
   game.history.push({
     round: game.round, boards: combat.boards, units: combat.units, frames: combat.frames, events: combat.events,
     tiles: combat.tiles, mines: combat.mines, winner: combat.result.winner, survivors: combat.result.survivors,
     damage: combat.damage, beats: combat.result.beats, ...(game.mobius ? { mobius: true } : {}),
+    ...(deathmatch > 0 ? { deathmatch } : {}),
   });
   game.lastRound = { round: game.round, winner: combat.result.winner, damage: combat.damage, survivors: combat.result.survivors };
 
-  const [a, b] = [game.players[0].hp, game.players[1].hp];
-  if (a <= 0 || b <= 0) {
-    // 둘 다 0 이하면 체력이 더 많이 남은 쪽, 같으면 라운드 승수가 많은 쪽, 그래도 같으면 무승부
-    game.over = { winner: decide(game, a, b), reason: "hp" };
+  const [w0, w1] = game.roundWins;
+  if (deathmatch > 0) {
+    // 데스매치(결승 라운드): 이기면 끝, 비기면 다시
+    if (combat.result.winner !== null) game.over = { winner: combat.result.winner, reason: "deathmatch" };
+    else if (deathmatch >= MAX_DEATHMATCH) game.over = { winner: null, reason: "deathmatch" };
+    else game.deathmatch = deathmatch + 1;
+  } else if (w0 >= target || w1 >= target) {
+    game.over = { winner: w0 >= target ? 0 : 1, reason: "wins" };
   } else if (game.round >= rules().maxRounds) {
-    game.over = { winner: decide(game, a, b), reason: "rounds" };
+    if (w0 !== w1) game.over = { winner: w0 > w1 ? 0 : 1, reason: "rounds" };
+    else game.deathmatch = 1; // 승수가 같다: 다음 라운드는 데스매치
   }
-}
-
-function decide(game: ChessGame, a: number, b: number): Seat | null {
-  if (a !== b) return a > b ? 0 : 1;
-  if (game.roundWins[0] !== game.roundWins[1]) return game.roundWins[0] > game.roundWins[1] ? 0 : 1;
-  return null;
 }
 
 /** 항복이나 기권패: 상대가 바로 이긴다. */

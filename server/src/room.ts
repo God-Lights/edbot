@@ -349,7 +349,8 @@ export class Room extends DurableObject<Env> {
       const store = rankingStoreOf(this.env);
       const ratings = await store.recordMatch(match);
       if (ratings && this.state.result) {
-        this.state.result.ratings = [ratings[0], ratings[1]];
+        // 봇과 한 판은 게임 기록만 (레이팅 변화는 보여 주지 않는다). 다시 보기는 남긴다.
+        if (match.rated !== false) this.state.result.ratings = [ratings[0], ratings[1]];
         const replay = buildReplay(this.state);
         if (replay) await store.saveReplay(matchIdOf(match.roomCode, match.startedAt), replay);
       }
@@ -434,9 +435,10 @@ export class Room extends DurableObject<Env> {
       round: state.chess?.round ?? 0,
       maxRounds: 8,
       hps,
+      ...(state.chess ? { wins: [state.chess.roundWins[0], state.chess.roundWins[1]] as [number, number] } : {}),
       updatedAt: Date.now(),
     };
-    const signature = JSON.stringify([room.phase, room.round, room.players, room.hps]);
+    const signature = JSON.stringify([room.phase, room.round, room.players, room.hps, room.wins]);
     if (signature === this.lastLiveSignature) return;
     this.lastLiveSignature = signature;
     try {

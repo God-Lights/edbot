@@ -144,9 +144,12 @@ describe("체스 방: 전체 게임", () => {
       }
       expect(state.phase).toBe("result");
       expect(state.result).not.toBeNull();
-      expect(state.chess!.round).toBeLessThanOrEqual(MAX_ROUNDS);
-      // 봇이 낀 판은 전적에 남기지 않는다
-      expect(takeMatchRecord(state, now)).toBeNull();
+      expect(state.chess!.round).toBeLessThanOrEqual(MAX_ROUNDS + 3); // 데스매치는 3번까지
+      // 봇과 한 판은 레이팅 없는 게임 기록으로 남는다
+      const rec = takeMatchRecord(state, now);
+      expect(rec?.rated).toBe(false);
+      expect(rec?.users.find((u) => u.userId.startsWith("bot:"))).toBeTruthy();
+      expect(rec?.users.find((u) => u.userId === "u1")).toBeTruthy();
     }
   });
 

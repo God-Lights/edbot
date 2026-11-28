@@ -102,7 +102,8 @@ struct LiveView: View {
             : room.players.map { ($0.studentId.map { "\($0) " } ?? "") + $0.name + ($0.connected ? "" : " (끊김)") }.joined(separator: "  vs  ")
         var detail: String = phaseText(room.phase)
         if room.round > 0 { detail += " · 라운드 \(room.round)/\(room.maxRounds)" }
-        if let hps = room.hps, hps.count == 2 { detail += " · 체력 \(max(0, hps[0])) : \(max(0, hps[1]))" }
+        if let wins = room.wins, wins.count == 2 { detail += " · 승수 \(wins[0]) : \(wins[1])" }
+        else if let hps = room.hps, hps.count == 2 { detail += " · 체력 \(max(0, hps[0])) : \(max(0, hps[1]))" }
         detail += " · 방 \(room.code)"
         if !room.host.isEmpty { detail += " · 만든 사람 \(room.host)" }
         return HStack {
@@ -216,9 +217,13 @@ struct SpectatorView: View {
     private func header(_ chess: ChessSnapshot) -> some View {
         let hps: [Int] = chess.hps ?? [chess.me?.hp ?? 0, chess.opponent?.hp ?? 0]
         return HStack(spacing: 18) {
-            hpBox(names[0], hps[safe: 0] ?? 0, Theme.mine)
+            side(chess, 0, hps[safe: 0] ?? 0, Theme.mine)
             VStack(spacing: 2) {
-                Text("라운드 \(chess.round) / \(chess.maxRounds)").font(.headline)
+                if let dm = chess.deathmatch {
+                    Label(dm > 1 ? "데스매치 \(dm)" : "데스매치", systemImage: "flame.fill").font(.headline).foregroundStyle(Theme.theirs)
+                } else {
+                    Text("라운드 \(chess.round) / \(chess.maxRounds)").font(.headline)
+                }
                 TimelineView(.periodic(from: .now, by: 0.5)) { context in
                     Text("\(Labels.phaseName(room.phase)) \(Labels.countdown(model.remainingMs(now: context.date)))")
                         .font(.subheadline.monospacedDigit())
@@ -226,7 +231,7 @@ struct SpectatorView: View {
                 }
             }
             .frame(minWidth: 130)
-            hpBox(names[1], hps[safe: 1] ?? 0, Theme.theirs)
+            side(chess, 1, hps[safe: 1] ?? 0, Theme.theirs)
             Spacer()
             Label("관전 중", systemImage: "eye")
                 .font(.caption.bold())
@@ -234,6 +239,15 @@ struct SpectatorView: View {
                 .background(Capsule().fill(Theme.good.opacity(0.25)))
         }
         .panel(padding: 10)
+    }
+
+    /// 8전 5승제면 라운드 승수, 오래된 서버면 체력
+    @ViewBuilder private func side(_ chess: ChessSnapshot, _ seat: Int, _ hp: Int, _ color: Color) -> some View {
+        if let target = chess.winTarget {
+            WinsPill(name: names[seat], wins: chess.roundWins[safe: seat] ?? 0, target: target, color: color)
+        } else {
+            hpBox(names[seat], hp, color)
+        }
     }
 
     private func hpBox(_ name: String, _ hp: Int, _ color: Color) -> some View {

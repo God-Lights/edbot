@@ -23,13 +23,14 @@ extension AppModel {
     func handlePad(_ command: PadCommand) {
         if command != .menu { padEmptyDoneArmed = false }
         if showGuide { padGuide(command); return }
-        if showRanking || showLive || showMyRooms || showPacks || createdGuestRoomCode != nil || showWorkshop {
+        if showRanking || showLive || showMyRooms || showPacks || createdGuestRoomCode != nil || showWorkshop || showRecord {
             if command == .back || command == .options {
                 showRanking = false
                 showLive = false
                 showMyRooms = false
                 showPacks = false
                 showWorkshop = false
+                showRecord = false
                 createdGuestRoomCode = nil
             }
             return

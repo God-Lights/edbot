@@ -14,8 +14,10 @@ export interface LiveRoom {
   phase: string;
   round: number;
   maxRounds: number;
-  /** seat별 체력 (게임이 시작되기 전에는 null) */
+  /** seat별 남은 목숨(8전 5승제) (게임이 시작되기 전에는 null) */
   hps: [number, number] | null;
+  /** seat별 라운드 승수 (게임이 시작되기 전에는 없다) */
+  wins?: [number, number];
   updatedAt: number;
 }
 

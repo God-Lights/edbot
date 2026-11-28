@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BENCH_SIZE, LITE_IDS, MAX_ROUNDS, SHOP_SIZE, START_GOLD, START_HP, buy, concedeGame, createChessGame, deploy, deployCap, finishRound, interest,
   reroll, rerollCost, runRoundCombat, sell, setDone, shopOdds, startRound, toBench, bothDone, finalRoster,
+  DEATHMATCH_GOLD, DEATHMATCH_PREP_SECONDS, MAX_DEATHMATCH, prepSeconds, winTarget,
 } from "../src/chess/game";
 import type { ChessGame, ChessPlayer } from "../src/chess/game";
 import { addBotIfNeeded, createRoom, joinRoom, setReady } from "../src/room-state";
@@ -45,12 +46,12 @@ const give = (g: ChessGame, seat: 0 | 1, defId: string, n = 1) => {
 };
 
 describe("시작과 라운드", () => {
-  it("라운드 1: 골드 5 + 기본 5 = 10, 체력 30, 상점이 가득 찬다", () => {
+  it("라운드 1: 골드 5 + 기본 5 = 10, 목숨 5(8전 5승제), 상점이 가득 찬다", () => {
     const g = newGame();
     expect(g.round).toBe(1);
     for (const p of g.players) {
       expect(p.gold).toBe(START_GOLD + 5);
-      expect(p.hp).toBe(START_HP);
+      expect(p.hp).toBe(winTarget());
       expect(p.shop.filter(Boolean)).toHaveLength(SHOP_SIZE);
       expect(p.bench).toHaveLength(BENCH_SIZE);
     }
@@ -282,14 +283,14 @@ describe("전투와 라운드 결과", () => {
     return g;
   }
 
-  it("진 쪽은 `이긴 쪽의 살아남은 기물 수 x 2 + 라운드`만큼 체력을 잃는다", () => {
+  it("진 쪽은 목숨이 하나 준다 (= 상대가 1승)", () => {
     const g = armed();
     const combat = runRoundCombat(g);
     expect(combat.result.winner).toBe(0);
-    expect(combat.damage).toEqual([0, 1 * 2 + 1]);
-    expect(g.players[1].hp).toBe(START_HP); // 전투를 계산했을 뿐, 체력은 전투 단계가 끝나야 깎는다
+    expect(combat.damage).toEqual([0, 1]);
+    expect(g.players[1].hp).toBe(5); // 전투를 계산했을 뿐, 전투 단계가 끝나야 반영한다
     finishRound(g);
-    expect(g.players[1].hp).toBe(START_HP - 3);
+    expect(g.players[1].hp).toBe(4);
     expect(g.roundWins).toEqual([1, 0]);
     expect(g.lastRound).toMatchObject({ round: 1, winner: 0 });
     expect(g.over).toBeNull();
@@ -305,36 +306,69 @@ describe("전투와 라운드 결과", () => {
     expect(combat.boards[0]).toHaveLength(1);
   });
 
-  it("빈 판끼리는 비기고 아무도 체력을 잃지 않는다", () => {
+  it("빈 판끼리는 비기고 아무도 목숨을 잃지 않는다", () => {
     const g = newGame();
     const combat = runRoundCombat(g);
     expect(combat.result.winner).toBeNull();
     finishRound(g);
-    expect(g.players.map((p) => p.hp)).toEqual([START_HP, START_HP]);
+    expect(g.players.map((p) => p.hp)).toEqual([5, 5]);
+    expect(g.roundWins).toEqual([0, 0]);
   });
 
-  it("체력이 0 이하가 되면 게임이 끝난다", () => {
+  it("8전 5승제: 먼저 5승하면 끝난다", () => {
+    expect(winTarget()).toBe(5);
     const g = armed();
-    g.players[1].hp = 3;
+    g.roundWins = [4, 2];
+    g.round = 6;
     runRoundCombat(g);
     finishRound(g);
-    expect(g.over).toEqual({ winner: 0, reason: "hp" });
+    expect(g.roundWins).toEqual([5, 2]);
+    expect(g.players[1].hp).toBe(0);
+    expect(g.over).toEqual({ winner: 0, reason: "wins" });
   });
 
-  it("8라운드가 끝나면 체력이 높은 쪽이 이긴다", () => {
+  it("8라운드가 끝나면 승수가 많은 쪽이 이긴다 (무승부 라운드가 있어 5승이 안 됐을 때)", () => {
     const g = armed();
     g.round = MAX_ROUNDS;
+    g.roundWins = [3, 3];
     runRoundCombat(g);
     finishRound(g);
     expect(g.over).toEqual({ winner: 0, reason: "rounds" });
   });
 
-  it("체력과 라운드 승수까지 같으면 무승부", () => {
+  it("8라운드 뒤 승수가 같으면 데스매치: 골드 +10, 준비 60초, 이기면 끝", () => {
     const g = newGame();
     g.round = MAX_ROUNDS;
+    g.roundWins = [4, 4];
+    runRoundCombat(g); // 빈 판: 무승부
+    finishRound(g);
+    expect(g.over).toBeNull();
+    expect(g.deathmatch).toBe(1);
+    const before = g.players[0].gold;
+    startRound(g);
+    expect(g.players[0].gold).toBe(before + 5 + interest(before) + DEATHMATCH_GOLD);
+    expect(prepSeconds(g.round, g.deathmatch)).toBe(DEATHMATCH_PREP_SECONDS);
+    give(g, 0, "ancient-lord");
+    deploy(g, 0, g.players[0].bench.find((u) => u)!.uid, 3, 0);
     runRoundCombat(g);
     finishRound(g);
-    expect(g.over).toEqual({ winner: null, reason: "rounds" });
+    expect(g.over).toEqual({ winner: 0, reason: "deathmatch" });
+    expect(g.history.at(-1)?.deathmatch).toBe(1);
+  });
+
+  it("데스매치도 비기면 다시, 3번까지 비기면 무승부", () => {
+    const g = newGame();
+    g.round = MAX_ROUNDS;
+    g.roundWins = [4, 4];
+    for (let i = 0; i < MAX_DEATHMATCH; i++) {
+      runRoundCombat(g);
+      finishRound(g);
+      expect(g.over).toBeNull();
+      startRound(g);
+    }
+    runRoundCombat(g);
+    finishRound(g);
+    expect(g.over).toEqual({ winner: null, reason: "deathmatch" });
   });
 
   it("항복과 기권패: 상대가 바로 이긴다 (이미 끝난 게임은 바꾸지 않는다)", () => {

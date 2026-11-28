@@ -29,9 +29,11 @@ export interface StoredMatch {
   rating1_before: number;
   rating0_after: number;
   rating1_after: number;
-  /** D1 표에는 없는 덤: 파일 저장소가 이 기록만으로 선수 표를 다시 만들 수 있게 한다. */
+  /** 판에 적힌 닉네임 (봇은 선수 표에 없다). 파일 저장소는 이 기록만으로 선수 표를 다시 만든다. */
   nickname0?: string;
   nickname1?: string;
+  /** false 면 레이팅·승패 수에 넣지 않은 게임 기록 (봇과 한 판). 없으면 true */
+  rated?: boolean;
 }
 
 /** replays 표의 한 행 */
@@ -73,8 +75,11 @@ export class MemoryRankingStore implements RankingStore {
       nextRating(before[1], before[0], scoreOf(1), games[1]),
     ];
 
+    // 봇과 한 판: 게임 기록만 남기고 선수 표(레이팅·승패 수)는 그대로
+    const rated = input.rated !== false;
     const changed: PlayerRow[] = [];
     for (const seat of [0, 1] as const) {
+      if (!rated) break;
       const user = input.users[seat];
       const score = scoreOf(seat);
       const old = this.players.get(user.userId);
@@ -108,17 +113,18 @@ export class MemoryRankingStore implements RankingStore {
       picks1: JSON.stringify(input.picks[1]),
       rating0_before: before[0],
       rating1_before: before[1],
-      rating0_after: after[0],
-      rating1_after: after[1],
+      rating0_after: rated ? after[0] : before[0],
+      rating1_after: rated ? after[1] : before[1],
       nickname0: input.users[0].nickname,
       nickname1: input.users[1].nickname,
+      ...(rated ? {} : { rated: false }),
     };
     this.matches.push(match);
     this.matchIds.add(id);
     this.onMatchRecorded(match, changed);
     return [
-      { before: before[0], after: after[0] },
-      { before: before[1], after: after[1] },
+      { before: before[0], after: match.rating0_after },
+      { before: before[1], after: match.rating1_after },
     ];
   }
 
@@ -177,7 +183,7 @@ export class MemoryRankingStore implements RankingStore {
       return {
         id: m.id,
         endedAt: m.ended_at,
-        opponent: this.players.get(pick(m.user1, m.user0))?.nickname ?? "?",
+        opponent: this.players.get(pick(m.user1, m.user0))?.nickname ?? pick(m.nickname1, m.nickname0) ?? "?",
         result: m.winner_seat === null ? "draw" : m.winner_seat === seat ? "win" : "loss",
         reason: m.reason,
         score: [pick(m.score0, m.score1), other(m.score0, m.score1)],
@@ -186,6 +192,7 @@ export class MemoryRankingStore implements RankingStore {
         opponentPicks: JSON.parse(other(m.picks0, m.picks1)) as string[],
         ratingBefore: pick(m.rating0_before, m.rating1_before),
         ratingAfter: pick(m.rating0_after, m.rating1_after),
+        rated: m.rated !== false,
       } satisfies MatchSummary;
     });
   }

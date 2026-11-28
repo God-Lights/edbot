@@ -60,8 +60,10 @@ export const errorText = (code, fallback) => ERRORS[code] ?? fallback ?? code;
 export const FATAL = new Set(["room_full", "room_not_found", "unauthorized", "game_in_progress", "spectate_unavailable", "room_closed"]);
 
 export const REASON_TEXT = {
+  wins: "먼저 5승",
+  rounds: "정규 라운드 종료 (승수)",
+  deathmatch: "데스매치에서 결판",
   hp: "상대의 체력을 모두 깎았어요",
-  rounds: "8라운드 종료 (남은 체력)",
   surrender: "항복",
   forfeit: "접속이 끊겨 기권패",
 };

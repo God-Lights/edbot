@@ -21,6 +21,7 @@ const KEEP_BACKUPS = 14;
 export function rebuildPlayers(matches: StoredMatch[]): PlayerRow[] {
   const players = new Map<string, PlayerRow>();
   for (const m of matches) {
+    if (m.rated === false) continue; // 봇과 한 판(게임 기록만)은 선수 표에 넣지 않는다
     for (const seat of [0, 1] as const) {
       const id = seat === 0 ? m.user0 : m.user1;
       const score = m.winner_seat === null ? 0.5 : m.winner_seat === seat ? 1 : 0;

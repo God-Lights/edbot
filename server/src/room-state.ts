@@ -334,7 +334,7 @@ function enterPhase(
       state.recorded = false;
     }
     startRound(state.chess);
-    state.phaseEndsAt = startedAt + Math.round(prepSeconds(state.chess.round) * 1000 * scale);
+    state.phaseEndsAt = startedAt + Math.round(prepSeconds(state.chess.round, state.chess.deathmatch ?? 0) * 1000 * scale);
   } else if (phase === "combat" && state.chess) {
     const combat = runRoundCombat(state.chess);
     state.phaseEndsAt = startedAt + Math.round((combat.result.beats + COMBAT_LINGER_SECONDS) * 1000 * scale);
@@ -480,7 +480,8 @@ function finishChess(state: RoomState, at: number, scale: number, rng: () => num
     ratings: [null, null],
     winner: chess.over.winner,
     reason: chess.over.reason,
-    score: [Math.max(0, chess.players[0].hp), Math.max(0, chess.players[1].hp)],
+    // 8전 5승제: 점수와 kills 모두 라운드 승수 (전적에 남는다)
+    score: [chess.roundWins[0], chess.roundWins[1]],
     kills: [chess.roundWins[0], chess.roundWins[1]],
   };
   enterPhase(state, "result", at, scale, rng);
@@ -1035,16 +1036,22 @@ export function takeMatchRecord(state: RoomState, now: number, anonymous = false
   if (state.guest) return null; // 게스트 방은 전적과 레이팅에 남기지 않는다
   const [a, b] = [0, 1].map((seat) => state.players.find((p) => p.seat === seat));
   if (!a || !b) return null;
-  // 로컬 서버(anonymous): GL 계정이 없어도 이름으로 전적을 남긴다. 봇과 한 판(테스트 방)은 남기지 않는다.
-  if (anonymous && (state.testMatch || a.bot || b.bot)) return null;
+  if (a.bot && b.bot) return null;
+  // 로컬 서버(anonymous): GL 계정이 없어도 이름으로 전적을 남긴다.
+  // 봇과 한 판은 레이팅 없이 "게임 기록"으로만 남긴다 (사람 쪽에 id 가 있을 때).
   const idOf = (p: typeof a): string | undefined => {
+    if (p.bot) return `bot:${p.name}`;
     if (p.userId) return p.userId;
     const name = p.name.trim().toLowerCase();
     return anonymous && name ? `name:${name}` : undefined;
   };
   const [idA, idB] = [idOf(a), idOf(b)];
   if (!idA || !idB || idA === idB) return null;
+  const withBot = !!(a.bot || b.bot);
+  // 로컬 서버의 테스트 방에 사람 둘이 들어온 판은 예전처럼 남기지 않는다
+  if (anonymous && state.testMatch && !withBot) return null;
   return {
+    ...(withBot ? { rated: false } : {}),
     roomCode: state.code,
     startedAt: state.matchStartedAt,
     endedAt: now,

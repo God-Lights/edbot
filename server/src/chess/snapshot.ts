@@ -2,7 +2,7 @@
 
 import type { ChessSelfSnapshot, ChessSnapshot, ChessUnitView, Seat } from "../protocol";
 import { rules } from "./content";
-import { bothDone, deployCap, interest, rerollCost, shopOdds } from "./game";
+import { DEATHMATCH_GOLD, bothDone, deployCap, interest, rerollCost, shopOdds, winTarget } from "./game";
 import type { ChessGame, ChessPlayer } from "./game";
 import { activeSynergies } from "./synergy";
 import { MARKET_PRICE, materialDef } from "./weapons";
@@ -34,7 +34,12 @@ export function toChessSnapshot(game: ChessGame, viewerSeat: Seat | null, showCo
   return {
     round: game.round,
     maxRounds: rules().maxRounds,
-    startHp: rules().startHp,
+    // 8전 5승제: 예전 앱은 이 값을 시작 체력으로, hps 를 남은 체력으로 보여 준다 (남은 목숨 5 → 0)
+    startHp: winTarget(),
+    winTarget: winTarget(),
+    ...((game.deathmatch ?? 0) > 0 ? { deathmatch: game.deathmatch, deathmatchGold: DEATHMATCH_GOLD } : {}),
+    // 라운드별 승자 (이 판의 기록 화면). 데스매치 라운드는 몇 번째인지도
+    roundResults: game.history.map((r) => ({ round: r.round, winner: r.winner, ...(r.deathmatch ? { deathmatch: r.deathmatch } : {}) })),
     deployCap: deployCap(game.round),
     shopOdds: shopOdds(game.round, game.lite),
     lite: game.lite,

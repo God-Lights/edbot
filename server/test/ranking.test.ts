@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { K_PROVISIONAL, K_STANDARD, START_RATING, expectedScore, kFactor, nextRating } from "../src/ranking/elo";
-import { getLeaderboard, getPlayerStats, getRecentMatches, recordMatch } from "../src/ranking/store";
+import { d1RankingStore, getLeaderboard, getPlayerStats, getRecentMatches, recordMatch } from "../src/ranking/store";
+import { MemoryRankingStore } from "../src/ranking/memory-store";
 import type { MatchInput } from "../src/ranking/store";
 import { createRoom, joinRoom, takeMatchRecord } from "../src/room-state";
 import { createTestD1 } from "./helpers/d1";
@@ -167,4 +168,27 @@ describe("방에서 전적 만들기", () => {
     state.phase = "battle";
     expect(takeMatchRecord(state, 1)).toBeNull();
   });
+});
+
+describe("봇과 한 판: 레이팅 없는 게임 기록", () => {
+  const botGame = (startedAt: number) => ({
+    roomCode: "ADMN", startedAt, endedAt: startedAt + 100,
+    users: [{ userId: "u-ed", nickname: "에드" }, { userId: "bot:테스트 봇", nickname: "테스트 봇" }] as [{ userId: string; nickname: string }, { userId: string; nickname: string }],
+    winnerSeat: 0 as const, reason: "wins", score: [5, 2] as [number, number], kills: [5, 2] as [number, number],
+    picks: [["relic"], ["dwargon"]] as [string[], string[]], rated: false,
+  });
+
+  for (const [name, make] of [["D1", () => d1RankingStore(createTestD1())], ["메모리", () => new MemoryRankingStore()]] as const) {
+    it(`${name}: 레이팅·승패 수·순위는 그대로, 내 최근 판에는 나온다`, async () => {
+      const store = make();
+      const changes = await store.recordMatch(botGame(1));
+      expect(changes).toEqual([{ before: 1000, after: 1000 }, { before: 1000, after: 1000 }]);
+      expect(await store.getPlayerStats("u-ed")).toBeNull();
+      expect(await store.getLeaderboard(10, null)).toEqual([]);
+      const recent = await store.getRecentMatches("u-ed", 10);
+      expect(recent).toHaveLength(1);
+      expect(recent[0]).toMatchObject({ opponent: "테스트 봇", result: "win", rated: false, score: [5, 2], ratingBefore: 1000, ratingAfter: 1000 });
+      expect(await store.recordMatch(botGame(1))).toBeNull(); // 같은 판은 한 번만
+    });
+  }
 });

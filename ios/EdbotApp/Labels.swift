@@ -156,10 +156,11 @@ enum Labels {
         switch reason {
         case "towers": return "본진 타워 파괴"
         case "time": return "시간 종료 (점수)"
-        case "deathmatch": return "데스매치 전멸"
+        case "wins": return "먼저 5승"
+        case "deathmatch": return "데스매치에서 결판"
         case "deathmatchTime": return "데스매치 시간 종료 (남은 체력)"
         case "hp": return "상대의 체력을 모두 깎았어요"
-        case "rounds": return "8라운드 종료 (남은 체력)"
+        case "rounds": return "정규 라운드 종료 (승수)"
         case "surrender": return "항복"
         case "forfeit": return "접속이 끊겨 기권패"
         default: return reason
