@@ -28,7 +28,9 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: COMMANDER 서버
+        # 기본 이름은 영문만: SideStore 가 이 이름으로 Apple 에 App ID 를 만드는데, 한글이 있으면 거절된다
+        # (SideSign.DeveloperPortalError error 10). 한국어 기기의 홈 화면에는 ko.lproj/InfoPlist.strings 의 "COMMANDER 서버".
+        CFBundleDisplayName: COMMANDER Server
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
