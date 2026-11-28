@@ -118,9 +118,15 @@ struct RankingView: View {
             }
             Spacer(minLength: 0)
             VStack(alignment: .trailing, spacing: 0) {
-                Text(Labels.delta(match.ratingDelta)).font(.subheadline.bold().monospacedDigit())
-                    .foregroundStyle(match.ratingDelta >= 0 ? Theme.good : Theme.theirs)
-                Text("\(match.ratingAfter)").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                if match.rated == false {
+                    // 봇과 한 판: 레이팅 없이 게임 기록만
+                    Text("봇").font(.subheadline.bold())
+                    Text("레이팅 없음").font(.caption2).foregroundStyle(.secondary)
+                } else {
+                    Text(Labels.delta(match.ratingDelta)).font(.subheadline.bold().monospacedDigit())
+                        .foregroundStyle(match.ratingDelta >= 0 ? Theme.good : Theme.theirs)
+                    Text("\(match.ratingAfter)").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                }
             }
         }
     }

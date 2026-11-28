@@ -109,6 +109,16 @@ final class AppModel {
     /// 준비 단계에서 고른 내 기물(대기석 또는 판 위). 칸을 누르면 거기에 놓는다.
     var selectedUid: String?
 
+    // 이 판의 기록과 Checkmate (GameRecordViews.swift)
+    /// 마지막으로 끝난 판의 기록. 결과 단계에서 잡고, 방이 로비로 돌아가도 남는다.
+    var gameRecord: GameRecord?
+    /// 이 판의 기록 창
+    var showRecord = false
+    /// 지면 잠깐 뜨는 "Checkmate!"
+    var showCheckmate = false
+    /// 마지막 라운드에 낸 기물 (전투 기록에서. 이 판의 기록에 보여 준다)
+    private var lastCombatBoards: [[ChessCombatPlacement]] = []
+
     // 게임 컨트롤러 (PadRouting.swift)
     /// 연결된 컨트롤러 이름. 있으면 화면에 고른 칸 테두리와 버튼 안내가 보인다.
     var padName: String?
@@ -1026,7 +1036,33 @@ final class AppModel {
             flash(evolved.map { "\(chessUnit($0.from)?.nameKo ?? $0.from)이(가) \(chessUnit($0.to)?.nameKo ?? $0.to)(으)로 진화했어요!" }.joined(separator: " "))
         }
         Sfx.shared.setScene(Self.musicScene(for: room))
+        recordGame(previous: previous, room: room)
         self.room = room
+    }
+
+    /// 판이 끝나면 이 판의 기록을 잡고, 지면 "Checkmate!" 를 띄운 뒤 기록 창을 연다. (이기거나 비기면 잠깐 뒤 기록 창)
+    private func recordGame(previous: RoomSnapshot?, room: RoomSnapshot) {
+        if previous?.phase == .lobby && room.phase == .prep { lastCombatBoards = [] }
+        if let combat = room.chess?.combat { lastCombatBoards = combat.boards }
+        guard !isSpectating, room.phase == .result, let result = room.result, let chess = room.chess, let seat = mySeat else { return }
+        let names: [String] = [0, 1].map { s in room.players.first { $0.seat == s }?.name ?? "?" }
+        let rounds: [ChessRoundResult] = chess.roundResults ?? []
+        gameRecord = GameRecord(
+            code: room.code, seat: seat, names: names, result: result, rounds: rounds,
+            winTarget: chess.winTarget, roundWins: chess.roundWins,
+            lastBoard: lastCombatBoards[safe: seat] ?? [],
+            bot: ["ADMN", "ADMF", "ADMX"].contains(room.code)
+        )
+        // 결과 단계에 막 들어왔을 때만 (레이팅이 늦게 와서 다시 오는 스냅샷은 기록만 갱신)
+        guard previous?.phase != .result else { return }
+        let lost: Bool = result.winner != nil && result.winner != seat
+        if lost { showCheckmate = true }
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: lost ? 2_800_000_000 : 1_600_000_000)
+            guard let self else { return }
+            self.showCheckmate = false
+            if self.gameRecord != nil { self.showRecord = true }
+        }
     }
 
     /// 지금 상황에 맞는 배경 음악: 로비·준비는 prep, 전투는 combat, 마지막 라운드·체력이 위태로울 때·결과는 finale.
@@ -1034,8 +1070,14 @@ final class AppModel {
         guard let room else { return .prep }
         if room.phase == .result { return .finale }
         if let chess = room.chess, room.phase == .prep || room.phase == .combat {
-            let lowest: Int = (chess.hps ?? []).min() ?? 99
-            if chess.round >= chess.maxRounds - 1 || lowest <= 8 { return .finale }
+            // 8전 5승제: 누가 한 판만 더 이기면 끝날 때, 데스매치. 오래된 서버는 체력 8 이하
+            let danger: Bool
+            if let target = chess.winTarget {
+                danger = (chess.roundWins.max() ?? 0) >= target - 1 || chess.deathmatch != nil
+            } else {
+                danger = ((chess.hps ?? []).min() ?? 99) <= 8
+            }
+            if chess.round >= chess.maxRounds - 1 || danger { return .finale }
         }
         return [Phase.combat, .battle, .deathmatch].contains(room.phase) ? .combat : .prep
     }

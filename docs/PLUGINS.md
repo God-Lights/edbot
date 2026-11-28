@@ -91,6 +91,7 @@
 
 ### rules
 - 다음 중 필요한 것만 쓴다: `startHp`, `startGold`, `baseIncome`, `maxInterest`, `maxRounds`, `maxDeploy`, `rerollCost`, `prepSeconds`, `firstPrepSeconds`, `poolCopies`.
+- 8전 5승제부터 `startHp` 는 쓰지 않는다 (받기는 한다). 이기는 승수는 `maxRounds` 의 과반이다 (8 → 5승, 5 → 3승).
 - 범위를 벗어나면 팩 전체가 거절된다.
 
 ### resources (리소스·종합 팩)

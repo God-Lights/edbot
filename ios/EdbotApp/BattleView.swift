@@ -408,8 +408,12 @@ struct ResultView: View {
                 Text(outcome.title).font(.system(size: vSize == .compact ? 40 : 64, weight: .heavy, design: .rounded)).foregroundStyle(outcome.color)
                 Text(Labels.resultReason(result.reason)).font(.title3).foregroundStyle(.secondary)
                 HStack(spacing: 40) {
-                    stat(room.chess != nil ? "남은 체력" : "점수", "\(result.score[safe: seat] ?? 0) : \(result.score[safe: 1 - seat] ?? 0)")
-                    stat(room.chess != nil ? "라운드 승" : "처치", "\(result.kills[safe: seat] ?? 0) : \(result.kills[safe: 1 - seat] ?? 0)")
+                    if room.chess != nil {
+                        stat("라운드 승", "\(result.kills[safe: seat] ?? 0) : \(result.kills[safe: 1 - seat] ?? 0)")
+                    } else {
+                        stat("점수", "\(result.score[safe: seat] ?? 0) : \(result.score[safe: 1 - seat] ?? 0)")
+                        stat("처치", "\(result.kills[safe: seat] ?? 0) : \(result.kills[safe: 1 - seat] ?? 0)")
+                    }
                 }
                 .panel()
                 if seat < result.ratings.count, let rating = result.ratings[seat] {
@@ -421,8 +425,14 @@ struct ResultView: View {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 Text("\(Labels.countdown(model.remainingMs(now: context.date))) 뒤 로비로 돌아가요").foregroundStyle(.secondary)
             }
-            Button { model.openRanking() } label: { Label("랭킹 보기", systemImage: "trophy") }
-                .buttonStyle(SecondaryButtonStyle())
+            HStack(spacing: 12) {
+                if model.gameRecord != nil {
+                    Button { model.showRecord = true } label: { Label("이 판의 기록", systemImage: "list.bullet.rectangle") }
+                        .buttonStyle(PrimaryButtonStyle())
+                }
+                Button { model.openRanking() } label: { Label("랭킹 보기", systemImage: "trophy") }
+                    .buttonStyle(SecondaryButtonStyle())
+            }
             Spacer()
         }
     }

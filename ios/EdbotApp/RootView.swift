@@ -18,6 +18,15 @@ struct RootView: View {
         .sheet(isPresented: $model.showGuide) { GuideView() }
         .sheet(isPresented: $model.showRanking) { RankingView() }
         .sheet(isPresented: $model.showPacks) { PacksView() }
+        // 이 판의 기록 (방이 로비로 돌아가도 닫을 때까지 남는다)
+        .sheet(isPresented: $model.showRecord) { GameRecordView() }
+        // 지면 화면 가득 "Checkmate!"
+        .overlay {
+            if model.showCheckmate, let record = model.gameRecord {
+                CheckmateOverlay(reason: record.result.reason).transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.3), value: model.showCheckmate)
         .sheet(isPresented: $model.showLive) { LiveView() }
         .sheet(isPresented: $model.showMyRooms) { MyRoomsView() }
         .sheet(isPresented: Binding(get: { model.createdGuestRoomCode != nil }, set: { if !$0 { model.createdGuestRoomCode = nil } })) {

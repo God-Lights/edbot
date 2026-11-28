@@ -4,8 +4,9 @@ import { ic } from "./icons.js";
 import { api } from "./api.js";
 import { arenaHtml, combatView, startPlayback, stopPlayback, teamPanels } from "./combat.js";
 import { guideModal, openGuide } from "./guide.js";
-import { autoPlace, S, act, conn, join, leave, me, mySeat, setRender, store, toast, update } from "./state.js";
-import { hpPill, prepView } from "./prep.js";
+import { autoPlace, S, act, conn, join, leave, me, mySeat, setRecordHook, setRender, store, toast, update } from "./state.js";
+import { prepView, roundLabel, sidePill } from "./prep.js";
+import { captureRecord, recordModal, showCheckmate } from "./record.js";
 import { openMatchReplay, openReplay, replayAction, replayModal, replayScrub, startReplay } from "./replay.js";
 import { openRanking, rankingModal } from "./ranking.js";
 import { combineItems, itemName } from "./crafting.js";
@@ -121,7 +122,7 @@ function liveModal() {
       const who = r.players.length
         ? r.players.map((p) => `${p.studentId ? esc(p.studentId) + " " : ""}${esc(p.name)}${p.connected ? "" : " (끊김)"}`).join("  vs  ")
         : "참가자를 기다리는 중";
-      const hp = r.hps ? `${ic("heart")} ${Math.max(0, r.hps[0])} : ${Math.max(0, r.hps[1])}` : "";
+      const hp = r.wins ? `${ic("trophy")} ${r.wins[0]} : ${r.wins[1]}` : r.hps ? `${ic("heart")} ${Math.max(0, r.hps[0])} : ${Math.max(0, r.hps[1])}` : "";
       const round = r.round ? `라운드 ${r.round}/${r.maxRounds}` : "";
       return `<div class="panel livecard"><div><b>${who}</b><div class="sub">${esc(LIVE_PHASE[r.phase] ?? r.phase)} ${round} ${hp} · 방 ${esc(r.code)} · 만든 사람 ${esc(r.host)}</div></div>
         <span class="grow"></span>${r.mine ? `<button class="btn sec" data-act="room-close" data-code="${esc(r.code)}" data-from="live">${ic("trash")} 삭제</button>` : ""}
@@ -249,19 +250,18 @@ function resultView(room) {
     ? `<div class="confetti">${Array.from({ length: 36 }, (_, i) => `<i style="left:${(i * 37) % 100}%;--d:${(i % 9) * 0.12}s;--c:${["#f2c74d", "#6bd98c", "#6194ff", "#e661d9", "#ff7566"][i % 5]}"></i>`).join("")}</div>`
     : "";
   return `${confetti}<div class="result"><div class="rtitle ${cls}">${title}</div><div class="sub big">${esc(REASON_TEXT[r.reason] ?? r.reason)}</div>
-    <div class="panel row center"><div class="stat"><small>남은 체력</small><b>${r.score[seat] ?? 0} : ${r.score[1 - seat] ?? 0}</b></div>
-      <div class="stat"><small>라운드 승</small><b>${r.kills[seat] ?? 0} : ${r.kills[1 - seat] ?? 0}</b></div></div>
+    <div class="panel row center"><div class="stat"><small>라운드 승</small><b>${r.kills[seat] ?? 0} : ${r.kills[1 - seat] ?? 0}</b></div></div>
     ${rating ? `<div class="big ${delta >= 0 ? "good" : "bad"}">레이팅 ${rating.before} → ${rating.after} (${delta >= 0 ? "+" : ""}${delta})</div>` : ""}
     <div class="sub" data-timer="${room.phaseEndsAt ?? ""}" data-suffix=" 뒤 로비로 돌아가요">${countdown(conn.remainingMs(room.phaseEndsAt))} 뒤 로비로 돌아가요</div>
-    <div class="row center">${Object.keys(S.sessionRounds).length ? `<button class="btn sec" data-act="rewatch-all">▶ 전투 다시 보기 (${Object.keys(S.sessionRounds).length}라운드)</button>` : ""}
+    <div class="row center">${S.record ? `<button class="btn primary" data-act="record">${ic("list")} 이 판의 기록</button>` : ""}${Object.keys(S.sessionRounds).length ? `<button class="btn sec" data-act="rewatch-all">▶ 전투 다시 보기 (${Object.keys(S.sessionRounds).length}라운드)</button>` : ""}
     <button class="btn sec" data-act="ranking">${ic("trophy")} 랭킹 보기</button></div></div>`;
 }
 
 function spectatorHeader(room, chess) {
   const names = [0, 1].map((seat) => room.players.find((p) => p.seat === seat)?.name ?? "?");
-  return `<header class="gbar"><div class="gb-side"><b class="mono gb-code">${esc(room.code)}</b>${hpPill(names[0], chess.hps[0], "var(--mine)", chess.startHp)}</div>
-    <div class="gb-center"><b>R${chess.round}/${chess.maxRounds}</b><span class="sub gb-timer" data-timer="${room.phaseEndsAt ?? ""}" data-label="${PHASE_NAME[room.phase]}">${PHASE_NAME[room.phase]} ${countdown(conn.remainingMs(room.phaseEndsAt))}</span></div>
-    <div class="gb-side gb-right">${hpPill(names[1], chess.hps[1], "var(--theirs)", chess.startHp)}<span class="badge">${ic("eye")} 관전</span>
+  return `<header class="gbar"><div class="gb-side"><b class="mono gb-code">${esc(room.code)}</b>${sidePill(names[0], chess, 0, "var(--mine)", chess.hps[0])}</div>
+    <div class="gb-center">${roundLabel(chess)}<span class="sub gb-timer" data-timer="${room.phaseEndsAt ?? ""}" data-label="${PHASE_NAME[room.phase]}">${PHASE_NAME[room.phase]} ${countdown(conn.remainingMs(room.phaseEndsAt))}</span></div>
+    <div class="gb-side gb-right">${sidePill(names[1], chess, 1, "var(--theirs)", chess.hps[1])}<span class="badge">${ic("eye")} 관전</span>
       <div class="gb-btns"><button class="ibtn" data-act="mute" title="효과음">${ic(sfx.muted ? "volume-off" : "volume")}</button><button class="ibtn" data-act="leave" title="관전 끝내기">${ic("log-out")}</button></div></div></header>`;
 }
 
@@ -284,7 +284,7 @@ function spectatorBody(room) {
     const r = room.result;
     const title = r.winner == null ? "무승부" : `${esc(names[r.winner])} 승리!`;
     return `<div class="result"><div class="rtitle">${title}</div><div class="sub big">${esc(REASON_TEXT[r.reason] ?? r.reason)}</div>
-      <div class="panel row center"><div class="stat"><small>남은 체력</small><b>${r.score[0]} : ${r.score[1]}</b></div><div class="stat"><small>라운드 승</small><b>${r.kills[0]} : ${r.kills[1]}</b></div></div></div>`;
+      <div class="panel row center"><div class="stat"><small>라운드 승</small><b>${r.kills[0]} : ${r.kills[1]}</b></div></div></div>`;
   }
   return `<div class="center-msg">불러오는 중...</div>`;
 }
@@ -362,8 +362,11 @@ function musicScene(room, inRoom) {
   if (room.phase === "result") return "finale";
   const chess = room.chess;
   if (chess && (room.phase === "prep" || room.phase === "combat")) {
-    const last = chess.round >= chess.maxRounds - 1;
-    const danger = Math.min(chess.hps?.[0] ?? 99, chess.hps?.[1] ?? 99) <= 8;
+    const last = chess.round >= chess.maxRounds - 1 || !!chess.deathmatch;
+    // 8전 5승제: 누가 한 판만 더 이기면 끝날 때. 오래된 서버는 체력 8 이하
+    const danger = chess.winTarget
+      ? Math.max(chess.roundWins?.[0] ?? 0, chess.roundWins?.[1] ?? 0) >= chess.winTarget - 1
+      : Math.min(chess.hps?.[0] ?? 99, chess.hps?.[1] ?? 99) <= 8;
     if (last || danger) return "finale";
   }
   return ["combat", "battle", "deathmatch"].includes(room.phase) ? "combat" : "prep";
@@ -382,7 +385,7 @@ function render() {
   stopPlayback();
   const modalScroll = document.querySelector(".modal-body")?.scrollTop ?? 0;
   app.innerHTML = (inRoom ? roomShell(room) : S.quick ? quickView() : S.status === "connecting" ? `<div class="center-msg">접속하는 중...</div>` : lobbyView())
-    + (S.modal === "guestroom" && S.guestRoom ? guestRoomModal() : S.modal === "live" ? liveModal() : S.modal === "myrooms" ? myRoomsModal() : S.modal === "guide" ? guideModal() : S.modal === "packs" ? packsModal() : S.modal === "ranking" ? rankingModal() : S.modal === "replay" && S.replay ? replayModal() : "");
+    + (S.modal === "guestroom" && S.guestRoom ? guestRoomModal() : S.modal === "live" ? liveModal() : S.modal === "myrooms" ? myRoomsModal() : S.modal === "guide" ? guideModal() : S.modal === "packs" ? packsModal() : S.modal === "ranking" ? rankingModal() : S.modal === "replay" && S.replay ? replayModal() : S.modal === "record" ? recordModal() : "");
   const modalBody = document.querySelector(".modal-body");
   if (modalBody) modalBody.scrollTop = modalScroll;
   if (S.modal === "replay") startReplay();
@@ -400,6 +403,12 @@ function render() {
     const seat = mySeat();
     const winner = room.result?.winner;
     sfx.play(winner == null ? "click" : winner === seat ? "win" : "lose");
+    // 지면 "Checkmate!" 를 띄운 뒤 이 판의 기록으로, 이기거나 비기면 잠깐 뒤 기록으로
+    if (!S.spectating && seat != null && S.record) {
+      const lost = winner != null && winner !== seat;
+      if (lost) showCheckmate(room.result?.reason);
+      setTimeout(() => { if (S.record) { S.modal = "record"; render(); } }, lost ? 2800 : 1600);
+    }
   }
   lastPhaseKey = phaseKey;
   // 빠른 대전으로 들어온 방은 로비에서 자동으로 준비한다.
@@ -413,6 +422,7 @@ function render() {
   }
 }
 setRender(render);
+setRecordHook(captureRecord);
 
 // ---- 입력 ----
 
@@ -551,6 +561,12 @@ document.addEventListener("click", (event) => {
       break;
     }
     case "replay-match": openMatchReplay(d.id); break;
+    case "record": if (S.record) update({ modal: "record" }); break;
+    case "rewatch-round": {
+      const round = S.sessionRounds[num(d.round)];
+      if (round) openReplay([round], S.record?.seat ?? mySeat() ?? 0, `라운드 ${d.round} 다시 보기`);
+      break;
+    }
     case "quick": quickMatch(); break;
     case "quick-cancel": cancelQuick(); break;
     case "join-code": join(d.code, S.botLevel); break;

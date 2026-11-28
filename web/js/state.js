@@ -60,6 +60,8 @@ export const S = {
   spectating: false,
   /** 이번 판에서 본 전투 기록 (라운드 번호 -> 전투). 다시 보기에 쓴다. */
   sessionRounds: {},
+  /** 이 판의 기록 (record.js). 결과 단계에서 잡고, 창을 닫아도 다음 판까지 남는다 */
+  record: null,
   /** 다시 보기 모달 상태 */
   replay: null,
   /** 빠른 대전으로 들어온 방이면 로비에서 자동으로 준비한다 */
@@ -120,6 +122,10 @@ export const conn = new Connection((event) => {
   }
 });
 
+/** 기록을 잡는 함수 (record.js 가 넣는다. 서로 import 가 돌지 않게) */
+let recordHook = null;
+export const setRecordHook = (fn) => { recordHook = fn; };
+
 function observe(room) {
   const prev = S.room;
   // 라운드가 바뀔 때 진화한 기물이 있으면 알린다 (데도키온 -> 토가로가 / 드워곤)
@@ -132,6 +138,8 @@ function observe(room) {
   if (room.phase === "combat" && room.chess?.combat) {
     S.sessionRounds[room.chess.round] = { round: room.chess.round, ...room.chess.combat };
   }
+  // 이 판의 기록 (record.js): 결과 단계 동안 계속 갱신한다 (레이팅이 조금 늦게 온다)
+  if (room.phase === "result") recordHook?.(room);
   if (prev?.phase !== room.phase || prev?.chess?.round !== room.chess?.round) {
     S.selUid = null;
     S.selWeapon = null;

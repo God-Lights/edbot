@@ -12,6 +12,8 @@ export interface MatchInput {
   score: [number, number];
   kills: [number, number];
   picks: [string[], string[]];
+  /** false 면 레이팅·승패 수에 넣지 않는 게임 기록만 (봇과 한 판). 기본 true */
+  rated?: boolean;
 }
 
 export interface RatingChange {
@@ -45,6 +47,26 @@ export async function recordMatch(db: D1Database, input: MatchInput): Promise<[R
 
   const rows = await Promise.all(input.users.map((u) => loadPlayer(db, u.userId)));
   const before = rows.map((row) => row?.rating ?? START_RATING) as [number, number];
+  const insertMatch = (after: [number, number], rated: boolean) =>
+    db
+      .prepare(
+        `INSERT OR IGNORE INTO matches (id, room_code, started_at, ended_at, user0, user1, winner_seat, reason,
+           score0, score1, kills0, kills1, picks0, picks1,
+           rating0_before, rating1_before, rating0_after, rating1_after, rated, nickname0, nickname1)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)`,
+      )
+      .bind(
+        id, input.roomCode, input.startedAt, input.endedAt,
+        input.users[0].userId, input.users[1].userId, input.winnerSeat, input.reason,
+        input.score[0], input.score[1], input.kills[0], input.kills[1],
+        JSON.stringify(input.picks[0]), JSON.stringify(input.picks[1]),
+        before[0], before[1], after[0], after[1], rated ? 1 : 0, input.users[0].nickname, input.users[1].nickname,
+      );
+  // 봇과 한 판: 게임 기록만 남기고 레이팅·승패 수(players)는 그대로
+  if (input.rated === false) {
+    await insertMatch(before, false).run();
+    return [{ before: before[0], after: before[0] }, { before: before[1], after: before[1] }];
+  }
   const games = rows.map((row) => row?.games ?? 0) as [number, number];
   const scoreOf = (seat: 0 | 1): 0 | 0.5 | 1 => (input.winnerSeat === null ? 0.5 : input.winnerSeat === seat ? 1 : 0);
   const after: [number, number] = [
@@ -71,22 +93,7 @@ export async function recordMatch(db: D1Database, input: MatchInput): Promise<[R
       input.endedAt,
     );
   });
-  statements.push(
-    db
-      .prepare(
-        `INSERT OR IGNORE INTO matches (id, room_code, started_at, ended_at, user0, user1, winner_seat, reason,
-           score0, score1, kills0, kills1, picks0, picks1,
-           rating0_before, rating1_before, rating0_after, rating1_after)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)`,
-      )
-      .bind(
-        id, input.roomCode, input.startedAt, input.endedAt,
-        input.users[0].userId, input.users[1].userId, input.winnerSeat, input.reason,
-        input.score[0], input.score[1], input.kills[0], input.kills[1],
-        JSON.stringify(input.picks[0]), JSON.stringify(input.picks[1]),
-        before[0], before[1], after[0], after[1],
-      ),
-  );
+  statements.push(insertMatch(after, true));
   await db.batch(statements);
   return [
     { before: before[0], after: after[0] },
@@ -172,6 +179,8 @@ export interface MatchSummary {
   opponentPicks: string[];
   ratingBefore: number;
   ratingAfter: number;
+  /** false 면 레이팅에 넣지 않은 게임 기록 (봇과 한 판) */
+  rated: boolean;
 }
 
 interface MatchRow {
@@ -191,6 +200,9 @@ interface MatchRow {
   rating1_before: number;
   rating0_after: number;
   rating1_after: number;
+  rated?: number | null;
+  nickname0?: string | null;
+  nickname1?: string | null;
   opponent_nickname: string | null;
 }
 
@@ -212,7 +224,7 @@ export async function getRecentMatches(db: D1Database, userId: string, limit: nu
     return {
       id: m.id,
       endedAt: m.ended_at,
-      opponent: m.opponent_nickname ?? "?",
+      opponent: m.opponent_nickname ?? theirs(m.nickname0, m.nickname1) ?? "?",
       result: m.winner_seat === null ? "draw" : m.winner_seat === seat ? "win" : "loss",
       reason: m.reason,
       score: [mine(m.score0, m.score1), theirs(m.score0, m.score1)],
@@ -221,6 +233,7 @@ export async function getRecentMatches(db: D1Database, userId: string, limit: nu
       opponentPicks: JSON.parse(theirs(m.picks0, m.picks1)) as string[],
       ratingBefore: mine(m.rating0_before, m.rating1_before),
       ratingAfter: mine(m.rating0_after, m.rating1_after),
+      rated: m.rated !== 0,
     };
   });
 }

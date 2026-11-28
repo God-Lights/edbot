@@ -164,7 +164,7 @@ describe("규칙 값", () => {
   it("rules 로 시작 체력, 골드, 이자, 새로고침, 시간, 라운드 수, 풀을 바꾼다", () => {
     apply(pack({ units: undefined, rules: { startHp: 50, startGold: 12, baseIncome: 7, maxInterest: 1, maxRounds: 5, maxDeploy: 5, rerollCost: 3, prepSeconds: 30, firstPrepSeconds: 60, poolCopies: { "1": 20 } } }));
     const g = createChessGame(1);
-    expect(g.players[0].hp).toBe(50);
+    expect(g.players[0].hp).toBe(3); // 8전 5승제: startHp 는 쓰지 않고, 목숨 = 이기는 데 필요한 승수 (5라운드면 3승)
     expect(g.players[0].gold).toBe(12);
     expect(g.pool["relic"]).toBe(20);
     expect(g.pool["felis"]).toBe(20);
@@ -177,7 +177,8 @@ describe("규칙 값", () => {
     expect(rules().maxRounds).toBe(5);
     const snap = toChessSnapshot(g, 0, false);
     expect(snap.maxRounds).toBe(5);
-    expect(snap.startHp).toBe(50);
+    expect(snap.startHp).toBe(3);
+    expect(snap.winTarget).toBe(3);
     expect(snap.me!.nextIncome).toBe(7 + 1);
   });
   it("범위를 벗어난 값, 모르는 항목은 거절한다", () => {

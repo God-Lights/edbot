@@ -104,13 +104,22 @@ describe("테스트 대전 봇", () => {
     expect(state.players.find((p) => !p.bot)!.ready).toBe(false);
   });
 
-  it("봇과의 판은 전적과 레이팅에 기록하지 않는다", () => {
+  it("봇과의 판은 레이팅 없는 게임 기록으로만 남긴다", () => {
     const { state } = testRoom("u-human");
     addBotIfNeeded(state);
     state.phase = "result";
     state.game = { picks: [["dwargon"], ["ankio"]] } as never;
     state.result = { ratings: [null, null], winner: 0, reason: "time", score: [3, 1], kills: [1, 0] };
-    expect(takeMatchRecord(state, 1)).toBeNull();
+    const rec = takeMatchRecord(state, 1);
+    expect(rec?.rated).toBe(false);
+    expect(rec?.users.map((u) => u.userId)).toEqual(["u-human", "bot:테스트 봇"]);
+    // 사람 쪽에 계정(또는 로컬 서버의 이름)이 없으면 남기지 않는다
+    const anon = testRoom("");
+    addBotIfNeeded(anon.state);
+    anon.state.phase = "result";
+    anon.state.game = { picks: [["dwargon"], ["ankio"]] } as never;
+    anon.state.result = { ratings: [null, null], winner: 0, reason: "time", score: [3, 1], kills: [1, 0] };
+    expect(takeMatchRecord(anon.state, 1)).toBeNull();
   });
 
   it("봇은 사람이 보는 스냅샷에서 다른 플레이어와 똑같이 보인다 (이름만 다름)", () => {

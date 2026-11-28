@@ -64,7 +64,6 @@ describe("게스트 방", () => {
       for (const [i, name] of ["가", "나"].entries()) {
         const r = joinRoom(state, { name, userId: `guest:2021${i}`, guestId: `2021${i}` }, 0, () => `id${++n}`);
         if (!r.ok) throw new Error("join");
-        r.player.bot = true;
         ids.push(r.player.id);
       }
       let s = 9;

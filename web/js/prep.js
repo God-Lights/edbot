@@ -35,8 +35,29 @@ export function hpPill(name, hp, color, max = START_HP) {
     <div class="hp-bar"><i style="width:${ratio * 100}%;background:${color}"></i></div></div>`;
 }
 
-function lastRoundText(last, seat) {
+/** 8전 5승제: 이름과 라운드 승수(●●○○○). 오래된 서버(winTarget 없음)는 예전 체력 막대 */
+export function winsPill(name, wins, target, color) {
+  const dots = Array.from({ length: target }, (_, i) => `<i class="${i < wins ? "on" : ""}"></i>`).join("");
+  return `<div class="hp wins" style="--wc:${color}"><div class="hp-top"><b>${esc(name)}</b><span>${wins}승</span></div><div class="wdots" title="${target}승 먼저">${dots}</div></div>`;
+}
+
+/** seat 쪽의 승수 표시 (hp 는 오래된 서버용 체력) */
+export function sidePill(name, chess, seat, color, hp) {
+  return chess.winTarget ? winsPill(name, chess.roundWins?.[seat] ?? 0, chess.winTarget, color) : hpPill(name, hp, color, chess.startHp);
+}
+
+/** 라운드 표시: 정규 라운드는 R3/8, 데스매치는 "데스매치" */
+export function roundLabel(chess) {
+  if (chess.deathmatch) return `<b class="dm-label" title="결승 라운드: 이기면 우승">${ic("swords")} 데스매치${chess.deathmatch > 1 ? ` ${chess.deathmatch}` : ""}</b>`;
+  return `<b>R${chess.round}/${chess.maxRounds}</b>`;
+}
+
+function lastRoundText(last, seat, chess) {
   const outcome = last.winner == null ? "무승부" : last.winner === seat ? "승리" : "패배";
+  if (chess.winTarget) {
+    const w = chess.roundWins ?? [0, 0];
+    return `지난 라운드 ${last.round}: ${outcome} · 승수 ${w[seat] ?? 0} : ${w[1 - seat] ?? 0} (${chess.winTarget}승 먼저)`;
+  }
   return `지난 라운드 ${last.round}: ${outcome} · 내 체력 -${last.damage[seat] ?? 0}, 상대 체력 -${last.damage[1 - seat] ?? 0}`;
 }
 
@@ -45,16 +66,18 @@ export function gameBar(room, chess) {
   const seat = mySeat();
   const mine = room.players.find((p) => p.seat === seat)?.name ?? "나";
   const theirs = room.players.find((p) => p.seat !== seat)?.name ?? "상대";
-  const last = room.phase === "prep" && chess.lastRound ? lastRoundText(chess.lastRound, seat) : "";
+  const last = room.phase === "prep" && chess.deathmatch
+    ? `데스매치! 이번 판을 이기면 우승 · 골드 +${chess.deathmatchGold ?? 10} · 준비 시간 넉넉히`
+    : room.phase === "prep" && chess.lastRound ? lastRoundText(chess.lastRound, seat, chess) : "";
   const opp = chess.opponent && room.phase === "prep"
     ? `<span class="opp-state ${chess.opponent.done ? "good" : ""}" title="상대 ${chess.opponent.boardCount}기 배치">${chess.opponent.done ? "준비 끝" : "준비 중"}</span>` : "";
   const btn = (act, label, title, extra = "") => `<button class="ibtn" data-act="${act}" title="${title}"${extra}>${label}</button>`;
   return `<header class="gbar">
-    <div class="gb-side"><b class="mono gb-code">${esc(room.code)}</b>${room.mobius ? `<span class="badge mob" title="무한 모드">${ic("infinity")}</span>` : ""}${hpPill(mine, chess.me?.hp ?? 0, "var(--mine)", chess.startHp)}</div>
-    <div class="gb-center"><b>R${chess.round}/${chess.maxRounds}</b>
+    <div class="gb-side"><b class="mono gb-code">${esc(room.code)}</b>${room.mobius ? `<span class="badge mob" title="무한 모드">${ic("infinity")}</span>` : ""}${sidePill(mine, chess, seat, "var(--mine)", chess.me?.hp ?? 0)}</div>
+    <div class="gb-center">${roundLabel(chess)}
       <span class="sub gb-timer" data-timer="${room.phaseEndsAt ?? ""}" data-label="${PHASE_NAME[room.phase]}">${PHASE_NAME[room.phase]} ${countdown(conn.remainingMs(room.phaseEndsAt))}</span>
-      ${last ? `<span class="gb-last" title="${esc(last)}">${esc(last)}</span>` : ""}</div>
-    <div class="gb-side gb-right">${hpPill(theirs, chess.opponent?.hp ?? 0, "var(--theirs)", chess.startHp)}${opp}
+      ${last ? `<span class="gb-last${chess.deathmatch ? " dm" : ""}" title="${esc(last)}">${esc(last)}</span>` : ""}</div>
+    <div class="gb-side gb-right">${sidePill(theirs, chess, 1 - seat, "var(--theirs)", chess.opponent?.hp ?? 0)}${opp}
       <div class="gb-btns">${btn("mute", ic(sfx.muted ? "volume-off" : "volume"), "효과음")}${btn("bgm", ic(bgm.on ? "music" : "music-off"), "배경 음악")}${btn("guide", ic("book"), "가이드", ' data-tab="flow"')}
         ${room.isHost ? btn("room-close", ic("trash"), "방 닫기", ` data-code="${esc(room.code)}" data-from="room"`) : ""}${btn("surrender", ic("flag"), "항복")}${btn("leave", ic("log-out"), "나가기")}</div></div>
   </header>`;
